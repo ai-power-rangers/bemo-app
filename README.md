@@ -29,7 +29,6 @@ graph TB
     %% Game Lobby
     D -->|Uses| G[GameLobbyViewModel]
     G -->|Depends on| H[ProfileService]
-    G -->|Depends on| I[GamificationService]
     
     %% Game Host
     E -->|Uses| J[GameHostViewModel]
@@ -67,6 +66,54 @@ graph TB
     style M fill:#bfb,stroke:#333,stroke-width:2px
 ```
 
+```mermaid
+graph TD
+    A[App Launch] --> B{Check Authentication}
+    B -->|Not Authenticated| C[OnboardingView]
+    B -->|Authenticated + No Profile| D[ProfileSetupView]
+    B -->|Authenticated + Has Profile| E[GameLobbyView]
+    
+    C --> F[Apple Sign-In]
+    F -->|Success| G{Has Child Profiles?}
+    F -->|Failed| H[Show Error]
+    H --> C
+    
+    G -->|No| D
+    G -->|Yes| E
+    
+    D --> I[Create Child Profile]
+    I -->|Success| E
+    I -->|Skip| E
+    
+    E --> J[GameHostView]
+    E --> K[ParentDashboardView]
+    
+    K --> L[Sign Out Button]
+    L --> M[Clear Tokens & Profile]
+    M --> C
+    
+    J --> N[Game Complete]
+    N --> E
+    
+    subgraph "Authentication Service"
+        O[Keychain Storage]
+        P[Apple Sign-In Handler]
+        Q[Token Management]
+        R[State Publisher]
+    end
+    
+    subgraph "App Coordinator"
+        S[Navigation State]
+        T[Authentication Observer]
+        U[View Factory]
+    end
+    
+    F -.-> P
+    M -.-> O
+    T -.-> R
+    S -.-> U
+```
+
 ### Core Components
 
 #### 1. App Core
@@ -82,7 +129,6 @@ graph TB
 #### 3. Services Layer
 - **CVService**: Computer vision wrapper publishing recognized game pieces via Combine
 - **ProfileService**: Manages active child profile and session
-- **GamificationService**: Handles XP, achievements, and progression
 - **APIService**: Backend communication for data persistence
 
 #### 4. Features
@@ -99,7 +145,6 @@ When a child places a physical game piece:
 3. **GameHostViewModel** receives pieces and forwards to active game
 4. **Game** processes pieces and returns `PlayerActionOutcome`
 5. **GameHostViewModel** updates UI and awards XP if needed
-6. **GamificationService** tracks progress and achievements
 
 ## 📁 Project Structure
 

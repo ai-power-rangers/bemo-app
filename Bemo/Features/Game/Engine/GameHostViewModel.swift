@@ -11,17 +11,18 @@
 
 import SwiftUI
 import Combine
+import Observation
 
-class GameHostViewModel: ObservableObject {
-    @Published var gameView: AnyView = AnyView(EmptyView())
-    @Published var showError = false
-    @Published var errorMessage = ""
-    @Published var progress: Float = 0.0
-    @Published var showProgress = false
+@Observable
+class GameHostViewModel {
+    var gameView: AnyView = AnyView(EmptyView())
+    var showError = false
+    var errorMessage = ""
+    var progress: Float = 0.0
+    var showProgress = false
     
     private let game: Game
     private let cvService: CVService
-    private let gamificationService: GamificationService
     private let profileService: ProfileService
     private let onQuit: () -> Void
     
@@ -30,13 +31,11 @@ class GameHostViewModel: ObservableObject {
     init(
         game: Game,
         cvService: CVService,
-        gamificationService: GamificationService,
         profileService: ProfileService,
         onQuit: @escaping () -> Void
     ) {
         self.game = game
         self.cvService = cvService
-        self.gamificationService = gamificationService
         self.profileService = profileService
         self.onQuit = onQuit
         
@@ -87,10 +86,7 @@ class GameHostViewModel: ObservableObject {
         switch outcome {
         case .correctPlacement(let points):
             // Award points through gamification service
-            if let profile = profileService.activeProfile {
-                gamificationService.awardPoints(points, to: profile.id)
-            }
-            
+            break
         case .incorrectPlacement:
             // Provide feedback (handled by game's view)
             break
@@ -126,12 +122,9 @@ class GameHostViewModel: ObservableObject {
 extension GameHostViewModel: GameDelegate {
     func gameDidCompleteLevel(xpAwarded: Int) {
         // Award XP through gamification service
-        if let profile = profileService.activeProfile {
-            gamificationService.awardXP(xpAwarded, to: profile.id)
-        }
         
         // Show celebration or transition to next level
-        print("Level completed! XP awarded: \(xpAwarded)")
+        print("Level completed! XP award not implemented: \(xpAwarded)")
     }
     
     func gameDidRequestQuit() {

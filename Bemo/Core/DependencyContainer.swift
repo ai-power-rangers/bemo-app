@@ -12,18 +12,18 @@
 import Foundation
 
 class DependencyContainer {
+    let authenticationService: AuthenticationService
     let apiService: APIService
     let cvService: CVService
-    let gamificationService: GamificationService
     let profileService: ProfileService
     let analyticsService: AnalyticsService
     
     init() {
-        self.apiService = APIService()
+        self.authenticationService = AuthenticationService()
+        self.apiService = APIService(authenticationService: authenticationService)
         self.profileService = ProfileService()
         self.cvService = CVService()
         self.analyticsService = AnalyticsService()
-        self.gamificationService = GamificationService(profileService: profileService)
         
         // Initialize services that need setup
         setupServices()
@@ -33,13 +33,7 @@ class DependencyContainer {
         // Perform any necessary service initialization
         cvService.initialize()
         
-        // Set up analytics to respond to profile changes
-//        profileService.onProfileChanged = { [weak self] profile in
-//            if let profile = profile {
-//                continue
-//            } else {
-//                self?.analyticsService.clearUser()
-//            }
-//        }
+        // Analytics will observe profile changes via @Published properties
+        // when needed in the future
     }
 }

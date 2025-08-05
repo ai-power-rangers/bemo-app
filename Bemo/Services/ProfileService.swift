@@ -6,30 +6,37 @@
 //
 
 // WHAT: Manages active child profile and session state. Single source of truth for current player. Persists to UserDefaults.
-// ARCHITECTURE: Core service in MVVM-S. Uses callback for profile changes. Used by all features needing user context.
-// USAGE: Set/clear active profile for child switching. Set onProfileChanged callback to observe profile changes.
+// ARCHITECTURE: Core ObservableObject service in MVVM-S. Publishes profile changes via @Published properties. Used by all features needing user context.
+// USAGE: Set/clear active profile for child switching. Observe $activeProfile for profile changes throughout the app.
 
 import Foundation
+import Observation
 
+@Observable
 class ProfileService {
-    @Published private(set) var activeProfile: UserProfile?
+    private(set) var activeProfile: UserProfile?
+    private(set) var childProfiles: [UserProfile] = []
     private let userDefaults = UserDefaults.standard
     private let activeProfileKey = "com.bemo.activeProfile"
+    private let childProfilesKey = "com.bemo.childProfiles"
     
-    // Callback for profile changes - replaces publisher pattern
-    var onProfileChanged: ((UserProfile?) -> Void)?
+    // Returns active profile or nil if no profiles exist
+    var currentProfile: UserProfile? {
+        return activeProfile
+    }
     
-    // Always returns a profile - either active or default
-    var currentProfile: UserProfile {
-        return activeProfile ?? createDefaultProfile()
+    // Check if any profiles exist
+    var hasProfiles: Bool {
+        return !childProfiles.isEmpty
     }
     
     init() {
         loadActiveProfile()
+        loadChildProfiles()
         
-        // For development: create a default profile if none exists
-        if activeProfile == nil {
-            setActiveProfile(createDefaultProfile())
+        // Set first profile as active if no active profile but profiles exist
+        if activeProfile == nil && !childProfiles.isEmpty {
+            setActiveProfile(childProfiles.first!)
         }
     }
     
@@ -39,9 +46,6 @@ class ProfileService {
         activeProfile = profile
         saveActiveProfile()
         
-        // Notify analytics via callback
-        onProfileChanged?(profile)
-        
         // Log session start
         print("Active profile set: \(profile.name)")
     }
@@ -50,10 +54,42 @@ class ProfileService {
         activeProfile = nil
         userDefaults.removeObject(forKey: activeProfileKey)
         
-        // Notify analytics via callback
-        onProfileChanged?(nil)
-        
         print("Active profile cleared")
+    }
+    
+    func addChildProfile(_ profile: UserProfile) {
+        childProfiles.append(profile)
+        saveChildProfiles()
+        print("Child profile added: \(profile.name)")
+    }
+    
+    func deleteChildProfile(_ profileId: String) {
+        childProfiles.removeAll { $0.id == profileId }
+        saveChildProfiles()
+        
+        // If the deleted profile was active, switch to another profile or clear
+        if activeProfile?.id == profileId {
+            if let firstProfile = childProfiles.first {
+                setActiveProfile(firstProfile)
+            } else {
+                clearActiveProfile()
+            }
+        }
+        
+        print("Child profile deleted: \(profileId)")
+    }
+    
+    func updateChildProfile(_ profile: UserProfile) {
+        if let index = childProfiles.firstIndex(where: { $0.id == profile.id }) {
+            childProfiles[index] = profile
+            saveChildProfiles()
+            
+            // Update active profile if it's the same one
+            if activeProfile?.id == profile.id {
+                activeProfile = profile
+                saveActiveProfile()
+            }
+        }
     }
     
     // MARK: - Profile Updates
@@ -65,12 +101,6 @@ class ProfileService {
         saveActiveProfile()
     }
     
-    func addAchievement(_ achievement: Achievement, for profileId: String) {
-        guard activeProfile?.id == profileId else { return }
-        
-        activeProfile?.achievements.append(achievement)
-        saveActiveProfile()
-    }
     
     func updatePreferences(_ preferences: UserPreferences, for profileId: String) {
         guard activeProfile?.id == profileId else { return }
@@ -104,24 +134,37 @@ class ProfileService {
         }
     }
     
-    // MARK: - Default Profile
+    private func saveChildProfiles() {
+        do {
+            let encoder = JSONEncoder()
+            let data = try encoder.encode(childProfiles)
+            userDefaults.set(data, forKey: childProfilesKey)
+        } catch {
+            print("Failed to save child profiles: \(error)")
+        }
+    }
     
-    func createDefaultProfile() -> UserProfile {
+    private func loadChildProfiles() {
+        guard let data = userDefaults.data(forKey: childProfilesKey) else { return }
+        
+        do {
+            let decoder = JSONDecoder()
+            childProfiles = try decoder.decode([UserProfile].self, from: data)
+        } catch {
+            print("Failed to load child profiles: \(error)")
+        }
+    }
+    
+    // MARK: - Profile Creation
+    
+    func createProfile(name: String, age: Int, gender: String, userId: String) -> UserProfile {
         return UserProfile(
             id: UUID().uuidString,
-            userId: "parent123",
-            name: "Emma",
-            age: 6,
-            totalXP: 450,
-            achievements: [
-                Achievement(
-                    id: "first_game",
-                    name: "First Game",
-                    description: "Completed your first game",
-                    iconName: "gamecontroller.fill",
-                    unlockedAt: Date()
-                )
-            ],
+            userId: userId,
+            name: name,
+            age: age,
+            gender: gender,
+            totalXP: 0,
             preferences: UserPreferences()
         )
     }
@@ -131,12 +174,17 @@ class ProfileService {
 
 struct UserProfile: Codable {
     let id: String
-    let userId: String // Parent's user ID
+    let userId: String // Parent's authenticated user ID
     var name: String
     var age: Int
+    var gender: String
     var totalXP: Int
-    var achievements: [Achievement]
     var preferences: UserPreferences
+    
+    // Helper to check if profile belongs to authenticated user
+    func belongsTo(authenticatedUserId: String) -> Bool {
+        return userId == authenticatedUserId
+    }
 }
 
 struct UserPreferences: Codable {

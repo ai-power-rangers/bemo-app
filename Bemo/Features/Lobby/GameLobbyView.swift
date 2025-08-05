@@ -12,7 +12,7 @@
 import SwiftUI
 
 struct GameLobbyView: View {
-    @StateObject var viewModel: GameLobbyViewModel
+    @State var viewModel: GameLobbyViewModel
     
     var body: some View {
         NavigationView {
@@ -28,7 +28,16 @@ struct GameLobbyView: View {
                 VStack {
                     // Profile section
                     HStack {
-                        ProfileBadgeView(profile: viewModel.displayProfile)
+                        if let profile = viewModel.displayProfile {
+                            ProfileBadgeView(profile: profile)
+                        } else {
+                            Text("No Profile Selected")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .padding()
+                                .background(Color.black.opacity(0.3))
+                                .cornerRadius(15)
+                        }
                         
                         Spacer()
                         

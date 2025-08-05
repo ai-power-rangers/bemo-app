@@ -6,33 +6,36 @@
 //
 
 // WHAT: Manages game lobby state including available games, active profile, and navigation callbacks to games/parent dashboard.
-// ARCHITECTURE: ViewModel in MVVM-S handling lobby logic. Depends on ProfileService and GamificationService for user data.
+// ARCHITECTURE: ViewModel in MVVM-S handling lobby logic. Depends on ProfileService for user data.
 // USAGE: Created by AppCoordinator with navigation callbacks. Observe profile changes via callback, validate game access, handle selection.
 
 import SwiftUI
+import Combine
+import Observation
 
-class GameLobbyViewModel: ObservableObject {
-    @Published var availableGames: [GameItem] = []
-    @Published var activeProfile: Profile?
-    @Published var showProfileSelection = false
+@Observable
+class GameLobbyViewModel {
+    var availableGames: [GameItem] = []
+    var activeProfile: Profile?
+    var showProfileSelection = false
     
-    // Always returns a profile for display (either active or default)
-    var displayProfile: Profile {
+    // Returns active profile for display, or nil if no profiles exist
+    var displayProfile: Profile? {
         if let activeProfile = activeProfile {
             return activeProfile
-        } else {
-            let currentUserProfile = profileService.currentProfile
+        } else if let currentUserProfile = profileService.currentProfile {
             return Profile(
                 id: currentUserProfile.id,
                 name: currentUserProfile.name,
                 level: calculateLevel(from: currentUserProfile.totalXP),
                 xp: currentUserProfile.totalXP
             )
+        } else {
+            return nil
         }
     }
     
     private let profileService: ProfileService
-    private let gamificationService: GamificationService
     private let onGameSelected: (Game) -> Void
     private let onParentDashboardRequested: () -> Void
     
@@ -53,12 +56,10 @@ class GameLobbyViewModel: ObservableObject {
     
     init(
         profileService: ProfileService,
-        gamificationService: GamificationService,
         onGameSelected: @escaping (Game) -> Void,
         onParentDashboardRequested: @escaping () -> Void
     ) {
         self.profileService = profileService
-        self.gamificationService = gamificationService
         self.onGameSelected = onGameSelected
         self.onParentDashboardRequested = onParentDashboardRequested
         
@@ -70,9 +71,16 @@ class GameLobbyViewModel: ObservableObject {
         // Set initial profile from service
         updateActiveProfile(profileService.activeProfile)
         
-        // Use callback to observe profile changes
-        profileService.onProfileChanged = { [weak self] profile in
-            self?.updateActiveProfile(profile)
+        // With @Observable ProfileService, we need to manually observe changes
+        // since we're transforming the data to our display model
+        withObservationTracking {
+            _ = profileService.activeProfile
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.updateActiveProfile(self?.profileService.activeProfile)
+                // Re-establish observation
+                self?.setupProfileObserver()
+            }
         }
     }
     
@@ -111,17 +119,22 @@ class GameLobbyViewModel: ObservableObject {
     
     func isGameUnlocked(_ game: Game) -> Bool {
         // Check if the player meets the requirements for this game
-        // Always has a profile (active or default) via currentProfile
-        let currentUserProfile = profileService.currentProfile
+        guard let currentUserProfile = profileService.currentProfile else {
+            return false // No profiles exist, no games unlocked
+        }
         
-        // For now, all games are unlocked
+        // For now, all games are unlocked if a profile exists
         // In a real app, this would check level requirements, completed prerequisites, etc.
         return true
     }
     
     func selectGame(_ game: Game) {
-        // Use currentProfile which always returns a profile (active or default)
-        let currentUserProfile = profileService.currentProfile
+        // Ensure we have a profile before selecting a game
+        guard let currentUserProfile = profileService.currentProfile else {
+            print("Cannot select game: No active profile")
+            return
+        }
+        
         let profile = Profile(
             id: currentUserProfile.id,
             name: currentUserProfile.name,
