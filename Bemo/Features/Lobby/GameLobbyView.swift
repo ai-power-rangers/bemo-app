@@ -5,6 +5,10 @@
 //  Game selection screen where children choose which game to play
 //
 
+// WHAT: Main menu view showing available games, active child profile, and parent dashboard access. First screen users see.
+// ARCHITECTURE: View layer for game selection in MVVM-S. Displays games grid and profile info from GameLobbyViewModel.
+// USAGE: Created by AppCoordinator as default view. Shows game cards, handles selection, displays profile badge and XP.
+
 import SwiftUI
 
 struct GameLobbyView: View {

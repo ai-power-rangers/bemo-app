@@ -5,16 +5,9 @@
 //  SwiftUI view that hosts the active game's view
 //
 
-
-// This is the physical screen or the container View. It's a SwiftUI View struct.
-// Its Job: To display the UI of whatever game is currently active.
-
-// What it Does:
-// It holds an instance of the GameHostViewModel.
-// It asks the active Game module to provide its specific SwiftUI view (by calling makeGameView(...)).
-// It places that game's view inside itself for the user to see. It might also contain UI elements that are common to all games, like a main "Pause" button or a header.
-
-
+// WHAT: Container view that displays the active game's UI. Provides common overlay controls (quit, hints, progress) for all games.
+// ARCHITECTURE: View layer of game hosting in MVVM-S. Displays game view from ViewModel and handles common UI elements.
+// USAGE: Created by AppCoordinator with GameHostViewModel. The gameView property displays the active game's content.
 
 import SwiftUI
 

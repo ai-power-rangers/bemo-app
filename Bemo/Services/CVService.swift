@@ -5,6 +5,10 @@
 //  Computer Vision service wrapper for Alan CV Kit
 //
 
+// WHAT: Computer vision service that processes camera frames to recognize game pieces. Publishes RecognizedPiece array via Combine.
+// ARCHITECTURE: Core service in MVVM-S. Wraps CV SDK, publishes recognition events. Central to game input processing.
+// USAGE: Start/stop sessions for games. Subscribe to recognizedPiecesPublisher for real-time piece detection. Handle calibration.
+
 import Foundation
 import Combine
 import CoreImage

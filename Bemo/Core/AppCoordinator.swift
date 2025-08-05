@@ -5,6 +5,10 @@
 //  Central navigation coordinator that manages app flow
 //
 
+// WHAT: Manages app navigation and view transitions. Holds DependencyContainer and publishes the current root view based on app state.
+// ARCHITECTURE: Central coordinator in MVVM-S. Creates ViewModels with injected dependencies and manages navigation flow between features.
+// USAGE: Create as @StateObject in BemoApp. Access rootView property for display. Call start() to begin app flow.
+
 import SwiftUI
 import Combine
 

@@ -5,6 +5,10 @@
 //  Service for handling backend API communication
 //
 
+// WHAT: Handles all backend API communication. Manages user accounts, profiles, game progress, and analytics with Combine publishers.
+// ARCHITECTURE: Service layer in MVVM-S. Stateless service providing async API methods. Returns publishers for reactive data flow.
+// USAGE: Injected via DependencyContainer. Call methods for API operations. Subscribe to publishers for async results.
+
 import Foundation
 import Combine
 

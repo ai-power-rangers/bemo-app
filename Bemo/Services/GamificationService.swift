@@ -5,6 +5,10 @@
 //  Service for managing XP, achievements, and rewards
 //
 
+// WHAT: Manages gamification features including XP, levels, achievements, and streaks. Tracks and rewards player progress.
+// ARCHITECTURE: Service layer in MVVM-S. Depends on ProfileService for active user. Publishes state changes via @Published.
+// USAGE: Award XP/points through methods. Service auto-calculates levels, unlocks achievements. Subscribe to published properties.
+
 import Foundation
 import Combine
 

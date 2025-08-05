@@ -5,6 +5,10 @@
 //  Model representing a physical piece recognized by the CV service
 //
 
+// WHAT: Data model for CV-recognized game pieces. Contains shape, color, position, rotation, and confidence data.
+// ARCHITECTURE: Core data model in MVVM-S. Published by CVService, consumed by games for gameplay logic.
+// USAGE: CVService creates instances when detecting pieces. Games use properties to validate placement and match requirements.
+
 import Foundation
 import CoreGraphics
 

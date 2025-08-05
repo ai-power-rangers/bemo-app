@@ -5,6 +5,10 @@
 //  ViewModel for the parent dashboard
 //
 
+// WHAT: Manages parent dashboard state including child profiles, analytics, insights, and settings. Handles profile switching.
+// ARCHITECTURE: ViewModel in MVVM-S for parent features. Uses ProfileService and APIService for data management.
+// USAGE: Created by AppCoordinator with dismiss callback. Load child data, generate insights, handle profile selection.
+
 import SwiftUI
 import Combine
 

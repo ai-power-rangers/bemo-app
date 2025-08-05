@@ -5,6 +5,10 @@
 //  ViewModel for the Tangram game view
 //
 
+// WHAT: ViewModel for TangramGameView. Manages display state, animations, and visual feedback for the Tangram game.
+// ARCHITECTURE: Presentation layer in game's internal MVVM. Transforms game state into view-friendly display models.
+// USAGE: Created by TangramGame. Updates view based on game logic. Manages target outlines, placed pieces, and feedback messages.
+
 import SwiftUI
 import Combine
 

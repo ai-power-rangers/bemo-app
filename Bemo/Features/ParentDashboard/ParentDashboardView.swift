@@ -5,6 +5,10 @@
 //  Parent-facing dashboard for monitoring child progress and settings
 //
 
+// WHAT: Parent control panel showing child profiles, progress metrics, achievements, and app settings. Analytics and management hub.
+// ARCHITECTURE: View layer for parent features in MVVM-S. Displays child data and settings from ParentDashboardViewModel.
+// USAGE: Accessed from GameLobby via parent button. Shows list of children, selected child's progress, insights, and settings.
+
 import SwiftUI
 
 struct ParentDashboardView: View {
