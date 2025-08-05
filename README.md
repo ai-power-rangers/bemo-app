@@ -136,11 +136,13 @@ class YourGame: Game {
 ## 💻 Development Guidelines
 
 - Follow MVVM-S architecture pattern
-- Use SwiftUI and Combine for reactive programming
+- Use SwiftUI for reactive programming
 - Prefer protocols and value types (structs)
 - Inject dependencies through initializers
 - Write unit tests for ViewModels and Services
-- Use `@Published` for observable state
+- Use `@Observable` for observable state
+- Use `@State` for owned ViewModels
+- Use `@Bindable` for two-way bindings
 - Handle all screen sizes and orientations
 
 ## 📄 License
