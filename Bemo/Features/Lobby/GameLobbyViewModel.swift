@@ -58,6 +58,7 @@ class GameLobbyViewModel {
         let game: Game
         let iconName: String
         let color: Color
+        let badge: String?
     }
     
     init(
@@ -97,12 +98,20 @@ class GameLobbyViewModel {
         // Load available games
         // In a real app, this would come from a configuration or backend
         let tangramGame = TangramGame()
+        let tangramEditorGame = TangramEditorGame()
         
         availableGames = [
             GameItem(
                 game: tangramGame,
                 iconName: "square.on.square",
-                color: .blue
+                color: .blue,
+                badge: nil
+            ),
+            GameItem(
+                game: tangramEditorGame,
+                iconName: "pencil.and.ruler.fill",
+                color: .orange,
+                badge: "Editor"
             )
             // Add more games here as they're implemented
         ]

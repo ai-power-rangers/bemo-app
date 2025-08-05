@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct TangramEditorView: View {
-    @ObservedObject var viewModel: TangramEditorViewModel
+    var viewModel: TangramEditorViewModel
     
     var body: some View {
         VStack {
