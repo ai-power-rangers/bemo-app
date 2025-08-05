@@ -2,8 +2,6 @@
 .DS_Store
 .Trashes
 
-
-
 # Xcode User settings
 xcuserdata/
 
@@ -15,39 +13,5 @@ Package.resolved
 # Pods
 Pods/
 
-# Configuration files with secrets
-# NOTE: You may want to gitignore these in production to avoid exposing API keys
-# For now, we're including them but make sure to update with real keys before deploying
-Bemo/Config/Debug.xcconfig
-Bemo/Config/Release.xcconfig
-
-*.xcodeproj/project.pbxproj
-
-# .doc
-.doc/*
-
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-dev-debug.log
-# Dependency directories
-node_modules/
-# Environment variables
-.env
-# Editor directories and files
-.idea
-.vscode
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-# OS specific
-
-# Task files
-# tasks.json
-# tasks/ 
-.taskmaster/
+# Configuration files with API keys
+Config/
