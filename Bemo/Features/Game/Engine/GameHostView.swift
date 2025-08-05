@@ -12,7 +12,7 @@
 import SwiftUI
 
 struct GameHostView: View {
-    @StateObject var viewModel: GameHostViewModel
+    @State var viewModel: GameHostViewModel
     
     var body: some View {
         ZStack {

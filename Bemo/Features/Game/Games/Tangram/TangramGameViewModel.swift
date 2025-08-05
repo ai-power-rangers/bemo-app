@@ -11,14 +11,16 @@
 
 import SwiftUI
 import Combine
+import Observation
 
-class TangramGameViewModel: ObservableObject {
-    @Published var targetShapeName: String = ""
-    @Published var targetOutlines: [ShapeOutline] = []
-    @Published var placedPieces: [PlacedPieceDisplay] = []
-    @Published var showFeedback: Bool = false
-    @Published var feedbackMessage: String = ""
-    @Published var feedbackColor: Color = .green
+@Observable
+class TangramGameViewModel {
+    var targetShapeName: String = ""
+    var targetOutlines: [ShapeOutline] = []
+    var placedPieces: [PlacedPieceDisplay] = []
+    var showFeedback: Bool = false
+    var feedbackMessage: String = ""
+    var feedbackColor: Color = .green
     
     private let game: TangramGame
     private weak var delegate: GameDelegate?

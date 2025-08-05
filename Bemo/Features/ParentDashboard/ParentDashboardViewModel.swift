@@ -11,16 +11,21 @@
 
 import SwiftUI
 import Combine
+import Observation
 
-class ParentDashboardViewModel: ObservableObject {
-    @Published var childProfiles: [ChildProfile] = []
-    @Published var selectedChild: ChildProfile?
-    @Published var insights: [Insight] = []
-    @Published var showAddChildSheet = false
+@Observable
+class ParentDashboardViewModel {
+    var childProfiles: [ChildProfile] = []
+    var selectedChild: ChildProfile?
+    var insights: [Insight] = []
+
+    var authenticatedUser: AuthenticatedUser?
     
     private let profileService: ProfileService
     private let apiService: APIService
+    private let authenticationService: AuthenticationService
     private let onDismiss: () -> Void
+    private let onAddChildRequested: () -> Void
     private var cancellables = Set<AnyCancellable>()
     
     // Display models
@@ -30,11 +35,11 @@ class ParentDashboardViewModel: ObservableObject {
         let level: Int
         let totalXP: Int
         let playTimeToday: TimeInterval
-        let recentAchievements: [Achievement]
+        let recentAchievements: [RecentAchievement]
         let isSelected: Bool
     }
     
-    struct Achievement: Identifiable {
+    struct RecentAchievement: Identifiable {
         let id = UUID()
         let name: String
         let iconName: String
@@ -52,13 +57,26 @@ class ParentDashboardViewModel: ObservableObject {
     init(
         profileService: ProfileService,
         apiService: APIService,
-        onDismiss: @escaping () -> Void
+        authenticationService: AuthenticationService,
+        onDismiss: @escaping () -> Void,
+        onAddChildRequested: @escaping () -> Void
     ) {
         self.profileService = profileService
         self.apiService = apiService
+        self.authenticationService = authenticationService
         self.onDismiss = onDismiss
+        self.onAddChildRequested = onAddChildRequested
+        
+        self.authenticatedUser = authenticationService.currentUser
         
         loadData()
+        setupAuthenticationObserver()
+    }
+    
+    private func setupAuthenticationObserver() {
+        // With @Observable, the authenticatedUser will automatically sync
+        // when authenticationService.currentUser changes
+        authenticatedUser = authenticationService.currentUser
     }
     
     private func loadData() {
@@ -70,43 +88,35 @@ class ParentDashboardViewModel: ObservableObject {
     }
     
     private func loadChildProfiles() {
-        // In a real app, this would fetch from the profile service
-        // For now, create mock data
-        let mockProfiles = [
-            ChildProfile(
-                id: "1",
-                name: "Emma",
-                level: 5,
-                totalXP: 450,
-                playTimeToday: 1800, // 30 minutes
-                recentAchievements: [
-                    Achievement(name: "Shape Master", iconName: "star.fill", date: Date()),
-                    Achievement(name: "5 Day Streak", iconName: "flame.fill", date: Date().addingTimeInterval(-86400))
-                ],
-                isSelected: true
-            ),
-            ChildProfile(
-                id: "2",
-                name: "Liam",
-                level: 3,
-                totalXP: 280,
-                playTimeToday: 1200, // 20 minutes
-                recentAchievements: [
-                    Achievement(name: "First Victory", iconName: "trophy.fill", date: Date().addingTimeInterval(-172800))
-                ],
-                isSelected: false
-            )
-        ]
+        // Load child profiles from ProfileService
+        let userProfiles = profileService.childProfiles
+        let activeProfileId = profileService.activeProfile?.id
         
-        childProfiles = mockProfiles
-        selectedChild = mockProfiles.first
+        childProfiles = userProfiles.map { profile in
+            ChildProfile(
+                id: profile.id,
+                name: profile.name,
+                level: calculateLevel(from: profile.totalXP),
+                totalXP: profile.totalXP,
+                playTimeToday: generateMockPlayTime(), // Mock data for now
+                recentAchievements: generateMockAchievements(), // Mock data for now
+                isSelected: profile.id == activeProfileId
+            )
+        }
+        
+        selectedChild = childProfiles.first { $0.isSelected } ?? childProfiles.first
     }
     
     private func generateInsights() {
+        guard let child = selectedChild else {
+            insights = []
+            return
+        }
+        
         insights = [
             Insight(
                 title: "Strong Spatial Skills",
-                description: "Emma excels at shape recognition tasks",
+                description: "\(child.name) excels at shape recognition tasks",
                 iconName: "cube.fill",
                 color: .green
             ),
@@ -125,6 +135,25 @@ class ParentDashboardViewModel: ObservableObject {
         ]
     }
     
+    private func calculateLevel(from xp: Int) -> Int {
+        return (xp / 100) + 1
+    }
+    
+    private func generateMockPlayTime() -> TimeInterval {
+        return Double.random(in: 600...3600) // 10 minutes to 1 hour
+    }
+    
+    private func generateMockAchievements() -> [RecentAchievement] {
+        let allAchievements = [
+            RecentAchievement(name: "Shape Master", iconName: "star.fill", date: Date()),
+            RecentAchievement(name: "5 Day Streak", iconName: "flame.fill", date: Date().addingTimeInterval(-86400)),
+            RecentAchievement(name: "First Victory", iconName: "trophy.fill", date: Date().addingTimeInterval(-172800)),
+            RecentAchievement(name: "Speed Runner", iconName: "bolt.fill", date: Date().addingTimeInterval(-259200))
+        ]
+        
+        return Array(allAchievements.prefix(Int.random(in: 1...3)))
+    }
+    
     func selectChild(_ profile: ChildProfile) {
         selectedChild = profile
         
@@ -141,6 +170,11 @@ class ParentDashboardViewModel: ObservableObject {
             )
         }
         
+        // Update the active profile in ProfileService
+        if let userProfile = profileService.childProfiles.first(where: { $0.id == profile.id }) {
+            profileService.setActiveProfile(userProfile)
+        }
+        
         // Update insights for selected child
         generateInsights()
     }
@@ -155,6 +189,41 @@ class ParentDashboardViewModel: ObservableObject {
         } else {
             return "\(minutes)m"
         }
+    }
+    
+    func signOut() {
+        authenticationService.signOut()
+        // Navigation will be handled by AppCoordinator's authentication observer
+    }
+    
+    func deleteChild(_ profile: ChildProfile) {
+        // Call API to delete profile
+        apiService.deleteChildProfile(profileId: profile.id)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    switch completion {
+                    case .finished:
+                        break
+                    case .failure(let error):
+                        print("Failed to delete profile: \(error)")
+                        // Handle error - could show alert to user
+                    }
+                },
+                receiveValue: { [weak self] _ in
+                    // Remove from ProfileService
+                    self?.profileService.deleteChildProfile(profile.id)
+                    
+                    // Reload profiles
+                    self?.loadChildProfiles()
+                    self?.generateInsights()
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
+    func addChild() {
+        onAddChildRequested()
     }
     
     func dismiss() {

@@ -12,7 +12,7 @@
 import SwiftUI
 
 struct GameLobbyView: View {
-    @StateObject var viewModel: GameLobbyViewModel
+    @State var viewModel: GameLobbyViewModel
     
     var body: some View {
         NavigationView {
@@ -28,7 +28,26 @@ struct GameLobbyView: View {
                 VStack {
                     // Profile section
                     HStack {
-                        ProfileBadgeView(profile: viewModel.displayProfile)
+                        if let profile = viewModel.displayProfile {
+                            Button(action: {
+                                viewModel.showProfileSelectionModal()
+                            }) {
+                                ProfileBadgeView(profile: profile)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        } else {
+                            Button(action: {
+                                viewModel.showProfileSelectionModal()
+                            }) {
+                                Text("No Profile Selected")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .padding()
+                                    .background(Color.black.opacity(0.3))
+                                    .cornerRadius(15)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
                         
                         Spacer()
                         
@@ -73,6 +92,20 @@ struct GameLobbyView: View {
                 }
             }
             .navigationBarHidden(true)
+        }
+        .sheet(isPresented: $viewModel.showProfileModal) {
+            ProfileSelectionModal(
+                profiles: viewModel.availableProfiles,
+                onProfileSelected: { profile in
+                    viewModel.selectProfile(profile)
+                },
+                onAddProfile: {
+                    viewModel.addNewProfile()
+                },
+                onDismiss: {
+                    viewModel.hideProfileSelectionModal()
+                }
+            )
         }
         .alert(isPresented: $viewModel.showProfileSelection) {
             Alert(
