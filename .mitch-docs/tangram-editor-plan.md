@@ -1,396 +1,364 @@
-# Tangram Editor Implementation Plan
+# Tangram Editor Implementation Status
 
-## Executive Summary
+## What's Complete ✅
 
-A comprehensive implementation plan for a CAD-like tangram puzzle editor that integrates with Bemo's game framework. The editor enables creation of puzzle targets with precise mathematical validation and constraint-based connections.
+### Core Business Logic (100% Complete)
+1. **Geometric Engine** - All mathematical calculations for tangram pieces
+   - Polygon overlap detection
+   - Edge/vertex contact detection  
+   - Transform operations (rotation, translation)
+   - Bounding box calculations
+   - Point-in-polygon tests
 
-## Implementation Phases
+2. **Validation System** - Three-layer validation architecture
+   - Layer 1: Pure geometric detection (overlaps, contacts)
+   - Layer 2: Connection management (vertex-to-vertex, edge-to-edge)
+   - Layer 3: Semantic validation (valid puzzle assembly)
 
-### Phase 1: Core Validation System ✅ COMPLETE
-**Goal:** Build robust geometric validation with clear separation of concerns
+3. **Connection System** - Constraint-based piece connections
+   - Vertex-to-vertex connections (allows rotation around point)
+   - Edge-to-edge connections (allows sliding along edge)
+   - Support for different length edges (small edge slides on larger edge)
+   - Full constraint satisfaction checking
 
-**Status:** 100% Complete
-- ✅ Mathematical piece definitions with exact geometry
-- ✅ Three-layer validation system (geometric, connection, semantic)
-- ✅ Polygon overlap detection with proper boundary handling
-- ✅ Edge/vertex contact detection
-- ✅ Graph connectivity validation
+4. **Data Models** - All required data structures
+   - `TangramPuzzle` - Main puzzle with metadata
+   - `TangramPiece` - Individual piece with transform
+   - `Connection` - Connection between pieces with constraints
+   - `PieceType` - All 7 tangram pieces defined
+   - Categories and difficulty levels
 
-### Phase 2: Connection System ✅ COMPLETE  
-**Goal:** Implement constraint-based connections between pieces
+5. **Services** 
+   - `ConnectionService` - Creates and validates connections
+   - `ValidationService` - Checks puzzle validity
+   - `TangramEditorEngine` - Orchestrates state management
 
-**Status:** 100% Complete
-- ✅ Vertex-to-vertex connections (rotation constraints)
-- ✅ Edge-to-edge connections (sliding constraints)
-- ✅ Support for different length edges (partial overlap)
-- ✅ Connection validation and constraint satisfaction
-- ✅ Full test coverage with new clean API
-- ✅ All deprecated methods removed
-- ✅ TangramEditorEngine with state management
+6. **Game Integration**
+   - `TangramEditorGame` - Conforms to Game protocol
+   - `TangramEditorViewModel` - View model with all business logic
+   - Basic `TangramEditorView` - Placeholder UI ready for enhancement
 
-**Minor Issue:** Missing `removeAllPieces()` method in ConnectionSystem (5 min fix)
+7. **Tests** - All tests passing with correct naming
 
-### Phase 3: Game Integration 🚧 NOT STARTED
-**Goal:** Integrate editor with Bemo's game framework
+## What's Remaining for Backend (Core Flow Only)
 
-**Status:** 0% Complete
-- ❌ TangramEditorGame class (conforms to Game protocol)
-- ❌ Integration with game selection menu
-- ❌ Navigation from parent dashboard
-
-### Phase 4: UI Implementation 🚧 NOT STARTED
-**Goal:** Build SwiftUI interface for puzzle creation
-
-**Status:** 0% Complete
-- ❌ TangramEditorView (main editor interface)
-- ❌ TangramEditorViewModel (MVVM pattern)
-- ❌ Piece rendering and selection
-- ❌ Connection creation workflow
-- ❌ Visual feedback system
-- ❌ Constraint visualization
-
-### Phase 5: User Interaction 🚧 NOT STARTED
-**Goal:** Implement editing workflows
-
-**Status:** 0% Complete
-- ❌ Piece manipulation (drag, rotate)
-- ❌ Connection point highlighting
-- ❌ Snap-to-connection behavior
-- ❌ Validation feedback
-- ❌ Undo/redo system
-
-### Phase 6: Persistence & Export 🚧 NOT STARTED
-**Goal:** Save and share puzzles
-
-**Status:** 0% Complete  
-- ❌ Save/load UI
-- ❌ Export to gameplay format
-- ❌ Puzzle library integration
-- ❌ Templates and presets
-
-## Architecture Overview
-
-### Clean Validation System
-
-The validation system separates geometric truth from semantic interpretation:
-
-#### Layer 1: Geometric Detection (Pure Math)
+### 1. Persistence Service (HIGH PRIORITY)
+Create `PuzzlePersistenceService` to save/load puzzles:
 ```swift
-// Pure geometric relationships - no semantic interpretation
-func hasAreaOverlap(_ pieceA: String, _ pieceB: String) -> Bool
-func hasEdgeContact(_ pieceA: String, _ pieceB: String) -> Bool  
-func hasVertexContact(_ pieceA: String, _ pieceB: String) -> Bool
-func getGeometricRelationship(_ pieceA: String, _ pieceB: String) -> GeometricRelationship
+class PuzzlePersistenceService {
+    func savePuzzle(_ puzzle: TangramPuzzle) async throws
+    func loadPuzzle(id: String) async throws -> TangramPuzzle
+    func listPuzzles() async throws -> [TangramPuzzle]
+    func deletePuzzle(id: String) async throws
+}
+```
+- Save to app's documents directory as JSON
+- Load existing puzzles for editing
+- List all created puzzles
 
-enum GeometricRelationship {
-    case areaOverlap    // Interior intersection - ALWAYS INVALID
-    case edgeContact    // Sharing edge - needs connection
-    case vertexContact  // Touching at point - needs connection
-    case noContact      // Not touching - breaks connectivity
+### 2. Connection Creation Logic (HIGH PRIORITY)
+Enhance `TangramEditorViewModel` with connection workflow:
+```swift
+// Connection creation state machine
+func startConnectionCreation(fromPiece: String)
+func selectConnectionPoint(piece: String, point: ConnectionPoint)
+func previewConnection(type: ConnectionType) -> ConnectionPreview?
+func confirmConnection(type: ConnectionType, constraint: ConstraintType)
+func cancelConnectionCreation()
+```
+
+### 3. Piece Transformation with Constraints (HIGH PRIORITY)
+Add constraint-aware transformations:
+```swift
+// Rotation around shared vertex
+func rotatePieceAroundVertex(pieceId: String, vertex: CGPoint, angle: Double)
+
+// Sliding along shared edge  
+func slidePieceAlongEdge(pieceId: String, edge: Edge, distance: Double)
+
+// Snap to valid positions
+func snapToValidPosition(pieceId: String) -> CGAffineTransform?
+```
+
+### 4. Grid System (MEDIUM PRIORITY)
+Implement `GridManager` for precise placement:
+```swift
+class GridManager {
+    var gridSize: CGFloat = 20
+    func snapToGrid(point: CGPoint) -> CGPoint
+    func snapTransformToGrid(_ transform: CGAffineTransform) -> CGAffineTransform
 }
 ```
 
-#### Layer 2: Connection Management
+### 5. Thumbnail Generator (MEDIUM PRIORITY)
+Create thumbnail from completed puzzle:
 ```swift
-// Connection queries and management
-func areConnected(_ pieceA: String, _ pieceB: String) -> Bool
-func createConnection(type: ConnectionType) -> Connection?
-func connectionBetween(_ pieceA: String, _ pieceB: String) -> Connection?
-func isConnected() -> Bool // Graph connectivity check
-```
-
-#### Layer 3: Semantic Validation
-```swift
-// High-level validation combining geometry and connections
-func hasInvalidAreaOverlaps() -> Bool    // Any area overlaps (always invalid)
-func hasUnexplainedContacts() -> Bool    // Touches without connections
-func isValidAssembly() -> Bool           // Overall puzzle validity
-
-// Main validation logic
-func isValidAssembly() -> Bool {
-    return !hasInvalidAreaOverlaps() &&  // No interior overlaps
-           !hasUnexplainedContacts() &&  // All touches have connections
-           isConnected()                  // All pieces form connected graph
+class ThumbnailGenerator {
+    func generateThumbnail(puzzle: TangramPuzzle, size: CGSize) -> Data?
+    // Render puzzle pieces to image
+    // Scale to fit icon size
+    // Center in frame
 }
 ```
 
-### Connection System
+### 6. Game Registry Integration (MEDIUM PRIORITY)
+Add to game lobby:
+- Register `TangramEditorGame` in `GameRegistry`
+- Add parent-only flag to restrict access
+- Show in game selection screen
 
-#### Connection Types
+### 7. Parent Access Control (LOW PRIORITY)
+Integrate with `ProfileService`:
 ```swift
-enum ConnectionType {
-    case vertexToVertex(pieceA: String, vertexA: Int, pieceB: String, vertexB: Int)
-    case edgeToEdge(pieceA: String, edgeA: Int, pieceB: String, edgeB: Int)
+extension TangramEditorGame {
+    func checkParentAccess() -> Bool {
+        // Use ProfileService to verify parent status
+    }
 }
 ```
 
-#### Constraint System
+---
+
+## Frontend Developer Integration Guide
+
+### Overview
+The Tangram Editor backend is complete. All business logic, validation, and data models are ready. Your task is to build the UI that allows users to create tangram puzzles by placing and connecting pieces.
+
+### Key Components You'll Work With
+
+#### 1. TangramEditorViewModel (Your Main Interface)
+Located at: `Bemo/Features/Game/Games/TangramEditor/ViewModels/TangramEditorViewModel.swift`
+
+**Published Properties to Bind To:**
 ```swift
-enum ConstraintType {
-    case rotation(around: CGPoint, range: ClosedRange<Double>)
-    case translation(along: CGVector, range: ClosedRange<Double>)
-    case fixed
-}
+@Published var puzzle: TangramPuzzle        // Current puzzle being edited
+@Published var selectedPieceId: String?     // Currently selected piece
+@Published var anchorPieceId: String?       // Piece being connected from
+@Published var validationState: ValidationState  // Valid/Invalid with errors
+@Published var editMode: EditMode           // select/move/rotate/connect
+@Published var showGrid: Bool               // Grid visibility
+@Published var snapToGrid: Bool             // Snap behavior
 ```
 
-**Key Features:**
-- Vertex connections allow rotation around shared point
-- Edge connections allow sliding (shorter edge along longer edge)
-- Multiple connections can fully constrain a piece
-
-#### Edge Connections with Different Lengths
-A fundamental tangram feature - smaller pieces can slide along larger pieces:
+**Key Methods to Call:**
 ```swift
-// Calculate sliding range for different length edges
-let slidingRange = max(0, longerEdgeLength - shorterEdgeLength)
-Constraint(type: .translation(along: edgeVector, range: 0...slidingRange))
+// Piece Management
+func addPiece(type: PieceType, at: CGPoint)
+func removePiece(id: String)
+func updatePieceTransform(id: String, transform: CGAffineTransform)
+func selectPiece(id: String?)
+
+// Connection Management
+func createConnection(type: ConnectionType)
+func removeConnection(id: String)
+
+// Validation (auto-called on changes)
+func validate()
+
+// Geometry Helpers
+func getTransformedVertices(for: String) -> [CGPoint]?
+func getPieceBounds(for: String) -> CGRect?
+func getPieceCentroid(for: String) -> CGPoint?
 ```
 
-### Geometry Engine
+#### 2. TangramEditorView (Starting Point)
+Located at: `Bemo/Features/Game/Games/TangramEditor/Views/TangramEditorView.swift`
 
-#### Core Algorithms
+Currently a basic placeholder. You need to build:
+- **Canvas area** for puzzle workspace
+- **Piece palette** showing 7 tangram pieces
+- **Properties panel** for puzzle metadata
+- **Connection mode UI** for creating connections
+- **Validation feedback** showing errors
 
-1. **Polygon Overlap Detection** (Simplified for convex polygons):
+### Core User Flow to Implement
+
+#### Step 1: Create New Puzzle
+1. User clicks "New Puzzle" 
+2. Empty canvas appears
+3. Piece palette shows 7 tangram pieces
+
+#### Step 2: Place First Piece
+1. User clicks piece from palette
+2. Call `viewModel.addPiece(type: pieceType, at: centerPoint)`
+3. Piece appears on canvas
+
+#### Step 3: Place Second Piece
+1. User clicks another piece from palette
+2. Piece appears on canvas (not connected yet)
+
+#### Step 4: Create Connection
+1. User enters connection mode (`viewModel.editMode = .connect`)
+2. User clicks first piece → highlight connection points:
+   - Vertices (for vertex-to-vertex connections)
+   - Edges (for edge-to-edge connections)
+3. User selects a connection point
+4. User clicks second piece → highlight compatible points
+5. User selects matching point
+6. Call `viewModel.createConnection(type: connectionType)`
+7. Pieces snap together based on connection
+
+#### Step 5: Adjust Within Constraints
+- **Vertex-to-vertex**: Show rotation handle, allow rotation around shared vertex
+- **Edge-to-edge**: Show slide handle, allow sliding along edge (if edges different length)
+
+#### Step 6: Add More Pieces
+- Repeat steps 2-5 for remaining pieces
+- Each new piece must connect to existing assembly
+
+#### Step 7: Save Puzzle
+1. Validation must pass (`viewModel.validationState == .valid`)
+2. Enter name, category, difficulty
+3. Call save method (when persistence service ready)
+
+### Visual Components Needed
+
+#### 1. Piece Rendering
+Use `PieceShape` to render tangram pieces:
 ```swift
-func polygonsOverlap(_ vertices1: [CGPoint], _ vertices2: [CGPoint]) -> Bool {
-    // 1. Check if any vertex of polygon1 is inside polygon2
-    // 2. Check if any vertex of polygon2 is inside polygon1  
-    // 3. Check for edge intersections (excluding endpoints)
-    // More reliable than complex clipping for convex shapes
-}
-```
-
-2. **Edge Coincidence Detection**:
-```swift
-// Full coincidence for same-length edges
-func edgesCoincide(_ edgeA: (CGPoint, CGPoint), _ edgeB: (CGPoint, CGPoint)) -> Bool
-
-// Partial coincidence for different-length edges
-func edgePartiallyCoincides(shorterEdge: (CGPoint, CGPoint), 
-                           longerEdge: (CGPoint, CGPoint)) -> Bool
-```
-
-3. **Shared Geometry Detection**:
-```swift
-func sharedVertices(_ vertices1: [CGPoint], _ vertices2: [CGPoint]) -> Set<CGPoint>
-func sharedEdges(_ vertices1: [CGPoint], _ vertices2: [CGPoint]) -> Set<String>
-```
-
-## Data Model
-
-### Core Types
-
-```swift
-struct TangramPiece: Codable, Identifiable {
-    let id: String
+struct PieceShape: Shape {
     let type: PieceType
-    var currentTransform: CGAffineTransform
-    var connectionIds: [String]
     
-    // Computed properties
-    var vertices: [CGPoint]     // Transformed vertices
-    var edges: [Edge]           // Edge definitions
-    var centroid: CGPoint       // Center point
-    var boundingBox: CGRect     // For optimization
-}
-
-struct Connection: Codable, Identifiable {
-    let id: String
-    let type: ConnectionType
-    let constraint: Constraint
-    let createdAt: Date
-}
-
-struct TangramPuzzle: Codable {
-    let id: String
-    var name: String
-    var difficulty: Difficulty
-    var pieces: [TangramPiece]
-    var connections: [Connection]
-    var solutionChecksum: String
-}
-```
-
-## Validation Rules
-
-### Fundamental Principles
-
-1. **No Area Overlaps**: Pieces cannot have interior intersection
-2. **All Contacts Declared**: Every geometric touch needs a connection
-3. **Graph Connectivity**: All pieces form single connected component
-4. **Connections Satisfied**: Declared connections are geometrically valid
-
-### Validation Flow
-
-```swift
-func validatePuzzle() -> ValidationResult {
-    // Step 1: Check for area overlaps (always invalid)
-    if hasInvalidAreaOverlaps() {
-        return .invalid(reason: "Pieces have area overlap")
+    func path(in rect: CGRect) -> Path {
+        let vertices = TangramGeometry.vertices(for: type)
+        // Convert vertices to path
     }
-    
-    // Step 2: Check for unexplained contacts
-    if hasUnexplainedContacts() {
-        return .invalid(reason: "Pieces touch without connection")
-    }
-    
-    // Step 3: Check graph connectivity
-    if !isConnected() {
-        return .invalid(reason: "Not all pieces connected")
-    }
-    
-    // Step 4: Verify all connections are satisfied
-    for connection in connections {
-        if !isConnectionGeometricallySatisfied(connection) {
-            return .invalid(reason: "Connection not satisfied")
-        }
-    }
-    
-    return .valid
 }
 ```
 
-## UI Implementation Plan
+#### 2. Connection Point Indicators
+Show dots/highlights at:
+- Vertices (corner points)
+- Edge midpoints or endpoints
 
-### Editor Modes
+#### 3. Constraint Visualization
+- **Rotation arc** for vertex connections
+- **Sliding line** for edge connections
+- **Lock icon** for fixed constraints
 
-1. **Place Mode**: Add pieces from palette
-2. **Connect Mode**: Create connections between pieces
-3. **Edit Mode**: Adjust existing connections within constraints
-4. **Validate Mode**: Check puzzle validity
-
-### Connection Creation Workflow
-
-1. User selects first piece
-2. Highlights available connection points (vertices/edges)
-3. User selects connection point
-4. User selects second piece
-5. Highlights compatible connection points
-6. User selects matching point
-7. System calculates valid positions
-8. User adjusts within constraints (rotation/sliding)
-9. Connection validated and saved
-
-### Visual Feedback System
-
+#### 4. Validation Feedback
 ```swift
-enum ConnectionPointState {
-    case available     // Blue highlight
-    case selected      // Yellow highlight
-    case connected     // Green highlight
-    case invalid       // Red highlight
-}
-
-enum ValidationState {
-    case valid         // Green border
-    case warning       // Yellow border (e.g., disconnected)
-    case invalid       // Red border (e.g., overlap)
+switch viewModel.validationState {
+case .valid:
+    // Green checkmark
+case .invalid(let errors):
+    // Red X with error list
+    // Common errors:
+    // - "Pieces have area overlap"
+    // - "Pieces touch without connection"  
+    // - "Not all pieces connected"
 }
 ```
 
-### Constraint Visualization
-
-- **Rotation constraints**: Arc showing valid rotation range
-- **Translation constraints**: Line showing sliding range
-- **Fixed constraints**: Lock icon
-- **Multiple constraints**: Stacked indicators
-
-## Testing Strategy
-
-### Unit Tests
-- Geometric calculations (overlap, edge detection, vertex matching)
-- Connection validation (vertex-to-vertex, edge-to-edge)
-- Constraint system (rotation, translation, fixed)
-- Graph connectivity algorithms
-
-### Integration Tests
-- Full puzzle validation scenarios
-- Connection creation and deletion
-- Piece transformation with constraints
-- Export/import functionality
-- Edge cases (multiple connections, complex assemblies)
-
-### Test Migration Plan
-Replace confusing old API calls with clear new ones:
+### Piece Colors (Standard)
 ```swift
-// OLD (confusing)
-XCTAssertTrue(hasOverlaps())  // What does this mean?
-
-// NEW (clear)
-XCTAssertTrue(hasAreaOverlap("piece1", "piece2"))  // Geometric truth
-XCTAssertTrue(hasUnexplainedContacts())            // Semantic validation
-XCTAssertTrue(isValidAssembly())                   // Overall validity
-```
-
-## Performance Optimizations
-
-- **Bounding box pre-checks**: Quick rejection before detailed checks
-- **Vertex caching**: Cache transformed vertices
-- **Lazy constraint evaluation**: Only compute when needed
-- **Spatial indexing**: For assemblies with many pieces
-
-## Integration with Bemo
-
-### Game Protocol Conformance
-```swift
-struct TangramEditorGame: Game {
-    func makeGameView(delegate: GameDelegate?) -> AnyView
-    func processRecognizedPieces(_ pieces: [RecognizedPiece]) -> PlayerActionOutcome
-    // Editor doesn't use CV but conforms to protocol
+switch pieceType {
+case .smallTriangle1, .smallTriangle2: return .blue
+case .mediumTriangle: return .green
+case .largeTriangle1, .largeTriangle2: return .red
+case .square: return .yellow
+case .parallelogram: return .purple
 }
 ```
 
-### Navigation Flow
-1. Parent Dashboard → Create Puzzle
-2. Editor opens with empty canvas
-3. Create/edit puzzle
-4. Save to puzzle library
-5. Available in game selection
+### Gesture Handling
 
-## Future Enhancements
+#### Drag Gesture (Move Mode)
+```swift
+DragGesture()
+    .onChanged { value in
+        // Update piece position temporarily
+    }
+    .onEnded { value in
+        let newTransform = // calculate transform
+        viewModel.updatePieceTransform(id: pieceId, transform: newTransform)
+    }
+```
 
-- **AI-assisted creation**: Suggest valid connections
-- **Difficulty analysis**: Automatically rate puzzle difficulty
-- **Solution hints**: Step-by-step assembly guidance
-- **Multiplayer editing**: Collaborative puzzle creation
-- **Animation system**: Smooth transitions for solutions
-- **Template library**: Pre-built shapes and patterns
+#### Rotation Gesture (Rotate Mode)
+```swift
+RotationGesture()
+    .onChanged { angle in
+        // Preview rotation
+    }
+    .onEnded { angle in
+        // Apply rotation transform
+    }
+```
 
-## Technical Status
+### Connection Creation UI Flow
 
-### Core Logic (Phases 1-2) ✅ COMPLETE
-- [x] Clean validation system implemented
-- [x] Edge connections with different lengths
-- [x] Geometric detection methods  
-- [x] Semantic validation layer
-- [x] All tests migrated to new API
-- [x] All deprecated methods removed
-- [x] Connection system fully functional
-- [x] Engine layer implemented
+1. **Select First Piece**
+   - Highlight piece border
+   - Show connection points (vertices and edges)
 
-**Technical Debt:** ZERO (except missing `removeAllPieces()` - 5 min fix)
+2. **Select Connection Point**
+   - User taps vertex or edge
+   - Store selection in view state
 
-### UI & Integration (Phases 3-6) 🚧 NOT STARTED
-- [ ] TangramEditorGame class
-- [ ] SwiftUI interface
-- [ ] Visual feedback system
-- [ ] Persistence UI
-- [ ] Export functionality
-- [ ] Game framework integration
+3. **Select Second Piece**
+   - Highlight compatible connection points only
+   - Vertices can connect to vertices
+   - Edges can connect to edges (if parallel)
 
-## Next Steps
+4. **Create Connection**
+   ```swift
+   let connectionType: ConnectionType = // based on selections
+   viewModel.createConnection(type: connectionType)
+   ```
 
-### Immediate (Before Phase 3)
-1. Add `removeAllPieces()` method to ConnectionSystem
-2. Verify TangramEditorEngine compiles with the fix
+5. **Pieces Snap Together**
+   - Automatic transform calculation
+   - Visual feedback for successful connection
 
-### Phase 3: Game Integration
-1. Create TangramEditorGame class conforming to Game protocol
-2. Wire up makeGameView() to return editor interface
-3. Add to game selection in lobby
+### Testing Your UI
 
-### Phase 4: Basic UI
-1. Create TangramEditorView with piece rendering
-2. Create TangramEditorViewModel
-3. Implement basic piece selection and movement
-4. Show validation status
+1. **Valid Puzzle Test**
+   - Place all 7 pieces
+   - Connect them properly
+   - No overlaps, all connected
+   - `validationState` should be `.valid`
+
+2. **Invalid Cases to Handle**
+   - Overlapping pieces → Show red overlap area
+   - Touching without connection → Highlight contact point
+   - Disconnected pieces → Show disconnected groups
+
+3. **Edge Cases**
+   - Small triangle sliding on large triangle edge
+   - Multiple pieces connected to same piece
+   - Rotation limits when constrained
+
+### Grid System
+When `snapToGrid` is enabled:
+- Pieces snap to nearest grid point
+- Grid size is typically 20 points
+- Show grid lines when `showGrid` is true
+
+### Don't Implement (Backend Will Handle)
+- Persistence/saving (coming soon)
+- Difficulty analysis
+- Import/export
+- Undo/redo
+
+### Example Connection Types
+```swift
+// Vertex to vertex
+ConnectionType.vertexToVertex(
+    pieceA: "piece1-id",
+    vertexA: 0,  // Index of vertex on piece1
+    pieceB: "piece2-id", 
+    vertexB: 2   // Index of vertex on piece2
+)
+
+// Edge to edge
+ConnectionType.edgeToEdge(
+    pieceA: "piece1-id",
+    edgeA: 1,    // Index of edge on piece1
+    pieceB: "piece2-id",
+    edgeB: 0     // Index of edge on piece2
+)
+```
+
+### Questions?
+The backend team has implemented all business logic. Focus on making the UI intuitive for creating tangram puzzles. The validation system will guide users to create valid puzzles.

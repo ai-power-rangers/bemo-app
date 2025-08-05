@@ -205,6 +205,25 @@ class TangramEditorViewModel: ObservableObject {
         return String(positionString.hashValue)
     }
     
+    // MARK: - Game Integration
+    
+    func reset() {
+        puzzle = TangramPuzzle(name: "New Puzzle")
+        selectedPieceId = nil
+        anchorPieceId = nil
+        validationState = .unknown
+        editMode = .select
+    }
+    
+    func currentPuzzleData() -> TangramPuzzle {
+        return puzzle
+    }
+    
+    func loadPuzzle(from data: TangramPuzzle) {
+        puzzle = data
+        validate()
+    }
+    
     // MARK: - Undo/Redo (Future)
     
     func undo() {
