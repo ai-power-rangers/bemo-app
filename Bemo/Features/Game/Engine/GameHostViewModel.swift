@@ -5,21 +5,9 @@
 //  ViewModel that manages the game session and connects services to the game
 //
 
-// GameHostViewModel.swift
-// This is the brain of the active game session. It's a concrete class that does the actual work of connecting the different parts of your app.
-// Its Job: To manage the entire lifecycle of a single game being played.
-
-// What it Does:
-
-// It holds the active Game module (e.g., the TangramGame instance).
-
-// It subscribes to the CVService and passes the recognized pieces to the game.
-
-// It implements the GameDelegate protocol, meaning it's the one listening for events like "level complete" or "quit."
-
-// It tells the AppCoordinator when it's time to navigate away from the game.
-
-
+// WHAT: Manages active game lifecycle. Connects CVService to game, implements GameDelegate, manages scoring and session state.
+// ARCHITECTURE: Central game coordinator in MVVM-S. Bridges services (CV, Gamification) with game logic. Implements GameDelegate for callbacks.
+// USAGE: Created with a Game instance and required services. Subscribe to CVService, forward pieces to game, handle delegate callbacks.
 
 import SwiftUI
 import Combine

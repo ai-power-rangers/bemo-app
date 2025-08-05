@@ -1,11 +1,6 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Project Overview
-
-Bemo is an iOS app built with SwiftUI following the MVVM-S (Model-View-ViewModel-Service) architecture pattern. The app is designed as an educational game platform for children with a focus on computer vision integration and modularity.
-
+---
+alwaysApply: true
+---
 
 # Bemo iOS App Architecture Guide
 
@@ -294,88 +289,3 @@ service.$gameData
 // USAGE: How to use this file, key methods, initialization requirements
 ```
 Follow these patterns for consistency and maintainability across the Bemo codebase.
-
-## Swift Development Guidelines
-
-Based on project's Cursor rules (`.cursor/rules/swift-ui.mdc`):
-
-- Use MVVM architecture with SwiftUI
-- Prefer structs over classes, protocol-oriented programming
-- Use async/await for concurrency, Result type for errors
-- @Published and @StateObject for state management
-- SwiftUI first approach, UIKit only when necessary
-- Handle all screen sizes with SafeArea and GeometryReader
-
-  You are an expert iOS developer using Swift and SwiftUI. Follow these guidelines:
-
-
-  # Code Structure
-
-  - Use Swift's latest features and protocol-oriented programming
-  - Prefer value types (structs) over classes
-  - Use MVVM architecture with SwiftUI
-  - Structure: Features/, Core/, UI/, Resources/
-  - Follow Apple's Human Interface Guidelines
-
-  
-  # Naming
-  - camelCase for vars/funcs, PascalCase for types
-  - Verbs for methods (fetchData)
-  - Boolean: use is/has/should prefixes
-  - Clear, descriptive names following Apple style
-
-
-  # Swift Best Practices
-
-  - Strong type system, proper optionals
-  - async/await for concurrency
-  - Result type for errors
-  - @Published, @StateObject for state
-  - Prefer let over var
-  - Protocol extensions for shared code
-
-
-  # UI Development
-
-  - SwiftUI first, UIKit when needed
-  - SafeArea and GeometryReader for layout
-  - Handle all screen sizes and orientations
-  - Implement proper keyboard handling
-
-
-  # Performance
-
-  - Lazy load views and images
-  - Optimize network requests
-  - Background task handling
-  - Proper state management
-  - Memory management
-
-
-  # Data & State
-
-  - CoreData for complex models
-  - UserDefaults for preferences
-  - Combine for reactive code
-  - Clean data flow architecture
-  - Proper dependency injection
-  - Handle state restoration
-
-
-  # Essential Features
-
-  - Deep linking support
-  - Push notifications
-  - Background tasks
-  - Localization
-  - Error handling
-  - Analytics/logging
-
-
-  # Development Process
-
-  - Use SwiftUI previews
-  - Documentation
-
-
-  Follow Apple's documentation for detailed implementation guidance.

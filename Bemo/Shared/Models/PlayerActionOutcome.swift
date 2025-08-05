@@ -5,6 +5,10 @@
 //  Model representing the result of a player's action in a game
 //
 
+// WHAT: Enum representing possible outcomes from processing player actions. Returned by Game.processRecognizedPieces().
+// ARCHITECTURE: Data model in MVVM-S. Communication type between Game logic and GameHostViewModel for action results.
+// USAGE: Games return this from processRecognizedPieces(). Host uses to award points, show feedback, or progress levels.
+
 import Foundation
 
 enum PlayerActionOutcome {

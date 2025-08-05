@@ -3,18 +3,11 @@
 //  Bemo
 //
 //  Protocol for games to communicate events back to the host
+//
 
-
-//This is the most abstract piece. It is a protocol, not a class or a view. Think of it as a contract or a set of rules.
-// Its Job: To define a standardized, one-way communication channel from the isolated Game module back to the main app.
-
-// What it Does:
-
-// It defines a list of methods like gameDidCompleteLevel(xpAwarded: Int) and gameDidRequestQuit().
-
-// It ensures that any game you create knows how to talk back to the host, but it doesn't know or care who the host is.
-
-
+// WHAT: Protocol defining callbacks for game events (level completion, quit, errors). Enables games to communicate with the host.
+// ARCHITECTURE: Communication bridge from isolated games to GameHostViewModel. Implements inversion of control for game modularity.
+// USAGE: GameHostViewModel implements this. Games receive delegate in makeGameView() and call methods to report events.
 
 import Foundation
 

@@ -5,6 +5,10 @@
 //  SwiftUI view for the Tangram puzzle game
 //
 
+// WHAT: SwiftUI view for Tangram game. Displays target shapes, placed pieces, and visual feedback for player actions.
+// ARCHITECTURE: View layer for TangramGame. Created by TangramGame.makeGameView() and displayed within GameHostView.
+// USAGE: Not instantiated directly. Created by TangramGame with TangramGameViewModel. Updates based on game state changes.
+
 import SwiftUI
 
 struct TangramGameView: View {

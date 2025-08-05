@@ -5,6 +5,10 @@
 //  Service for managing the active child's profile and session
 //
 
+// WHAT: Manages active child profile and session state. Single source of truth for current player. Persists to UserDefaults.
+// ARCHITECTURE: Core service in MVVM-S. Publishes active profile changes. Used by all features needing user context.
+// USAGE: Set/clear active profile for child switching. Subscribe to activeProfilePublisher. Updates propagate through app.
+
 import Foundation
 import Combine
 

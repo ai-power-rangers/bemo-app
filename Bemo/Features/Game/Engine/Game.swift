@@ -5,6 +5,10 @@
 //  Protocol defining the contract that all games must follow
 //
 
+// WHAT: Protocol that all games must implement. Defines required properties and methods for game identification, UI creation, and CV input processing.
+// ARCHITECTURE: Core protocol of the plug-and-play game engine. Enables modular game addition without modifying engine code.
+// USAGE: Implement this protocol for new games. Must provide makeGameView(), processRecognizedPieces(), and state management methods.
+
 import SwiftUI
 
 protocol Game {

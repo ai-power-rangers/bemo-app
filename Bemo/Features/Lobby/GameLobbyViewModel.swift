@@ -5,6 +5,10 @@
 //  ViewModel for the game selection lobby
 //
 
+// WHAT: Manages game lobby state including available games, active profile, and navigation callbacks to games/parent dashboard.
+// ARCHITECTURE: ViewModel in MVVM-S handling lobby logic. Depends on ProfileService and GamificationService for user data.
+// USAGE: Created by AppCoordinator with navigation callbacks. Subscribe to profile changes, validate game access, handle selection.
+
 import SwiftUI
 import Combine
 

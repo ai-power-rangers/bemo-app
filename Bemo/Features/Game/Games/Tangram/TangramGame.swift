@@ -5,6 +5,10 @@
 //  Concrete implementation of the Tangram puzzle game
 //
 
+// WHAT: Tangram puzzle game implementation. Manages game logic for matching physical pieces to target shapes.
+// ARCHITECTURE: Concrete Game protocol implementation. Self-contained game module that processes CV input and manages game state.
+// USAGE: Add to GameLobbyViewModel's game list. Handles piece placement validation, level progression, and score tracking.
+
 import SwiftUI
 
 class TangramGame: Game {
