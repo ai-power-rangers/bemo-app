@@ -28,7 +28,7 @@ alwaysApply: true
   - Strong type system, proper optionals
   - async/await for concurrency
   - Result type for errors
-  - @Published, @StateObject for state
+  - Use iOS 17+ Observables always over @Published
   - Prefer let over var
   - Protocol extensions for shared code
 

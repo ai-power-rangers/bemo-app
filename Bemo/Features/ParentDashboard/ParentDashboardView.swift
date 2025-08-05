@@ -12,7 +12,7 @@
 import SwiftUI
 
 struct ParentDashboardView: View {
-    @StateObject var viewModel: ParentDashboardViewModel
+    @State var viewModel: ParentDashboardViewModel
     
     var body: some View {
         NavigationView {
@@ -24,9 +24,15 @@ struct ParentDashboardView: View {
                             viewModel.selectChild(child)
                         }
                     }
+                    .onDelete { indexSet in
+                        for index in indexSet {
+                            let child = viewModel.childProfiles[index]
+                            viewModel.deleteChild(child)
+                        }
+                    }
                     
                     Button(action: {
-                        viewModel.showAddChildSheet = true
+                        viewModel.addChild()
                     }) {
                         Label("Add Child", systemImage: "plus.circle.fill")
                             .foregroundColor(.blue)
@@ -107,6 +113,43 @@ struct ParentDashboardView: View {
                     NavigationLink(destination: Text("Account Settings")) {
                         Label("Account", systemImage: "person.circle")
                     }
+                    
+                    Button(action: {
+                        viewModel.signOut()
+                    }) {
+                        Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                            .foregroundColor(.red)
+                    }
+                }
+                
+                // User info section
+                if let user = viewModel.authenticatedUser {
+                    Section(header: Text("Account")) {
+                        HStack {
+                            Image(systemName: "person.crop.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.blue)
+                            
+                            VStack(alignment: .leading) {
+                                if let fullName = user.fullName {
+                                    Text("\(fullName.givenName ?? "") \(fullName.familyName ?? "")")
+                                        .font(.headline)
+                                } else {
+                                    Text("Parent Account")
+                                        .font(.headline)
+                                }
+                                
+                                if let email = user.email {
+                                    Text(email)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            
+                            Spacer()
+                        }
+                        .padding(.vertical, 4)
+                    }
                 }
             }
             .navigationTitle("Parent Dashboard")
@@ -118,10 +161,7 @@ struct ParentDashboardView: View {
                 }
             }
         }
-        .sheet(isPresented: $viewModel.showAddChildSheet) {
-            Text("Add Child Profile")
-                // In a real app, this would be a form to add a new child
-        }
+
     }
 }
 

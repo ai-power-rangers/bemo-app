@@ -12,7 +12,7 @@
 import SwiftUI
 
 struct TangramGameView: View {
-    @StateObject var viewModel: TangramGameViewModel
+    @State var viewModel: TangramGameViewModel
     
     var body: some View {
         GeometryReader { geometry in

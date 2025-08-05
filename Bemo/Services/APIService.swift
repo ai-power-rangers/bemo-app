@@ -15,6 +15,7 @@ import Combine
 class APIService {
     private let baseURL = "https://api.bemoapp.com/v1"
     private let session = URLSession.shared
+    private weak var authenticationService: AuthenticationService?
     private var cancellables = Set<AnyCancellable>()
     
     enum APIError: Error {
@@ -26,8 +27,8 @@ class APIService {
         case serverError(Int)
     }
     
-    init() {
-        // Initialize API service
+    init(authenticationService: AuthenticationService? = nil) {
+        self.authenticationService = authenticationService
     }
     
     // MARK: - User Management
@@ -50,15 +51,15 @@ class APIService {
     
     // MARK: - Profile Management
     
-    func createChildProfile(userId: String, name: String, age: Int) -> AnyPublisher<UserProfile, APIError> {
+    func createChildProfile(userId: String, name: String, age: Int, gender: String) -> AnyPublisher<UserProfile, APIError> {
         // Stub implementation
         let profile = UserProfile(
             id: UUID().uuidString,
             userId: userId,
             name: name,
             age: age,
+            gender: gender,
             totalXP: 0,
-            achievements: [],
             preferences: UserPreferences()
         )
         return Just(profile)
@@ -74,12 +75,19 @@ class APIService {
                 userId: userId,
                 name: "Emma",
                 age: 6,
+                gender: "Female",
                 totalXP: 450,
-                achievements: [],
                 preferences: UserPreferences()
             )
         ]
         return Just(profiles)
+            .setFailureType(to: APIError.self)
+            .eraseToAnyPublisher()
+    }
+    
+    func deleteChildProfile(profileId: String) -> AnyPublisher<Void, APIError> {
+        // Stub implementation
+        return Just(())
             .setFailureType(to: APIError.self)
             .eraseToAnyPublisher()
     }
@@ -123,7 +131,8 @@ class APIService {
     private func makeRequest<T: Decodable>(
         endpoint: String,
         method: String = "GET",
-        body: Data? = nil
+        body: Data? = nil,
+        requiresAuth: Bool = true
     ) -> AnyPublisher<T, APIError> {
         guard let url = URL(string: "\(baseURL)/\(endpoint)") else {
             return Fail(error: APIError.invalidURL)
@@ -135,8 +144,13 @@ class APIService {
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
+        // Add authentication header if required and available
+        if requiresAuth, let accessToken = authenticationService?.currentUser?.accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        
         return session.dataTaskPublisher(for: request)
-            .tryMap { data, response in
+            .tryMap { [weak self] data, response in
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw APIError.networkError(URLError(.badServerResponse))
                 }
@@ -145,6 +159,10 @@ class APIService {
                 case 200...299:
                     return data
                 case 401:
+                    // Handle unauthorized by triggering sign-out
+                    DispatchQueue.main.async {
+                        self?.authenticationService?.signOut()
+                    }
                     throw APIError.unauthorized
                 default:
                     throw APIError.serverError(httpResponse.statusCode)
