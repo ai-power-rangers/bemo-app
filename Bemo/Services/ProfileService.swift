@@ -20,6 +20,11 @@ class ProfileService {
     
     init() {
         loadActiveProfile()
+        
+        // For development: create a mock profile if none exists
+        if activeProfile == nil {
+            setActiveProfile(createMockProfile())
+        }
     }
     
     // MARK: - Profile Management
