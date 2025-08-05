@@ -1,0 +1,23 @@
+name: iOS Pull Request Build Check
+
+on:
+  pull_request:
+    branches: [ "**" ]  # Run on PRs targeting any branch
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_15.3.app
+
+      - name: Build Bemo for Simulator (No Code Signing)
+        run: |
+          xcodebuild clean build \
+            -scheme Bemo \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            CODE_SIGNING_ALLOWED=NO
