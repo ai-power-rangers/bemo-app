@@ -144,7 +144,10 @@ class ConstraintManagerTests: XCTestCase {
     // MARK: - Multiple Constraints Tests
     
     func testApplyMultipleConstraints() {
-        let transform = CGAffineTransform.identity
+        // Start with a transform that's outside the constraints
+        let transform = CGAffineTransform(translationX: 5, y: 3)
+            .rotated(by: Double.pi/2)
+        
         let constraints = [
             Constraint(
                 type: .rotation(around: CGPoint.zero, range: 0...Double.pi/4),
@@ -158,8 +161,14 @@ class ConstraintManagerTests: XCTestCase {
         
         let result = constraintManager.applyConstraints(transform, constraints: constraints)
         
-        XCTAssertNotEqual(result, transform,
-                         "Should apply multiple constraints")
+        // Should clamp rotation to pi/4
+        let angle = atan2(result.b, result.a)
+        XCTAssertEqual(angle, Double.pi/4, accuracy: 0.01,
+                      "Should clamp rotation to constraint range")
+        
+        // Should clamp translation to 2
+        XCTAssertEqual(result.tx, 2, accuracy: 0.01,
+                      "Should clamp translation to constraint range")
     }
     
     func testFixedConstraint() {

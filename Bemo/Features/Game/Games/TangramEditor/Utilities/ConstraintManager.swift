@@ -45,16 +45,19 @@ class ConstraintManager {
         range: ClosedRange<Double>
     ) -> CGAffineTransform {
         
-        // Project current position onto constraint vector
+        // Get current position
         let currentPos = CGPoint(x: transform.tx, y: transform.ty)
-        let projection = projectPointOntoVector(currentPos, vector)
         
-        // Clamp along vector
-        let distance = sqrt(projection.x * projection.x + projection.y * projection.y)
-        let clampedDistance = min(max(distance, range.lowerBound), range.upperBound)
-        
-        // Calculate new position
+        // Normalize the constraint vector
         let normalizedVector = normalizeVector(vector)
+        
+        // Calculate signed distance along the vector using dot product
+        let signedDistance = Double(currentPos.x * normalizedVector.dx + currentPos.y * normalizedVector.dy)
+        
+        // Clamp the signed distance to the allowed range
+        let clampedDistance = min(max(signedDistance, range.lowerBound), range.upperBound)
+        
+        // Calculate new position along the constraint vector
         let newPos = CGPoint(
             x: normalizedVector.dx * clampedDistance,
             y: normalizedVector.dy * clampedDistance
@@ -152,14 +155,27 @@ class ConstraintManager {
     
     /// Create rotation transform around a specific point
     func rotateAroundPoint(_ transform: CGAffineTransform, angle: Double, point: CGPoint) -> CGAffineTransform {
-        var result = transform
+        // Get the current position of the origin in world space
+        let currentOrigin = CGPoint(x: transform.tx, y: transform.ty)
         
-        // Translate to origin
-        result = result.translatedBy(x: -point.x, y: -point.y)
-        // Rotate
-        result = result.rotated(by: angle)
-        // Translate back
-        result = result.translatedBy(x: point.x, y: point.y)
+        // Calculate vector from rotation point to current origin
+        let dx = currentOrigin.x - point.x
+        let dy = currentOrigin.y - point.y
+        
+        // Rotate this vector by the angle
+        let cos = cos(angle)
+        let sin = sin(angle)
+        let rotatedX = dx * cos - dy * sin
+        let rotatedY = dx * sin + dy * cos
+        
+        // New position is rotation point plus rotated vector
+        let newX = point.x + rotatedX
+        let newY = point.y + rotatedY
+        
+        // Create new transform with rotation and new position
+        var result = CGAffineTransform(rotationAngle: angle)
+        result.tx = newX
+        result.ty = newY
         
         return result
     }

@@ -98,6 +98,13 @@ class TangramEditorViewModel {
         let transform = CGAffineTransform(translationX: position.x, y: position.y)
         let piece = TangramPiece(type: type, transform: transform)
         puzzle.pieces.append(piece)
+        
+        // If this is not the first piece, we'll need to connect it
+        if puzzle.pieces.count > 1 {
+            // Store the new piece ID for connection
+            selectedPieceId = piece.id
+        }
+        
         validate()
     }
     
@@ -357,12 +364,18 @@ class TangramEditorViewModel {
         
         let constraint = constraintType ?? getDefaultConstraint(for: pending.connectionType)
         
+        // Snap the second piece to the connection point before creating the connection
+        snapPieceToConnection(pending)
+        
         let connection = Connection(
             type: pending.connectionType,
             constraint: Constraint(type: constraint, affectedPieceId: pending.pieceBId)
         )
         
         puzzle.connections.append(connection)
+        
+        // Re-center all pieces after connection (using default canvas size)
+        recenterPuzzle()
         
         connectionState = .idle
         editMode = .select
@@ -371,6 +384,120 @@ class TangramEditorViewModel {
         anchorPieceId = nil
         
         validate()
+    }
+    
+    private func snapPieceToConnection(_ pending: PendingConnection) {
+        guard let pieceAIndex = puzzle.pieces.firstIndex(where: { $0.id == pending.pieceAId }),
+              let pieceBIndex = puzzle.pieces.firstIndex(where: { $0.id == pending.pieceBId }) else { return }
+        
+        let pieceA = puzzle.pieces[pieceAIndex]
+        let pieceB = puzzle.pieces[pieceBIndex]
+        
+        switch pending.connectionType {
+        case .vertexToVertex(_, let vertexA, _, let vertexB):
+            // Get the transformed vertices
+            let verticesA = GeometryEngine.transformVertices(
+                TangramGeometry.vertices(for: pieceA.type),
+                with: pieceA.transform
+            )
+            let verticesB = GeometryEngine.transformVertices(
+                TangramGeometry.vertices(for: pieceB.type),
+                with: pieceB.transform
+            )
+            
+            // Calculate the translation needed to align vertexB with vertexA
+            let targetPoint = verticesA[vertexA]
+            let currentPoint = verticesB[vertexB]
+            let dx = targetPoint.x - currentPoint.x
+            let dy = targetPoint.y - currentPoint.y
+            
+            // Apply the translation to pieceB
+            var newTransform = pieceB.transform
+            newTransform.tx += dx
+            newTransform.ty += dy
+            puzzle.pieces[pieceBIndex].transform = newTransform
+            
+        case .edgeToEdge(_, let edgeA, _, let edgeB):
+            // Get edges
+            let edgesA = TangramGeometry.edges(for: pieceA.type)
+            let edgesB = TangramGeometry.edges(for: pieceB.type)
+            
+            let verticesA = GeometryEngine.transformVertices(
+                TangramGeometry.vertices(for: pieceA.type),
+                with: pieceA.transform
+            )
+            let verticesB = GeometryEngine.transformVertices(
+                TangramGeometry.vertices(for: pieceB.type),
+                with: pieceB.transform
+            )
+            
+            // Get edge midpoints
+            let edgeAStart = verticesA[edgesA[edgeA].startVertex]
+            let edgeAEnd = verticesA[edgesA[edgeA].endVertex]
+            let edgeAMid = CGPoint(
+                x: (edgeAStart.x + edgeAEnd.x) / 2,
+                y: (edgeAStart.y + edgeAEnd.y) / 2
+            )
+            
+            let edgeBStart = verticesB[edgesB[edgeB].startVertex]
+            let edgeBEnd = verticesB[edgesB[edgeB].endVertex]
+            let edgeBMid = CGPoint(
+                x: (edgeBStart.x + edgeBEnd.x) / 2,
+                y: (edgeBStart.y + edgeBEnd.y) / 2
+            )
+            
+            // Calculate translation to align edge midpoints
+            let dx = edgeAMid.x - edgeBMid.x
+            let dy = edgeAMid.y - edgeBMid.y
+            
+            // Apply the translation
+            var newTransform = pieceB.transform
+            newTransform.tx += dx
+            newTransform.ty += dy
+            puzzle.pieces[pieceBIndex].transform = newTransform
+        }
+    }
+    
+    func recenterPuzzle(canvasSize: CGSize = CGSize(width: 800, height: 800)) {
+        guard !puzzle.pieces.isEmpty else { return }
+        
+        // Calculate the bounding box of all pieces
+        var minX = Double.infinity
+        var minY = Double.infinity
+        var maxX = -Double.infinity
+        var maxY = -Double.infinity
+        
+        for piece in puzzle.pieces {
+            let vertices = GeometryEngine.transformVertices(
+                TangramGeometry.vertices(for: piece.type),
+                with: piece.transform
+            )
+            
+            for vertex in vertices {
+                minX = min(minX, vertex.x)
+                minY = min(minY, vertex.y)
+                maxX = max(maxX, vertex.x)
+                maxY = max(maxY, vertex.y)
+            }
+        }
+        
+        // Calculate center of bounding box
+        let centerX = (minX + maxX) / 2
+        let centerY = (minY + maxY) / 2
+        
+        // Target is the center of the canvas
+        let targetX = canvasSize.width / 2
+        let targetY = canvasSize.height / 2
+        
+        // Calculate translation needed
+        let dx = targetX - centerX
+        let dy = targetY - centerY
+        
+        // Apply translation to all pieces
+        for i in puzzle.pieces.indices {
+            puzzle.pieces[i].transform.tx += dx
+            puzzle.pieces[i].transform.ty += dy
+        }
     }
     
     private func getConnectionPoints(for pieceId: String) -> [ConnectionPoint] {
