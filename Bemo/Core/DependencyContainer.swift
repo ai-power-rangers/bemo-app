@@ -33,7 +33,6 @@ class DependencyContainer {
         // Perform any necessary service initialization
         cvService.initialize()
         
-        // Analytics will observe profile changes via @Published properties
         // when needed in the future
     }
 }

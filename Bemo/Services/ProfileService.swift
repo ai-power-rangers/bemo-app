@@ -6,7 +6,7 @@
 //
 
 // WHAT: Manages active child profile and session state. Single source of truth for current player. Persists to UserDefaults.
-// ARCHITECTURE: Core ObservableObject service in MVVM-S. Publishes profile changes via @Published properties. Used by all features needing user context.
+// ARCHITECTURE: Core ObservableObject service in MVVM-S. 
 // USAGE: Set/clear active profile for child switching. Observe $activeProfile for profile changes throughout the app.
 
 import Foundation

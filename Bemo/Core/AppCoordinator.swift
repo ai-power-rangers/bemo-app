@@ -5,17 +5,16 @@
 //  Central navigation coordinator that manages app flow with authentication
 //
 
-// WHAT: Manages app navigation and view transitions. Holds DependencyContainer and publishes the current root view based on app state including authentication.
+// WHAT: Manages app navigation and view transitions. Holds DependencyContainer and exposes the current root view based on app state including authentication.
 // ARCHITECTURE: Central coordinator in MVVM-S. Creates ViewModels with injected dependencies and manages navigation flow between features with auth state.
-// USAGE: Create as @StateObject in BemoApp. Access rootView property for display. Call start() to begin app flow with authentication check.
+// USAGE: Create as Observable instance in BemoApp. Access rootView property for display. Call start() to begin app flow with authentication check.
 
 import SwiftUI
-import Combine
 import Observation
 
-class AppCoordinator: ObservableObject {
+@Observable
+class AppCoordinator {
     private let dependencyContainer: DependencyContainer
-    private var cancellables = Set<AnyCancellable>()
     
     enum AppState {
         case loading
@@ -27,7 +26,7 @@ class AppCoordinator: ObservableObject {
         case parentDashboard
     }
     
-    @Published private var currentState: AppState = .loading
+    private var currentState: AppState = .loading
     
     init() {
         self.dependencyContainer = DependencyContainer()
