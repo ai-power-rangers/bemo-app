@@ -1,5 +1,5 @@
 //
-//  TangramPieceGeometry.swift
+//  TangramGeometry.swift
 //  Bemo
 //
 //  Mathematical definitions for all 7 tangram pieces with precise geometry
@@ -8,31 +8,7 @@
 import Foundation
 import CoreGraphics
 
-struct TangramPieceGeometry {
-    enum PieceType: CaseIterable {
-        case smallTriangle1
-        case smallTriangle2
-        case square
-        case mediumTriangle
-        case largeTriangle1
-        case largeTriangle2
-        case parallelogram
-        
-        var displayName: String {
-            switch self {
-            case .smallTriangle1, .smallTriangle2:
-                return "Small Triangle"
-            case .square:
-                return "Square"
-            case .mediumTriangle:
-                return "Medium Triangle"
-            case .largeTriangle1, .largeTriangle2:
-                return "Large Triangle"
-            case .parallelogram:
-                return "Parallelogram"
-            }
-        }
-    }
+enum TangramGeometry {
     
     struct Edge: Equatable {
         let startVertex: Int
@@ -200,7 +176,7 @@ struct TangramPieceGeometry {
     }
 }
 
-extension TangramPieceGeometry {
+extension TangramGeometry {
     static func verifyTotalArea() -> Bool {
         var totalArea: Double = 0
         let pieceCounts: [PieceType: Int] = [

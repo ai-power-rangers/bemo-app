@@ -256,6 +256,24 @@ struct GeometryEngine {
         return (clipVertex2.x - clipVertex1.x) * (point.y - clipVertex1.y) - (clipVertex2.y - clipVertex1.y) * (point.x - clipVertex1.x) >= 0
     }
     
+    static func boundingBox(for vertices: [CGPoint]) -> CGRect {
+        guard !vertices.isEmpty else { return .zero }
+        
+        var minX = vertices[0].x
+        var maxX = vertices[0].x
+        var minY = vertices[0].y
+        var maxY = vertices[0].y
+        
+        for vertex in vertices.dropFirst() {
+            minX = min(minX, vertex.x)
+            maxX = max(maxX, vertex.x)
+            minY = min(minY, vertex.y)
+            maxY = max(maxY, vertex.y)
+        }
+        
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+    
     static func boundingBoxesOverlap(_ box1: CGRect, _ box2: CGRect) -> Bool {
         return box1.intersects(box2)
     }
