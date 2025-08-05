@@ -16,11 +16,13 @@ class DependencyContainer {
     let cvService: CVService
     let gamificationService: GamificationService
     let profileService: ProfileService
+    let analyticsService: AnalyticsService
     
     init() {
         self.apiService = APIService()
         self.profileService = ProfileService()
         self.cvService = CVService()
+        self.analyticsService = AnalyticsService()
         self.gamificationService = GamificationService(profileService: profileService)
         
         // Initialize services that need setup
@@ -30,5 +32,14 @@ class DependencyContainer {
     private func setupServices() {
         // Perform any necessary service initialization
         cvService.initialize()
+        
+        // Set up analytics to respond to profile changes
+//        profileService.onProfileChanged = { [weak self] profile in
+//            if let profile = profile {
+//                continue
+//            } else {
+//                self?.analyticsService.clearUser()
+//            }
+//        }
     }
 }

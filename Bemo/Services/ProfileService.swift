@@ -6,28 +6,30 @@
 //
 
 // WHAT: Manages active child profile and session state. Single source of truth for current player. Persists to UserDefaults.
-// ARCHITECTURE: Core service in MVVM-S. Publishes active profile changes. Used by all features needing user context.
-// USAGE: Set/clear active profile for child switching. Subscribe to activeProfilePublisher. Updates propagate through app.
+// ARCHITECTURE: Core service in MVVM-S. Uses callback for profile changes. Used by all features needing user context.
+// USAGE: Set/clear active profile for child switching. Set onProfileChanged callback to observe profile changes.
 
 import Foundation
-import Combine
 
 class ProfileService {
     @Published private(set) var activeProfile: UserProfile?
     private let userDefaults = UserDefaults.standard
     private let activeProfileKey = "com.bemo.activeProfile"
     
-    // Public publisher for active profile changes
-    var activeProfilePublisher: AnyPublisher<UserProfile?, Never> {
-        $activeProfile.eraseToAnyPublisher()
+    // Callback for profile changes - replaces publisher pattern
+    var onProfileChanged: ((UserProfile?) -> Void)?
+    
+    // Always returns a profile - either active or default
+    var currentProfile: UserProfile {
+        return activeProfile ?? createDefaultProfile()
     }
     
     init() {
         loadActiveProfile()
         
-        // For development: create a mock profile if none exists
+        // For development: create a default profile if none exists
         if activeProfile == nil {
-            setActiveProfile(createMockProfile())
+            setActiveProfile(createDefaultProfile())
         }
     }
     
@@ -37,6 +39,9 @@ class ProfileService {
         activeProfile = profile
         saveActiveProfile()
         
+        // Notify analytics via callback
+        onProfileChanged?(profile)
+        
         // Log session start
         print("Active profile set: \(profile.name)")
     }
@@ -44,6 +49,9 @@ class ProfileService {
     func clearActiveProfile() {
         activeProfile = nil
         userDefaults.removeObject(forKey: activeProfileKey)
+        
+        // Notify analytics via callback
+        onProfileChanged?(nil)
         
         print("Active profile cleared")
     }
@@ -96,9 +104,9 @@ class ProfileService {
         }
     }
     
-    // MARK: - Mock Data (for testing)
+    // MARK: - Default Profile
     
-    func createMockProfile() -> UserProfile {
+    func createDefaultProfile() -> UserProfile {
         return UserProfile(
             id: UUID().uuidString,
             userId: "parent123",

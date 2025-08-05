@@ -13,6 +13,7 @@ alwaysApply: true
   - Use MVVM architecture with SwiftUI
   - Structure: Features/, Core/, UI/, Resources/
   - Follow Apple's Human Interface Guidelines
+  - Make sure to leverage SwiftUI Observables
 
   
   # Naming
@@ -53,7 +54,7 @@ alwaysApply: true
 
   - CoreData for complex models
   - UserDefaults for preferences
-  - Combine for reactive code
+  - Utilize Observables
   - Clean data flow architecture
   - Proper dependency injection
   - Handle state restoration

@@ -10,7 +10,6 @@
 // USAGE: Award XP/points through methods. Service auto-calculates levels, unlocks achievements. Subscribe to published properties.
 
 import Foundation
-import Combine
 
 class GamificationService {
     @Published private(set) var currentXP: Int = 0
@@ -19,7 +18,6 @@ class GamificationService {
     @Published private(set) var streakDays: Int = 0
     
     private let profileService: ProfileService
-    private var cancellables = Set<AnyCancellable>()
     
     // XP thresholds for each level
     private let levelThresholds = [
@@ -37,17 +35,16 @@ class GamificationService {
     
     init(profileService: ProfileService) {
         self.profileService = profileService
-        setupBindings()
+        setupProfileObserver()
     }
     
-    private func setupBindings() {
-        // Subscribe to profile changes
-        profileService.activeProfilePublisher
-            .compactMap { $0 }
-            .sink { [weak self] profile in
+    private func setupProfileObserver() {
+        // Use callback to observe profile changes
+        profileService.onProfileChanged = { [weak self] profile in
+            if let profile = profile {
                 self?.loadGamificationData(for: profile)
             }
-            .store(in: &cancellables)
+        }
     }
     
     private func loadGamificationData(for profile: UserProfile) {

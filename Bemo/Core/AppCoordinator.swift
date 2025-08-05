@@ -10,7 +10,6 @@
 // USAGE: Create as @StateObject in BemoApp. Access rootView property for display. Call start() to begin app flow.
 
 import SwiftUI
-import Combine
 
 class AppCoordinator: ObservableObject {
     private let dependencyContainer: DependencyContainer
