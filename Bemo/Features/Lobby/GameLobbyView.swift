@@ -28,9 +28,7 @@ struct GameLobbyView: View {
                 VStack {
                     // Profile section
                     HStack {
-                        if let profile = viewModel.activeProfile {
-                            ProfileBadgeView(profile: profile)
-                        }
+                        ProfileBadgeView(profile: viewModel.displayProfile)
                         
                         Spacer()
                         

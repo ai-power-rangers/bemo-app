@@ -356,7 +356,6 @@ Based on project's Cursor rules (`.cursor/rules/swift-ui.mdc`):
 
   - CoreData for complex models
   - UserDefaults for preferences
-  - Combine for reactive code
   - Clean data flow architecture
   - Proper dependency injection
   - Handle state restoration
