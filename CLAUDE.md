@@ -16,7 +16,7 @@ This project follows **MVVM-S** (Model-View-ViewModel-Service) architecture with
 ### Core Pattern: MVVM-S
 - **Models**: Simple Swift structs (RecognizedPiece, PlayerActionOutcome)
 - **Views**: SwiftUI views for UI presentation
-- **ViewModels**: `@ObservableObject` classes handling presentation logic
+- **ViewModels**: `@Observable` classes handling presentation logic
 - **Services**: Business logic, networking, CV processing (injected via DependencyContainer)
 
 ### Key Components
@@ -70,17 +70,20 @@ class MyGame: Game {
 
 2. **Create Game View & ViewModel**:
 ```swift
+import Observation
+
 struct MyGameView: View {
-    @StateObject private var viewModel: MyGameViewModel
+    private var viewModel: MyGameViewModel
     
     var body: some View {
         // Game UI implementation
     }
 }
 
-class MyGameViewModel: ObservableObject {
+@Observable
+class MyGameViewModel {
     private weak var delegate: GameDelegate?
-    @Published var gameState: GameState = .ready
+    var gameState: GameState = .ready
     
     init(delegate: GameDelegate) {
         self.delegate = delegate
@@ -114,9 +117,10 @@ AppCoordinator → DependencyContainer → ViewModel(services) → View
 ### Creating a New Service
 
 ```swift
+@Observable
 class MyService {
     private let apiClient: APIClient
-    @Published var data: [DataModel] = []
+    var data: [DataModel] = []
     
     init(apiClient: APIClient = APIClient()) {
         self.apiClient = apiClient
@@ -149,32 +153,28 @@ class DependencyContainer {
 ### Standard ViewModel Structure:
 
 ```swift
-class MyViewModel: ObservableObject {
-    // MARK: - Published Properties
-    @Published var state: ViewState = .loading
-    @Published var items: [Item] = []
-    @Published var errorMessage: String?
+@Observable
+class MyViewModel {
+    // MARK: - Observable Properties
+    var state: ViewState = .loading
+    var items: [Item] = []
+    var errorMessage: String?
     
     // MARK: - Dependencies
     private let service: MyService
     private let onAction: (Action) -> Void
-    private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Initialization
     init(service: MyService, onAction: @escaping (Action) -> Void) {
         self.service = service
         self.onAction = onAction
-        setupBindings()
+        setupObservation()
     }
     
     // MARK: - Setup
-    private func setupBindings() {
-        service.$data
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] data in
-                self?.items = data
-            }
-            .store(in: &cancellables)
+    private func setupObservation() {
+        // Observable services automatically propagate changes
+        // No manual binding required
     }
     
     // MARK: - Actions
@@ -184,12 +184,13 @@ class MyViewModel: ObservableObject {
             do {
                 try await service.fetchData()
                 await MainActor.run {
-                    state = .loaded
+                    self.items = service.data
+                    self.state = .loaded
                 }
             } catch {
                 await MainActor.run {
-                    state = .error
-                    errorMessage = error.localizedDescription
+                    self.state = .error
+                    self.errorMessage = error.localizedDescription
                 }
             }
         }
@@ -203,13 +204,16 @@ class MyViewModel: ObservableObject {
 
 ```swift
 // In AppCoordinator
-@Published private var currentState: AppState = .lobby
-
-enum AppState {
-    case lobby
-    case game(Game)
-    case parentDashboard
-    case newFeature(FeatureData)  // Adding new states
+@Observable
+class AppCoordinator {
+    private var currentState: AppState = .lobby
+    
+    enum AppState {
+        case lobby
+        case game(Game)
+        case parentDashboard
+        case newFeature(FeatureData)  // Adding new states
+    }
 }
 
 // Navigation callbacks in ViewModels
@@ -230,7 +234,8 @@ MyFeatureView(viewModel: MyFeatureViewModel(
 
 ```swift
 // 1. Create ViewModel with dependencies
-class NewFeatureViewModel: ObservableObject {
+@Observable
+class NewFeatureViewModel {
     private let requiredService: RequiredService
     private let onComplete: () -> Void
     
@@ -242,7 +247,7 @@ class NewFeatureViewModel: ObservableObject {
 
 // 2. Create SwiftUI View
 struct NewFeatureView: View {
-    @StateObject private var viewModel: NewFeatureViewModel
+    private let viewModel: NewFeatureViewModel
     
     var body: some View {
         // Implementation
@@ -262,13 +267,23 @@ case .newFeature:
 ### 3. Reactive State Management
 
 ```swift
-// Service publishes data
-@Published var gameData: [GameData] = []
+// Service exposes observable data
+@Observable class GameService {
+    var gameData: [GameData] = []
+}
 
-// ViewModel subscribes and transforms
-service.$gameData
-    .map { data in data.filter { $0.isActive } }
-    .assign(to: &$filteredGames)
+// ViewModel directly accesses and transforms
+@Observable class GameListViewModel {
+    private let service: GameService
+    
+    var filteredGames: [GameData] {
+        service.gameData.filter { $0.isActive }
+    }
+    
+    init(service: GameService) {
+        self.service = service
+    }
+}
 ```
 
 ## 🚫 Anti-Patterns to Avoid
@@ -302,7 +317,7 @@ Based on project's Cursor rules (`.cursor/rules/swift-ui.mdc`):
 - Use MVVM architecture with SwiftUI
 - Prefer structs over classes, protocol-oriented programming
 - Use async/await for concurrency, Result type for errors
-- @Published and @StateObject for state management
+- @Observable for state management (iOS 17+)
 - SwiftUI first approach, UIKit only when necessary
 - Handle all screen sizes with SafeArea and GeometryReader
 
@@ -330,7 +345,7 @@ Based on project's Cursor rules (`.cursor/rules/swift-ui.mdc`):
   - Strong type system, proper optionals
   - async/await for concurrency
   - Result type for errors
-  - @Published, @StateObject for state
+  - @Observable for state management (iOS 17+)
   - Prefer let over var
   - Protocol extensions for shared code
 
