@@ -23,12 +23,13 @@ class AnalyticsService {
     }
     
     private func setupPostHog() {
-        // TODO: Add your PostHog project API key here
-        var config = PostHogConfig(apiKey: "phc_VAx21DPi27x9NmY1i3eFQQl0ThnDtb6oK3TANkOWbJ3", host: "https://us.i.posthog.com")
+        let configuration = AppConfiguration.shared
+        var config = PostHogConfig(
+            apiKey: configuration.postHogAPIKey,
+            host: configuration.postHogHost
+        )
         
-        #if DEBUG
-        config.debug = true
-        #endif
+        config.debug = configuration.isDebugBuild
         
         PostHogSDK.shared.setup(config)
     }
