@@ -158,7 +158,7 @@ class AppCoordinator {
                 profileService: self.dependencyContainer.profileService,
                 apiService: self.dependencyContainer.apiService,
                 onProfileSetupComplete: { [weak self] in
-                    self?.currentState = .parentDashboard
+                    self?.currentState = .lobby
                 }
             ))
             
@@ -170,6 +170,11 @@ class AppCoordinator {
                 },
                 onParentDashboardRequested: { [weak self] in
                     self?.currentState = .parentDashboard
+                },
+                onProfileSetupRequested: { [weak self] in
+                    if let currentUser = self?.dependencyContainer.authenticationService.currentUser {
+                        self?.currentState = .addChildProfile(currentUser)
+                    }
                 }
             ))
             

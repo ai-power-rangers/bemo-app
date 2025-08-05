@@ -18,6 +18,7 @@ class GameLobbyViewModel {
     var availableGames: [GameItem] = []
     var activeProfile: Profile?
     var showProfileSelection = false
+    var showProfileModal = false
     
     // Returns active profile for display, or nil if no profiles exist
     var displayProfile: Profile? {
@@ -38,6 +39,7 @@ class GameLobbyViewModel {
     private let profileService: ProfileService
     private let onGameSelected: (Game) -> Void
     private let onParentDashboardRequested: () -> Void
+    private let onProfileSetupRequested: () -> Void
     
     // Display models
     struct Profile {
@@ -57,14 +59,17 @@ class GameLobbyViewModel {
     init(
         profileService: ProfileService,
         onGameSelected: @escaping (Game) -> Void,
-        onParentDashboardRequested: @escaping () -> Void
+        onParentDashboardRequested: @escaping () -> Void,
+        onProfileSetupRequested: @escaping () -> Void
     ) {
         self.profileService = profileService
         self.onGameSelected = onGameSelected
         self.onParentDashboardRequested = onParentDashboardRequested
+        self.onProfileSetupRequested = onProfileSetupRequested
         
         setupProfileObserver()
         loadGames()
+        checkAndShowProfileModal()
     }
     
     private func setupProfileObserver() {
@@ -110,6 +115,7 @@ class GameLobbyViewModel {
         } else {
             activeProfile = nil
         }
+        checkAndShowProfileModal()
     }
     
     private func calculateLevel(from xp: Int) -> Int {
@@ -158,6 +164,35 @@ class GameLobbyViewModel {
     func openParentDashboard() {
         print("Opening parent dashboard")
         onParentDashboardRequested()
+    }
+    
+    func showProfileSelectionModal() {
+        showProfileModal = true
+    }
+    
+    func hideProfileSelectionModal() {
+        showProfileModal = false
+    }
+    
+    func selectProfile(_ profile: UserProfile) {
+        profileService.setActiveProfile(profile)
+        hideProfileSelectionModal()
+    }
+    
+    func addNewProfile() {
+        hideProfileSelectionModal()
+        onProfileSetupRequested()
+    }
+    
+    private func checkAndShowProfileModal() {
+        // Show modal if user has profiles but none are selected
+        if profileService.hasProfiles && activeProfile == nil {
+            showProfileModal = true
+        }
+    }
+    
+    var availableProfiles: [UserProfile] {
+        return profileService.childProfiles
     }
 
     // You can inject analytics service directly, or access it through a simple method
