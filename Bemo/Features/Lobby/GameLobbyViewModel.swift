@@ -16,6 +16,7 @@ class GameLobbyViewModel: ObservableObject {
     private let profileService: ProfileService
     private let gamificationService: GamificationService
     private let onGameSelected: (Game) -> Void
+    private let onParentDashboardRequested: () -> Void
     private var cancellables = Set<AnyCancellable>()
     
     // Display models
@@ -36,11 +37,13 @@ class GameLobbyViewModel: ObservableObject {
     init(
         profileService: ProfileService,
         gamificationService: GamificationService,
-        onGameSelected: @escaping (Game) -> Void
+        onGameSelected: @escaping (Game) -> Void,
+        onParentDashboardRequested: @escaping () -> Void
     ) {
         self.profileService = profileService
         self.gamificationService = gamificationService
         self.onGameSelected = onGameSelected
+        self.onParentDashboardRequested = onParentDashboardRequested
         
         setupBindings()
         loadGames()
@@ -111,8 +114,7 @@ class GameLobbyViewModel: ObservableObject {
     }
     
     func openParentDashboard() {
-        // This would trigger navigation to parent dashboard
-        // For now, just log
         print("Opening parent dashboard")
+        onParentDashboardRequested()
     }
 }
