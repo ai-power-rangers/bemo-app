@@ -188,14 +188,15 @@ struct OnboardingView: View {
                     .cornerRadius(8)
                     .padding(.horizontal, 40)
                 } else {
-                    SignInWithAppleButton(
-                        onRequest: { request in
-                            viewModel.configureAppleSignInRequest(request)
-                        },
-                        onCompletion: { result in
-                            viewModel.handleAppleSignInResult(result)
-                        }
-                    )
+                    Button(action: {
+                        viewModel.signInWithApple()
+                    }) {
+                        SignInWithAppleButton(
+                            onRequest: { _ in },
+                            onCompletion: { _ in }
+                        )
+                        .allowsHitTesting(false)
+                    }
                     .signInWithAppleButtonStyle(.black)
                     .frame(height: 50)
                     .padding(.horizontal, 40)
