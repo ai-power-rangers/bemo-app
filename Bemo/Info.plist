@@ -2,10 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
 	<key>PostHogAPIKey</key>
 	<string>$(POSTHOG_API_KEY)</string>
 	<key>PostHogHost</key>
@@ -18,5 +14,9 @@
 	<string>$(SENTRY_DSN)</string>
 	<key>SentryEnvironment</key>
 	<string>$(SENTRY_ENVIRONMENT)</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

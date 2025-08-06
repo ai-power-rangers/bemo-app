@@ -12,6 +12,7 @@
 import SwiftUI
 import Combine
 import Observation
+import LocalAuthentication
 
 @Observable
 class GameLobbyViewModel {
@@ -19,6 +20,7 @@ class GameLobbyViewModel {
     var activeProfile: Profile?
     var showProfileSelection = false
     var showProfileModal = false
+    var showAuthenticationError = false
     
     // Returns active profile for display, or nil if no profiles exist
     var displayProfile: Profile? {
@@ -28,6 +30,7 @@ class GameLobbyViewModel {
             return Profile(
                 id: currentUserProfile.id,
                 name: currentUserProfile.name,
+                avatar: nil,  // TODO: Add avatar support
                 level: calculateLevel(from: currentUserProfile.totalXP),
                 xp: currentUserProfile.totalXP
             )
@@ -45,6 +48,7 @@ class GameLobbyViewModel {
     struct Profile {
         let id: String
         let name: String
+        let avatar: String?
         let level: Int
         let xp: Int
     }
@@ -109,6 +113,7 @@ class GameLobbyViewModel {
             activeProfile = Profile(
                 id: profile.id,
                 name: profile.name,
+                avatar: nil,  // TODO: Add avatar support
                 level: calculateLevel(from: profile.totalXP),
                 xp: profile.totalXP
             )
@@ -144,6 +149,7 @@ class GameLobbyViewModel {
         let profile = Profile(
             id: currentUserProfile.id,
             name: currentUserProfile.name,
+            avatar: nil,  // TODO: Add avatar support
             level: calculateLevel(from: currentUserProfile.totalXP),
             xp: currentUserProfile.totalXP
         )
@@ -164,6 +170,35 @@ class GameLobbyViewModel {
     func openParentDashboard() {
         print("Opening parent dashboard")
         onParentDashboardRequested()
+    }
+    
+    // MARK: - Parent Gate with LocalAuthentication
+    
+    func requestParentalAccess() {
+        let context = LAContext()
+        var error: NSError?
+        
+        // Check if device can perform local authentication
+        if context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) {
+            let reason = "Please authenticate to access the Parent Dashboard."
+            
+            // Request authentication
+            context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { [weak self] success, authenticationError in
+                Task { @MainActor in
+                    if success {
+                        // Authentication successful, navigate to parent dashboard
+                        self?.onParentDashboardRequested()
+                    } else {
+                        // Authentication failed or was cancelled
+                        print("Authentication failed or was cancelled: \(authenticationError?.localizedDescription ?? "Unknown error")")
+                    }
+                }
+            }
+        } else {
+            // No authentication method available on device
+            // Show alert to inform user they need to set up a passcode/Face ID
+            showAuthenticationError = true
+        }
     }
     
     func showProfileSelectionModal() {
