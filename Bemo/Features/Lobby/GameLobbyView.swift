@@ -13,85 +13,81 @@ import SwiftUI
 
 struct GameLobbyView: View {
     @State var viewModel: GameLobbyViewModel
+    @State private var showingSideMenu = false
     
     var body: some View {
-        NavigationView {
-            ZStack {
-                // Background
-                LinearGradient(
-                    gradient: Gradient(colors: [Color.orange.opacity(0.3), Color.pink.opacity(0.3)]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-                
-                VStack {
-                    // Profile section
-                    HStack {
-                        if let profile = viewModel.displayProfile {
-                            Button(action: {
-                                viewModel.showProfileSelectionModal()
-                            }) {
-                                ProfileBadgeView(profile: profile)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        } else {
-                            Button(action: {
-                                viewModel.showProfileSelectionModal()
-                            }) {
-                                Text("No Profile Selected")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                    .padding()
-                                    .background(Color.black.opacity(0.3))
-                                    .cornerRadius(15)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                        
-                        Spacer()
-                        
-                        // Parent dashboard button
-                        Button(action: {
-                            viewModel.openParentDashboard()
-                        }) {
-                            Image(systemName: "person.fill")
-                                .font(.title)
-                                .foregroundColor(.white)
-                                .padding()
-                                .background(Color.purple)
-                                .clipShape(Circle())
-                        }
+        ZStack {
+            BemoTheme.Colors.background.ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // Top Navigation Bar
+                HeaderView(
+                    profileName: viewModel.displayProfile?.name,
+                    profileAvatar: viewModel.displayProfile?.avatar,
+                    onMenuTapped: {
+                        showingSideMenu = true
                     }
-                    .padding()
+                )
+                
+                // Welcome Message
+                VStack(alignment: .leading, spacing: BemoTheme.Spacing.xsmall) {
+                    Text("Hello,")
+                        .font(BemoTheme.font(for: .heading2))
+                        .foregroundColor(BemoTheme.Colors.primary)
                     
-                    // Title
-                    Text("Choose Your Adventure!")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                        .padding()
+                    Text("\(viewModel.displayProfile?.name ?? "Friend")!")
+                        .font(BemoTheme.font(for: .heading2))
+                        .foregroundColor(BemoTheme.Colors.primary)
                     
-                    // Games grid
-                    ScrollView {
-                        LazyVGrid(columns: [
-                            GridItem(.flexible(), spacing: 20),
-                            GridItem(.flexible(), spacing: 20)
-                        ], spacing: 20) {
-                            ForEach(viewModel.availableGames) { gameItem in
-                                GameCardView(
-                                    game: gameItem,
-                                    isLocked: !viewModel.isGameUnlocked(gameItem.game)
-                                ) {
+                    Text("Nice to see you again!")
+                        .font(BemoTheme.font(for: .body))
+                        .foregroundColor(BemoTheme.Colors.gray2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, BemoTheme.Spacing.xlarge)
+                .padding(.top, BemoTheme.Spacing.large)
+                
+                // Section Title
+                Text("Games")
+                    .font(BemoTheme.font(for: .heading3))
+                    .foregroundColor(BemoTheme.Colors.gray1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, BemoTheme.Spacing.xlarge)
+                    .padding(.top, BemoTheme.Spacing.xxlarge)
+                    .padding(.bottom, BemoTheme.Spacing.large)
+                
+                // Games Grid
+                ScrollView {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 150), spacing: BemoTheme.Spacing.large)],
+                        spacing: BemoTheme.Spacing.large
+                    ) {
+                        ForEach(Array(viewModel.availableGames.enumerated()), id: \.element.id) { index, gameItem in
+                            GameCardView(
+                                game: GameItem(
+                                    game: gameItem.game,
+                                    colorScheme: (index % 4) + 1,
+                                    isLocked: false  // MVP: All games accessible
+                                ),
+                                onTap: {
                                     viewModel.selectGame(gameItem.game)
                                 }
-                            }
+                            )
                         }
-                        .padding()
                     }
+                    .padding(.horizontal, BemoTheme.Spacing.xlarge)
+                    .padding(.bottom, BemoTheme.Spacing.xlarge)
                 }
             }
-            .navigationBarHidden(true)
+        }
+        .sheet(isPresented: $showingSideMenu) {
+            SideMenuView(
+                isPresented: $showingSideMenu,
+                onParentDashboardTapped: {
+                    showingSideMenu = false
+                    viewModel.requestParentalAccess()
+                }
+            )
         }
         .sheet(isPresented: $viewModel.showProfileModal) {
             ProfileSelectionModal(
@@ -107,92 +103,11 @@ struct GameLobbyView: View {
                 }
             )
         }
-        .alert(isPresented: $viewModel.showProfileSelection) {
-            Alert(
-                title: Text("Who's Playing?"),
-                message: Text("Please select a profile to continue"),
-                dismissButton: .default(Text("OK"))
-            )
+        .alert("Authentication Required", isPresented: $viewModel.showAuthenticationError) {
+            Button("OK") {}
+        } message: {
+            Text("You must have Face ID, Touch ID, or a passcode set up to access the parent dashboard.")
         }
     }
 }
 
-struct ProfileBadgeView: View {
-    let profile: GameLobbyViewModel.Profile
-    
-    var body: some View {
-        HStack {
-            Image(systemName: "person.circle.fill")
-                .font(.largeTitle)
-                .foregroundColor(.white)
-            
-            VStack(alignment: .leading) {
-                Text(profile.name)
-                    .font(.headline)
-                    .foregroundColor(.white)
-                
-                HStack {
-                    Image(systemName: "star.fill")
-                        .foregroundColor(.yellow)
-                    Text("Level \(profile.level)")
-                        .foregroundColor(.white)
-                    Text("• \(profile.xp) XP")
-                        .foregroundColor(.white.opacity(0.8))
-                }
-                .font(.caption)
-            }
-        }
-        .padding()
-        .background(Color.black.opacity(0.3))
-        .cornerRadius(15)
-    }
-}
-
-struct GameCardView: View {
-    let game: GameLobbyViewModel.GameItem
-    let isLocked: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            VStack {
-                // Game thumbnail
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(game.color)
-                    .frame(height: 150)
-                    .overlay(
-                        Image(systemName: game.iconName)
-                            .font(.system(size: 60))
-                            .foregroundColor(.white)
-                    )
-                    .overlay(
-                        isLocked ? 
-                        Color.black.opacity(0.6)
-                            .overlay(
-                                Image(systemName: "lock.fill")
-                                    .font(.largeTitle)
-                                    .foregroundColor(.white)
-                            )
-                        : nil
-                    )
-                
-                // Game info
-                VStack(alignment: .leading) {
-                    Text(game.game.title)
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    
-                    Text("Ages \(game.game.recommendedAge.lowerBound)-\(game.game.recommendedAge.upperBound)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding()
-            .background(Color.white)
-            .cornerRadius(20)
-            .shadow(radius: 5)
-        }
-        .disabled(isLocked)
-    }
-}
