@@ -1,0 +1,15 @@
+# Supabase
+.branches
+.temp
+.env.local
+.env.example
+
+# Local development
+.DS_Store
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Edge function secrets
+functions/*/setup-secrets.sh
