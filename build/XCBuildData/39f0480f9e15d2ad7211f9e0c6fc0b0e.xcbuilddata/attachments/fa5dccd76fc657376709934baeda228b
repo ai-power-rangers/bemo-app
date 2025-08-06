@@ -1,0 +1,4 @@
+module SentrySwiftUI {
+header "SentrySwiftUI-Swift.h"
+export *
+}

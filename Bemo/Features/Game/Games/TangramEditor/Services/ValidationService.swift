@@ -73,23 +73,27 @@ class ValidationService {
         return false
     }
     
-    /// Check if any pieces touch without a connection
+    /// Check if any pieces touch without a connection (only edge contacts need connections)
     func hasUnexplainedContacts(pieces: [TangramPiece], connections: [Connection]) -> Bool {
         for i in 0..<pieces.count {
             for j in (i+1)..<pieces.count {
                 let relationship = getGeometricRelationship(pieceA: pieces[i], pieceB: pieces[j])
                 
                 switch relationship {
-                case .edgeContact, .vertexContact:
-                    // Check if there's a connection between these pieces
+                case .edgeContact:
+                    // Edge contact REQUIRES a connection
                     let hasConnection = connections.contains { connection in
                         let ids = [connection.pieceAId, connection.pieceBId]
                         return ids.contains(pieces[i].id) && ids.contains(pieces[j].id)
                     }
                     
                     if !hasConnection {
-                        return true // Touching without connection
+                        return true // Edge touching without connection is invalid
                     }
+                    
+                case .vertexContact:
+                    // Vertex contact is ALWAYS valid, with or without connection
+                    continue
                     
                 case .areaOverlap, .noContact:
                     continue
@@ -99,7 +103,7 @@ class ValidationService {
         return false
     }
     
-    /// Check if all pieces form a connected graph through connections
+    /// Check if all pieces form a connected graph through connections or vertex contacts
     func isConnected(pieces: [TangramPiece], connections: [Connection]) -> Bool {
         guard !pieces.isEmpty else { return true }
         
@@ -112,7 +116,10 @@ class ValidationService {
             
             visited.insert(current)
             
-            // Find all pieces connected to current
+            // Find the current piece
+            guard let currentPiece = pieces.first(where: { $0.id == current }) else { continue }
+            
+            // Find all pieces connected to current through explicit connections
             for connection in connections {
                 let other: String?
                 if connection.pieceAId == current {
@@ -125,6 +132,16 @@ class ValidationService {
                 
                 if let other = other, !visited.contains(other) {
                     queue.append(other)
+                }
+            }
+            
+            // Also find pieces connected through vertex contact (implicit connections)
+            for piece in pieces {
+                if piece.id != current && !visited.contains(piece.id) {
+                    let relationship = getGeometricRelationship(pieceA: currentPiece, pieceB: piece)
+                    if relationship == .vertexContact || relationship == .edgeContact {
+                        queue.append(piece.id)
+                    }
                 }
             }
         }
@@ -143,6 +160,8 @@ class ValidationService {
     
     private func getTransformedVertices(for piece: TangramPiece) -> [CGPoint] {
         let baseVertices = TangramGeometry.vertices(for: piece.type)
-        return GeometryEngine.transformVertices(baseVertices, with: piece.transform)
+        // Apply the same scale factor used in the UI (50 units)
+        let scaledVertices = baseVertices.map { CGPoint(x: $0.x * 50, y: $0.y * 50) }
+        return GeometryEngine.transformVertices(scaledVertices, with: piece.transform)
     }
 }

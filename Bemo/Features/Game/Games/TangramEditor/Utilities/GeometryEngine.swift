@@ -283,7 +283,8 @@ struct GeometryEngine {
     /// Find vertices that are shared between two polygons (within tolerance)
     static func sharedVertices(_ vertices1: [CGPoint], _ vertices2: [CGPoint]) -> Set<CGPoint> {
         var shared = Set<CGPoint>()
-        let tolerance: CGFloat = 1e-6
+        // Use a more generous tolerance for vertex matching to handle floating point precision
+        let tolerance: CGFloat = 0.01  // Increased from 1e-6 to handle rotation precision issues
         
         for v1 in vertices1 {
             for v2 in vertices2 {
@@ -300,7 +301,8 @@ struct GeometryEngine {
     /// Find edges that are shared between two polygons
     static func sharedEdges(_ vertices1: [CGPoint], _ vertices2: [CGPoint]) -> Set<String> {
         var shared = Set<String>()
-        let tolerance: CGFloat = 1e-6
+        // Use consistent tolerance with vertex matching
+        let tolerance: CGFloat = 0.01  // Increased from 1e-6 for consistency
         
         // Get edges for both polygons
         let edges1 = getEdges(from: vertices1)

@@ -55,8 +55,12 @@ class ConnectionService {
                 return nil 
             }
             
-            let worldVertexA = verticesA[vertexA].applying(pieceA.transform)
-            let worldVertexB = verticesB[vertexB].applying(pieceB.transform)
+            // Apply the same scale factor used in the UI (50 units)
+            let scaledVertexA = CGPoint(x: verticesA[vertexA].x * 50, y: verticesA[vertexA].y * 50)
+            let scaledVertexB = CGPoint(x: verticesB[vertexB].x * 50, y: verticesB[vertexB].y * 50)
+            
+            let worldVertexA = scaledVertexA.applying(pieceA.transform)
+            let worldVertexB = scaledVertexB.applying(pieceB.transform)
             
             if GeometryEngine.pointsEqual(worldVertexA, worldVertexB) {
                 return Constraint(
@@ -85,8 +89,12 @@ class ConnectionService {
             
             let verticesA = TangramGeometry.vertices(for: pieceA.type)
             
-            let edgeStartA = verticesA[edgesA[edgeA].startVertex].applying(pieceA.transform)
-            let edgeEndA = verticesA[edgesA[edgeA].endVertex].applying(pieceA.transform)
+            // Apply the same scale factor used in the UI (50 units)
+            let scaledStartA = CGPoint(x: verticesA[edgesA[edgeA].startVertex].x * 50, y: verticesA[edgesA[edgeA].startVertex].y * 50)
+            let scaledEndA = CGPoint(x: verticesA[edgesA[edgeA].endVertex].x * 50, y: verticesA[edgesA[edgeA].endVertex].y * 50)
+            
+            let edgeStartA = scaledStartA.applying(pieceA.transform)
+            let edgeEndA = scaledEndA.applying(pieceA.transform)
             
             let edgeVector = GeometryEngine.edgeVector(from: edgeStartA, to: edgeEndA)
             let normalizedVector = GeometryEngine.normalizeVector(edgeVector)
@@ -164,14 +172,14 @@ class ConnectionService {
             return false 
         }
         
-        let verticesA = GeometryEngine.transformVertices(
-            TangramGeometry.vertices(for: pieceA.type),
-            with: pieceA.transform
-        )
-        let verticesB = GeometryEngine.transformVertices(
-            TangramGeometry.vertices(for: pieceB.type),
-            with: pieceB.transform
-        )
+        // Apply the same scale factor used in the UI (50 units)
+        let baseVerticesA = TangramGeometry.vertices(for: pieceA.type)
+        let scaledVerticesA = baseVerticesA.map { CGPoint(x: $0.x * 50, y: $0.y * 50) }
+        let verticesA = GeometryEngine.transformVertices(scaledVerticesA, with: pieceA.transform)
+        
+        let baseVerticesB = TangramGeometry.vertices(for: pieceB.type)
+        let scaledVerticesB = baseVerticesB.map { CGPoint(x: $0.x * 50, y: $0.y * 50) }
+        let verticesB = GeometryEngine.transformVertices(scaledVerticesB, with: pieceB.transform)
         
         let tolerance: CGFloat = 1e-5
         

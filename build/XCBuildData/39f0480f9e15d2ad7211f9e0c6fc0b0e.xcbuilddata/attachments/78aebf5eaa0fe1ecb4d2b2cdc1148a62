@@ -1,0 +1,4 @@
+module phlibwebp {
+umbrella "/Users/mitchellwhite/Library/Developer/Xcode/DerivedData/Bemo-bqigzbmdmecuxdbsluuhiyatbewu/SourcePackages/checkouts/posthog-ios/vendor/libwebp"
+export *
+}

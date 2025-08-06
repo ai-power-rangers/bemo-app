@@ -17,11 +17,24 @@ class TangramEditorGame: Game {
     let recommendedAge = 18...99 // Parent-only tool
     let thumbnailImageName = "tangram_editor_thumb"
     
-    // Use editor configuration (respects safe areas, no hints/progress)
-    let gameUIConfig = GameUIConfig.editorConfig
-    
     private var viewModel: TangramEditorViewModel?
     private weak var delegate: GameDelegate?
+    
+    // Use editor configuration with custom bars
+    var gameUIConfig: GameUIConfig {
+        // Create custom bars if viewModel exists
+        let topBar = viewModel != nil ? AnyView(TangramEditorTopBar(viewModel: viewModel!, delegate: delegate)) : nil
+        let bottomBar = viewModel != nil ? AnyView(TangramEditorBottomBar(viewModel: viewModel!)) : nil
+        
+        return GameUIConfig(
+            respectsSafeAreas: true,
+            showHintButton: false,
+            showProgressBar: false,
+            showQuitButton: false,  // We provide quit in our custom top bar
+            customTopBar: topBar,
+            customBottomBar: bottomBar
+        )
+    }
     
     // MARK: - Initialization
     
@@ -39,10 +52,11 @@ class TangramEditorGame: Game {
                 // Create the view model if needed
                 if viewModel == nil {
                     viewModel = TangramEditorViewModel(puzzle: nil)
+                    viewModel?.delegate = delegate
                 }
                 
-                // Create and return the editor view
-                return TangramEditorView(viewModel: viewModel!)
+                // Return just the canvas view - bars are handled via GameUIConfig
+                return TangramEditorCanvasView(viewModel: viewModel!)
             }
         )
     }

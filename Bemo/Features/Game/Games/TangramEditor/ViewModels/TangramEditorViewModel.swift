@@ -27,7 +27,13 @@ class TangramEditorViewModel {
     var availableConnectionPoints: [ConnectionPoint] = []  // All available points
     var pendingPieceRotation: Double = 0  // Rotation for pending piece
     var previewTransform: CGAffineTransform?  // Transform for preview
+    var previewPiece: TangramPiece?  // Preview piece for placement
     var currentCanvasSize: CGSize = CGSize(width: 800, height: 800)  // Track canvas size
+    var showSettings = false
+    var showSaveDialog = false
+    
+    // Game delegate for communication with host
+    weak var delegate: GameDelegate?
     
     // MARK: - Services
     
@@ -44,13 +50,32 @@ class TangramEditorViewModel {
         case rotate
     }
     
-    enum EditorState {
+    enum EditorState: Equatable {
         case idle
         case pendingFirstPiece(type: PieceType, rotation: Double)  // First piece being configured
         case selectingCanvasPoints  // Selecting connection points on existing pieces
         case pendingSubsequentPiece(type: PieceType, rotation: Double)  // Subsequent piece being configured
         case previewingPlacement(piece: TangramPiece, connections: [(canvasPoint: ConnectionPoint, piecePoint: ConnectionPoint)])  // Preview before placement
         case error(String)
+        
+        static func == (lhs: EditorState, rhs: EditorState) -> Bool {
+            switch (lhs, rhs) {
+            case (.idle, .idle):
+                return true
+            case (.selectingCanvasPoints, .selectingCanvasPoints):
+                return true
+            case let (.pendingFirstPiece(type1, rot1), .pendingFirstPiece(type2, rot2)):
+                return type1 == type2 && rot1 == rot2
+            case let (.pendingSubsequentPiece(type1, rot1), .pendingSubsequentPiece(type2, rot2)):
+                return type1 == type2 && rot1 == rot2
+            case let (.error(msg1), .error(msg2)):
+                return msg1 == msg2
+            case let (.previewingPlacement(piece1, conn1), .previewingPlacement(piece2, conn2)):
+                return piece1.id == piece2.id && conn1.count == conn2.count
+            default:
+                return false
+            }
+        }
     }
     
     struct ConnectionPoint: Equatable, Hashable {
@@ -91,6 +116,16 @@ class TangramEditorViewModel {
             if case .invalid(let errors) = self { return errors }
             return []
         }
+    }
+    
+    // MARK: - UI State Methods
+    
+    func toggleSettings() {
+        showSettings.toggle()
+    }
+    
+    func requestSave() {
+        showSaveDialog = true
     }
     
     // MARK: - Initialization
@@ -847,13 +882,35 @@ class TangramEditorViewModel {
         return points
     }
     
-    // MARK: - Undo/Redo (Future)
+    // MARK: - Selection Methods
+    
+    func togglePieceSelection(_ pieceId: String) {
+        if selectedPieceIds.contains(pieceId) {
+            selectedPieceIds.remove(pieceId)
+        } else {
+            selectedPieceIds.insert(pieceId)
+        }
+    }
+    
+    func clearPuzzle() {
+        puzzle.pieces.removeAll()
+        puzzle.connections.removeAll()
+        selectedPieceIds.removeAll()
+        editorState = .idle
+        validate()
+    }
+    
+    // MARK: - Undo/Redo
+    
+    // For now, undo/redo is not implemented
+    var canUndo: Bool { false }
+    var canRedo: Bool { false }
     
     func undo() {
-        // TODO: Implement undo
+        // TODO: Implement undo stack
     }
     
     func redo() {
-        // TODO: Implement redo
+        // TODO: Implement redo stack
     }
 }

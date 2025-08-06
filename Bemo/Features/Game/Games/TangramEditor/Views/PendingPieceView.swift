@@ -17,99 +17,50 @@ struct PendingPieceView: View {
     @State private var dragOffset = CGSize.zero
     @State private var isDragging = false
     
-    private let pieceScale: CGFloat = 20  // Smaller scale for preview
+    private let pieceScale: CGFloat = 40  // Doubled from 20
     
     var body: some View {
-        HStack(spacing: 8) {
-            // Compact piece preview
+        VStack(spacing: 12) {
+            // Piece preview at actual size (50 scale)
             ZStack {
                 // Draw the piece
-                PieceShapeForPending(type: pieceType, scale: pieceScale)
-                    .fill(pieceColor.opacity(0.3))
+                PieceShapeForPending(type: pieceType, scale: 50)
+                    .fill(pieceColor.opacity(0.5))
                     .overlay(
-                        PieceShapeForPending(type: pieceType, scale: pieceScale)
-                            .stroke(pieceColor, lineWidth: 2)
+                        PieceShapeForPending(type: pieceType, scale: 50)
+                            .stroke(pieceColor, lineWidth: 3)
                     )
                     .rotationEffect(Angle(radians: rotation))
-                    .frame(width: 80, height: 80)
                 
                 // Show connection points for subsequent pieces
                 if !isFirstPiece {
-                    ForEach(viewModel.getConnectionPointsForPendingPiece(type: pieceType, scale: pieceScale * 0.67), id: \.id) { point in
+                    ForEach(viewModel.getConnectionPointsForPendingPiece(type: pieceType, scale: 50), id: \.id) { point in
                         PendingConnectionPoint(
                             point: point,
                             rotation: rotation,
                             isSelected: viewModel.selectedPendingPoints.contains { $0.id == point.id },
                             isCompatible: isPointCompatible(point),
-                            scale: pieceScale * 0.67
+                            scale: 50
                         )
                         .onTapGesture {
-                            if !isFirstPiece {
-                                viewModel.togglePendingPoint(point)
-                            }
+                            viewModel.togglePendingPoint(point)
                         }
                     }
                 }
             }
-            .frame(width: 80, height: 80)
-            .background(Color.gray.opacity(0.1))
-            .cornerRadius(8)
+            .frame(width: 250, height: 250)  // Increased to prevent cutoff
             
-            // Control buttons
-            VStack(spacing: 6) {
-                HStack(spacing: 6) {
-                    // Cancel
-                    Button(action: { viewModel.cancelPendingPiece() }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 16))
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.red)
-                    .frame(width: 32, height: 32)
-                    
-                    // Rotate
-                    Button(action: { viewModel.rotatePendingPiece(by: Double.pi/4) }) {
-                        Image(systemName: "rotate.right")
-                            .font(.system(size: 16))
-                    }
-                    .buttonStyle(.bordered)
-                    .frame(width: 32, height: 32)
-                    
-                    // Flip (for parallelogram)
-                    if pieceType == .parallelogram {
-                        Button(action: { viewModel.flipPendingPiece() }) {
-                            Image(systemName: "arrow.left.and.right")
-                                .font(.system(size: 16))
-                        }
-                        .buttonStyle(.bordered)
-                        .frame(width: 32, height: 32)
-                    }
-                    
-                    // Confirm
-                    Button(action: { viewModel.confirmPendingPiece(canvasSize: canvasSize) }) {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 16))
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.green)
-                    .frame(width: 32, height: 32)
-                    .disabled(!canPlacePiece())
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color.green.opacity(0.2))
-                    )
-                }
-                
-                // Connection status text
-                if !isFirstPiece {
-                    connectionStatusText
-                }
+            // Connection status text
+            if !isFirstPiece {
+                connectionStatusText
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color(.systemBackground).opacity(0.9))
+                    .cornerRadius(8)
             }
         }
-        .padding(8)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: isDragging ? 8 : 4)
         .offset(dragOffset)
         .gesture(
             DragGesture()
@@ -119,36 +70,24 @@ struct PendingPieceView: View {
                 }
                 .onEnded { value in
                     isDragging = false
-                    dragOffset = value.translation
+                    // Keep the final position
                 }
         )
-        .animation(.easeInOut(duration: 0.2), value: isDragging)
+        .animation(.interactiveSpring(), value: isDragging)
     }
     
     private var connectionStatusText: some View {
         Group {
             if viewModel.selectedCanvasPoints.isEmpty {
-                Text("Select points")
-                    .font(.caption2)
+                Text("Select connection points on canvas")
                     .foregroundColor(.orange)
             } else if viewModel.selectedPendingPoints.count == viewModel.selectedCanvasPoints.count {
-                Text("Ready!")
-                    .font(.caption2)
+                Text("Ready to place!")
                     .foregroundColor(.green)
             } else {
-                Text("Match \(viewModel.selectedCanvasPoints.count)")
-                    .font(.caption2)
+                Text("Match \(viewModel.selectedCanvasPoints.count) point\(viewModel.selectedCanvasPoints.count == 1 ? "" : "s") on this piece")
                     .foregroundColor(.blue)
             }
-        }
-    }
-    
-    private func canPlacePiece() -> Bool {
-        if isFirstPiece {
-            return true
-        } else {
-            return !viewModel.selectedCanvasPoints.isEmpty && 
-                   viewModel.selectedPendingPoints.count == viewModel.selectedCanvasPoints.count
         }
     }
     
@@ -207,31 +146,31 @@ struct PendingConnectionPoint: View {
     var body: some View {
         let rotatedPosition = rotatePoint(point.position, angle: rotation)
         let displayPosition = CGPoint(
-            x: 40 + rotatedPosition.x,  // Center at 40 (half of 80)
-            y: 40 + rotatedPosition.y
+            x: 125 + rotatedPosition.x,  // Center at 125 (half of 250)
+            y: 125 + rotatedPosition.y
         )
         
         Group {
             switch point.type {
             case .vertex:
                 Circle()
-                    .fill(fillColor.opacity(0.3))
+                    .fill(fillColor.opacity(isSelected ? 0.8 : 0.3))
                     .overlay(
                         Circle()
-                            .stroke(strokeColor, lineWidth: 1.5)
+                            .stroke(strokeColor, lineWidth: 2)
                     )
-                    .frame(width: 12, height: 12)
+                    .frame(width: 16, height: 16)  // Larger touch target
             case .edge:
                 Rectangle()
-                    .fill(fillColor.opacity(0.3))
+                    .fill(fillColor.opacity(isSelected ? 0.8 : 0.3))
                     .overlay(
                         Rectangle()
-                            .stroke(strokeColor, lineWidth: 1.5)
+                            .stroke(strokeColor, lineWidth: 2)
                     )
-                    .frame(width: 12, height: 12)
+                    .frame(width: 16, height: 16)  // Larger touch target
             }
         }
-        .scaleEffect(isSelected ? 1.2 : 1.0)
+        .scaleEffect(isSelected ? 1.3 : 1.0)
         .opacity(isCompatible ? 1.0 : 0.3)
         .position(displayPosition)
         .allowsHitTesting(isCompatible)
