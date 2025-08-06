@@ -21,6 +21,10 @@ class GameHostViewModel {
     var progress: Float = 0.0
     var showProgress = false
     
+    // Session-wide tracking properties
+    private var totalSessionXP: Int = 0
+    private var levelsCompleted: Int = 0
+    
     private let game: Game
     private let cvService: CVService
     private let profileService: ProfileService
@@ -124,8 +128,9 @@ class GameHostViewModel {
         let outcome = game.processRecognizedPieces(pieces)
         
         // Track the outcome in Supabase
+        //not implemented until we figure out what we want to track
         Task {
-            await trackOutcome(outcome)
+            //            await trackOutcome(outcome)
         }
         
         // Handle the outcome locally
@@ -138,15 +143,11 @@ class GameHostViewModel {
         case .incorrectPlacement:
             // Provide feedback (handled by game's view)
             break
-            
-        case .levelComplete(let xpAwarded):
-            // Level completed - delegate will be called by game
-            break
-            
         case .noAction:
             // No action needed
             break
         case .specialAchievement(name: let name, bonusXP: let bonusXP):
+            totalSessionXP += bonusXP
             break
         case .hintUsed:
             break
@@ -154,54 +155,7 @@ class GameHostViewModel {
             break
         }
     }
-    
-    private func trackOutcome(_ outcome: PlayerActionOutcome) async {
-        do {
-            let eventType: String
-            let xpAwarded: Int
-            var eventData: [String: Any] = [:]
-            
-            switch outcome {
-            case .correctPlacement(let points):
-                eventType = "correct_placement"
-                xpAwarded = points
-                eventData["points"] = points
-                
-            case .incorrectPlacement:
-                eventType = "incorrect_placement"
-                xpAwarded = 0
-                
-            case .levelComplete(let xp):
-                eventType = "level_completed"
-                xpAwarded = xp
-                eventData["level"] = currentLevel
-                
-            case .specialAchievement(let name, let bonusXP):
-                eventType = "achievement_unlocked"
-                xpAwarded = bonusXP
-                eventData["achievement_name"] = name
-                
-            case .hintUsed:
-                eventType = "hint_used"
-                xpAwarded = 0
-                
-            case .noAction, .stateUpdated:
-                return // Don't track these
-            }
-            
-            try await supabaseService.trackLearningEvent(
-                childProfileId: currentChildProfileId,
-                eventType: eventType,
-                gameId: game.id,
-                xpAwarded: xpAwarded,
-                eventData: eventData,
-                sessionId: currentSessionId
-            )
-        } catch {
-            print("Failed to track learning event: \(error)")
-        }
-    }
-    
+        
     func handleQuitRequest() {
         endSession()
         onQuit()
@@ -224,14 +178,13 @@ extension GameHostViewModel: GameDelegate {
                     gameId: game.id,
                     xpAwarded: xpAwarded,
                     eventData: [
-                        "level": currentLevel,
-                        "time_to_complete": levelTimer
+                        "levels_completed_total": levelsCompleted
                     ],
                     sessionId: currentSessionId
                 )
                 
                 // Update local profile XP
-                profileService.awardXP(xpAwarded, to: currentChildProfileId)
+                profileService.updateXP(xpAwarded, for: currentChildProfileId)
                 
             } catch {
                 print("Failed to track level completion: \(error)")
@@ -271,7 +224,7 @@ extension GameHostViewModel: GameDelegate {
                         xpAwarded: 0,
                         eventData: [
                             "frustration_level": level,
-                            "current_level": currentLevel
+                            "levels_completed": levelsCompleted
                         ],
                         sessionId: currentSessionId
                     )

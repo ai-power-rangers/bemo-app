@@ -184,7 +184,7 @@ class AppCoordinator {
                 cvService: self.dependencyContainer.cvService,
                 profileService: self.dependencyContainer.profileService,
                 supabaseService: self.dependencyContainer.supabaseService,
-                currentChildProfileId: activeProfile.id,
+                currentChildProfileId: self.dependencyContainer.profileService.activeProfile!.id,
                 onQuit: { [weak self] in
                     self?.currentState = .lobby
                 }
