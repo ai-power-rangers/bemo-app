@@ -42,43 +42,28 @@ struct SavePuzzleDialog: View {
                             Text(category.rawValue).tag(category)
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .pickerStyle(.menu)  // Changed to menu for better readability
                 }
                 
                 // Difficulty Section
                 Section(header: Text("Difficulty")) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(spacing: 8) {
-                            ForEach(PuzzleDifficulty.allCases, id: \.self) { difficulty in
-                                Button(action: { selectedDifficulty = difficulty }) {
-                                    VStack(spacing: 4) {
-                                        HStack(spacing: 2) {
-                                            ForEach(1...5, id: \.self) { star in
-                                                Image(systemName: star <= difficulty.rawValue ? "star.fill" : "star")
-                                                    .font(.caption2)
-                                                    .foregroundColor(
-                                                        selectedDifficulty == difficulty ? .orange : .gray
-                                                    )
-                                            }
-                                        }
-                                        Text(difficulty.displayName)
-                                            .font(.caption2)
-                                            .foregroundColor(
-                                                selectedDifficulty == difficulty ? .primary : .secondary
-                                            )
+                    Picker("Difficulty", selection: $selectedDifficulty) {
+                        ForEach(PuzzleDifficulty.allCases, id: \.self) { difficulty in
+                            HStack {
+                                Text(difficulty.displayName)
+                                Spacer()
+                                HStack(spacing: 2) {
+                                    ForEach(1...5, id: \.self) { star in
+                                        Image(systemName: star <= difficulty.rawValue ? "star.fill" : "star")
+                                            .font(.caption)
+                                            .foregroundColor(.orange)
                                     }
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 6)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(selectedDifficulty == difficulty ? 
-                                                  Color(.systemGray5) : Color.clear)
-                                    )
                                 }
-                                .buttonStyle(.plain)
                             }
+                            .tag(difficulty)
                         }
                     }
+                    .pickerStyle(.menu)
                 }
                 
                 // Tags Section (Optional)

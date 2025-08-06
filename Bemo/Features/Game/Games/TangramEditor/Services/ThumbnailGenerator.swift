@@ -62,7 +62,12 @@ struct ThumbnailPuzzleView: View {
         
         for piece in puzzle.pieces {
             let vertices = TangramGeometry.vertices(for: piece.type)
-            let transformed = vertices.map { $0.applying(piece.transform) }
+            // CRITICAL: Scale vertices before applying transform (matching rendering)
+            let scaledVertices = vertices.map { 
+                CGPoint(x: $0.x * TangramConstants.visualScale, 
+                        y: $0.y * TangramConstants.visualScale)
+            }
+            let transformed = scaledVertices.map { $0.applying(piece.transform) }
             
             for vertex in transformed {
                 minX = min(minX, vertex.x)
@@ -96,7 +101,12 @@ struct ThumbnailPieceShape: Shape {
     
     func path(in rect: CGRect) -> Path {
         let vertices = TangramGeometry.vertices(for: piece.type)
-        let transformed = vertices.map { $0.applying(piece.transform) }
+        // CRITICAL: Scale vertices before applying transform (matching rendering)
+        let scaledVertices = vertices.map { 
+            CGPoint(x: $0.x * TangramConstants.visualScale, 
+                    y: $0.y * TangramConstants.visualScale)
+        }
+        let transformed = scaledVertices.map { $0.applying(piece.transform) }
         
         var path = Path()
         
