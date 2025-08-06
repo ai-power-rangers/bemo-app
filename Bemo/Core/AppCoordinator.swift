@@ -182,10 +182,13 @@ class AppCoordinator {
             GameHostView(viewModel: GameHostViewModel(
                 game: game,
                 cvService: self.dependencyContainer.cvService,
-                profileService: self.dependencyContainer.profileService
-            ) { [weak self] in
-                self?.currentState = .lobby
-            })
+                profileService: self.dependencyContainer.profileService,
+                supabaseService: self.dependencyContainer.supabaseService,
+                currentChildProfileId: activeProfile.id,
+                onQuit: { [weak self] in
+                    self?.currentState = .lobby
+                }
+            ))
             
         case .parentDashboard:
             ParentDashboardView(viewModel: ParentDashboardViewModel(
