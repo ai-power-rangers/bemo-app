@@ -6,12 +6,8 @@
 //
 
 import Foundation
-import Observation
 
-@Observable
-@MainActor
 class PuzzlePersistenceService {
-    var savedPuzzles: [TangramPuzzle] = []
     
     private let documentsDirectory: URL
     private let puzzlesDirectory: URL
@@ -27,9 +23,6 @@ class PuzzlePersistenceService {
         
         // Create directories if needed
         createDirectoriesIfNeeded()
-        
-        // Load puzzle index on init
-        Task { await loadPuzzleIndex() }
     }
     
     private func createDirectoriesIfNeeded() {
@@ -41,27 +34,27 @@ class PuzzlePersistenceService {
     
     // MARK: - Public Methods
     
-    func savePuzzle(_ puzzle: TangramPuzzle) async throws {
+    func savePuzzle(_ puzzle: TangramPuzzle) async throws -> TangramPuzzle {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
-        let data = try encoder.encode(puzzle)
         
-        let fileURL = puzzlesDirectory.appendingPathComponent("puzzle_\(puzzle.id).json")
-        try data.write(to: fileURL)
+        var updatedPuzzle = puzzle
         
         // Generate and save thumbnail
-        if let thumbnailData = await thumbnailGenerator.generateThumbnailAuto(for: puzzle) {
+        if let thumbnailData = await thumbnailGenerator.generateThumbnail(for: puzzle) {
             try saveThumbnail(thumbnailData, for: puzzle.id)
-            
-            // Update puzzle with thumbnail data
-            var updatedPuzzle = puzzle
             updatedPuzzle.thumbnailData = thumbnailData
-            let updatedData = try encoder.encode(updatedPuzzle)
-            try updatedData.write(to: fileURL)
         }
         
+        // Save puzzle to file
+        let data = try encoder.encode(updatedPuzzle)
+        let fileURL = puzzlesDirectory.appendingPathComponent("puzzle_\(updatedPuzzle.id).json")
+        try data.write(to: fileURL)
+        
         // Update index
-        await updatePuzzleIndex(puzzle)
+        try await updatePuzzleIndex(updatedPuzzle)
+        
+        return updatedPuzzle
     }
     
     func loadPuzzle(id: String) async throws -> TangramPuzzle {
@@ -78,7 +71,7 @@ class PuzzlePersistenceService {
         let thumbURL = thumbnailsDirectory.appendingPathComponent("thumb_\(id).png")
         try? FileManager.default.removeItem(at: thumbURL)
         
-        await removeFromIndex(id: id)
+        try await removeFromIndex(id: id)
     }
     
     func listPuzzles() async throws -> [PuzzleMetadata] {
@@ -98,7 +91,7 @@ class PuzzlePersistenceService {
     
     // MARK: - Private Methods
     
-    private func updatePuzzleIndex(_ puzzle: TangramPuzzle) async {
+    private func updatePuzzleIndex(_ puzzle: TangramPuzzle) async throws {
         var index = (try? await listPuzzles()) ?? []
         
         let metadata = PuzzleMetadata(
@@ -120,46 +113,30 @@ class PuzzlePersistenceService {
         
         // Save index
         let indexURL = puzzlesDirectory.appendingPathComponent("puzzles.index")
-        if let data = try? JSONEncoder().encode(index) {
-            try? data.write(to: indexURL)
-        }
-        
-        // Update published property
-        var loadedPuzzles: [TangramPuzzle] = []
-        for metadata in index {
-            if let puzzle = try? await self.loadPuzzle(id: metadata.id) {
-                loadedPuzzles.append(puzzle)
-            }
-        }
-        self.savedPuzzles = loadedPuzzles
+        let data = try JSONEncoder().encode(index)
+        try data.write(to: indexURL)
     }
     
-    private func removeFromIndex(id: String) async {
+    private func removeFromIndex(id: String) async throws {
         var index = (try? await listPuzzles()) ?? []
         index.removeAll { $0.id == id }
         
         let indexURL = puzzlesDirectory.appendingPathComponent("puzzles.index")
-        if let data = try? JSONEncoder().encode(index) {
-            try? data.write(to: indexURL)
-        }
-        
-        // Update published property
-        await MainActor.run {
-            self.savedPuzzles.removeAll { $0.id == id }
-        }
+        let data = try JSONEncoder().encode(index)
+        try data.write(to: indexURL)
     }
     
-    private func loadPuzzleIndex() async {
-        if let puzzles = try? await listPuzzles() {
-            // Load full puzzles (could optimize to load on demand)
-            var loadedPuzzles: [TangramPuzzle] = []
-            for metadata in puzzles {
-                if let puzzle = try? await self.loadPuzzle(id: metadata.id) {
-                    loadedPuzzles.append(puzzle)
-                }
+    func loadAllPuzzles() async throws -> [TangramPuzzle] {
+        let puzzles = try await listPuzzles()
+        var loadedPuzzles: [TangramPuzzle] = []
+        
+        for metadata in puzzles {
+            if let puzzle = try? await loadPuzzle(id: metadata.id) {
+                loadedPuzzles.append(puzzle)
             }
-            self.savedPuzzles = loadedPuzzles
         }
+        
+        return loadedPuzzles
     }
     
     // MARK: - Thumbnail Support

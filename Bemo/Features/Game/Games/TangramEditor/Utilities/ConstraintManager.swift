@@ -12,6 +12,34 @@ class ConstraintManager {
     
     // MARK: - Constraint Application
     
+    /// Apply a single constraint to a transform
+    func applyConstraint(_ constraint: Constraint, to transform: CGAffineTransform, parameter: Double) -> CGAffineTransform {
+        switch constraint.type {
+        case .rotation(let center, let range):
+            let clampedAngle = max(range.lowerBound, min(range.upperBound, parameter))
+            let rotation = CGAffineTransform(rotationAngle: CGFloat(clampedAngle))
+            
+            let toOrigin = CGAffineTransform(translationX: -center.x, y: -center.y)
+            let fromOrigin = CGAffineTransform(translationX: center.x, y: center.y)
+            
+            return transform
+                .concatenating(toOrigin)
+                .concatenating(rotation)
+                .concatenating(fromOrigin)
+            
+        case .translation(let vector, let range):
+            let clampedT = max(range.lowerBound, min(range.upperBound, parameter))
+            let translation = CGAffineTransform(
+                translationX: vector.dx * CGFloat(clampedT),
+                y: vector.dy * CGFloat(clampedT)
+            )
+            return transform.concatenating(translation)
+            
+        case .fixed:
+            return transform
+        }
+    }
+    
     /// Apply rotation constraint around a vertex
     func applyRotationConstraint(
         transform: CGAffineTransform,

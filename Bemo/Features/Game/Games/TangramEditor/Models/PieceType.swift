@@ -38,26 +38,26 @@ enum PieceType: String, CaseIterable, Codable, Identifiable {
     var color: Color {
         switch self {
         case .smallTriangle1:
-            return Color(hex: "#C445A4")  // Purple-pink
+            return Self.colorFromHex(TangramConstants.Colors.smallTriangle1)
         case .smallTriangle2:
-            return Color(hex: "#02B7CD")  // Cyan
+            return Self.colorFromHex(TangramConstants.Colors.smallTriangle2)
         case .mediumTriangle:
-            return Color(hex: "#2BBA35")  // Green
+            return Self.colorFromHex(TangramConstants.Colors.mediumTriangle)
         case .largeTriangle1:
-            return Color(hex: "#3896FF")  // Blue
+            return Self.colorFromHex(TangramConstants.Colors.largeTriangle1)
         case .largeTriangle2:
-            return Color(hex: "#FF3A41")  // Red
+            return Self.colorFromHex(TangramConstants.Colors.largeTriangle2)
         case .square:
-            return Color(hex: "#FFD935")  // Yellow
+            return Self.colorFromHex(TangramConstants.Colors.square)
         case .parallelogram:
-            return Color(hex: "#FF8625")  // Orange
+            return Self.colorFromHex(TangramConstants.Colors.parallelogram)
         }
     }
-}
-
-// MARK: - Color Extension for Hex Support
-extension Color {
-    init(hex: String) {
+    
+    // MARK: - Private Helper
+    
+    /// Convert hex string to Color - private helper to avoid polluting Color namespace
+    private static func colorFromHex(_ hex: String) -> Color {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
         var int: UInt64 = 0
         Scanner(string: hex).scanHexInt64(&int)
@@ -72,7 +72,7 @@ extension Color {
         default:
             (a, r, g, b) = (255, 0, 0, 0)
         }
-        self.init(
+        return Color(
             .sRGB,
             red: Double(r) / 255,
             green: Double(g) / 255,

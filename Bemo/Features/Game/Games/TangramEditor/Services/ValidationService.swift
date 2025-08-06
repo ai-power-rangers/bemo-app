@@ -50,10 +50,10 @@ class ValidationService {
         // Check in priority order
         if hasAreaOverlap(pieceA: pieceA, pieceB: pieceB) {
             return .areaOverlap
-        } else if hasEdgeContact(pieceA: pieceA, pieceB: pieceB) {
-            return .edgeContact
         } else if hasVertexContact(pieceA: pieceA, pieceB: pieceB) {
             return .vertexContact
+        } else if hasEdgeContact(pieceA: pieceA, pieceB: pieceB) {
+            return .edgeContact
         } else {
             return .noContact
         }
@@ -160,8 +160,8 @@ class ValidationService {
     
     private func getTransformedVertices(for piece: TangramPiece) -> [CGPoint] {
         let baseVertices = TangramGeometry.vertices(for: piece.type)
-        // Apply the same scale factor used in the UI (50 units)
-        let scaledVertices = baseVertices.map { CGPoint(x: $0.x * 50, y: $0.y * 50) }
+        // Apply the visual scale factor
+        let scaledVertices = baseVertices.map { CGPoint(x: $0.x * TangramConstants.visualScale, y: $0.y * TangramConstants.visualScale) }
         return GeometryEngine.transformVertices(scaledVertices, with: piece.transform)
     }
 }

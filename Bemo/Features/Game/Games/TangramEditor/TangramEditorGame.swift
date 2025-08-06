@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Foundation
 
 class TangramEditorGame: Game {
     
@@ -19,6 +20,10 @@ class TangramEditorGame: Game {
     
     private var viewModel: TangramEditorViewModel?
     private weak var delegate: GameDelegate?
+    
+    // State management
+    private var cachedPuzzleData: Data?
+    private var pendingStateToLoad: Data?
     
     // Use editor configuration with custom bars
     var gameUIConfig: GameUIConfig {
@@ -53,6 +58,19 @@ class TangramEditorGame: Game {
                 if viewModel == nil {
                     viewModel = TangramEditorViewModel(puzzle: nil)
                     viewModel?.delegate = delegate
+                    
+                    // Set up state change notification
+                    viewModel?.onPuzzleChanged = { [weak self] puzzle in
+                        self?.updateStateCache(puzzle)
+                    }
+                    
+                    // Load pending state if any
+                    if let pendingData = pendingStateToLoad {
+                        if let puzzle = try? JSONDecoder().decode(TangramPuzzle.self, from: pendingData) {
+                            viewModel?.loadPuzzle(from: puzzle)
+                        }
+                        pendingStateToLoad = nil
+                    }
                 }
                 
                 // Return just the canvas view - bars are handled via GameUIConfig
@@ -74,14 +92,30 @@ class TangramEditorGame: Game {
     }
     
     func saveState() -> Data? {
-        // We need to get the data synchronously, so we'll return nil for now
-        // and handle persistence through the view model's save methods
-        return nil
+        // Return cached state if available
+        // This is the primary mechanism - always use cache
+        return cachedPuzzleData
     }
     
     func loadState(from data: Data) {
-        // Load state will be handled through the view model's async methods
-        // This synchronous method can't directly call MainActor methods
+        // Store the data for when viewModel is created
+        pendingStateToLoad = data
+        cachedPuzzleData = data
+        
+        // If viewModel already exists, load immediately
+        if let puzzle = try? JSONDecoder().decode(TangramPuzzle.self, from: data) {
+            Task { @MainActor in
+                viewModel?.loadPuzzle(from: puzzle)
+            }
+        }
+    }
+    
+    // MARK: - State Management Helpers
+    
+    private func updateStateCache(_ puzzle: TangramPuzzle) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        cachedPuzzleData = try? encoder.encode(puzzle)
     }
 }
 

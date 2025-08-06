@@ -70,10 +70,10 @@ struct PieceShape: Shape {
         var path = Path()
         
         if let first = vertices.first {
-            // Scale vertices by 50 to match visual size
-            path.move(to: CGPoint(x: first.x * 50, y: first.y * 50))
+            // Scale vertices to match visual size
+            path.move(to: CGPoint(x: first.x * TangramConstants.visualScale, y: first.y * TangramConstants.visualScale))
             for vertex in vertices.dropFirst() {
-                path.addLine(to: CGPoint(x: vertex.x * 50, y: vertex.y * 50))
+                path.addLine(to: CGPoint(x: vertex.x * TangramConstants.visualScale, y: vertex.y * TangramConstants.visualScale))
             }
             path.closeSubpath()
         }

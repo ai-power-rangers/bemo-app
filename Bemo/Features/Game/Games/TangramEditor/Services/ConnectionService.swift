@@ -10,6 +10,8 @@ import CoreGraphics
 
 class ConnectionService {
     
+    private let constraintManager = ConstraintManager()
+    
     // MARK: - Connection Creation
     
     /// Create a connection between two pieces
@@ -55,9 +57,9 @@ class ConnectionService {
                 return nil 
             }
             
-            // Apply the same scale factor used in the UI (50 units)
-            let scaledVertexA = CGPoint(x: verticesA[vertexA].x * 50, y: verticesA[vertexA].y * 50)
-            let scaledVertexB = CGPoint(x: verticesB[vertexB].x * 50, y: verticesB[vertexB].y * 50)
+            // Apply the visual scale factor
+            let scaledVertexA = CGPoint(x: verticesA[vertexA].x * TangramConstants.visualScale, y: verticesA[vertexA].y * TangramConstants.visualScale)
+            let scaledVertexB = CGPoint(x: verticesB[vertexB].x * TangramConstants.visualScale, y: verticesB[vertexB].y * TangramConstants.visualScale)
             
             let worldVertexA = scaledVertexA.applying(pieceA.transform)
             let worldVertexB = scaledVertexB.applying(pieceB.transform)
@@ -89,9 +91,9 @@ class ConnectionService {
             
             let verticesA = TangramGeometry.vertices(for: pieceA.type)
             
-            // Apply the same scale factor used in the UI (50 units)
-            let scaledStartA = CGPoint(x: verticesA[edgesA[edgeA].startVertex].x * 50, y: verticesA[edgesA[edgeA].startVertex].y * 50)
-            let scaledEndA = CGPoint(x: verticesA[edgesA[edgeA].endVertex].x * 50, y: verticesA[edgesA[edgeA].endVertex].y * 50)
+            // Apply the visual scale factor
+            let scaledStartA = CGPoint(x: verticesA[edgesA[edgeA].startVertex].x * TangramConstants.visualScale, y: verticesA[edgesA[edgeA].startVertex].y * TangramConstants.visualScale)
+            let scaledEndA = CGPoint(x: verticesA[edgesA[edgeA].endVertex].x * TangramConstants.visualScale, y: verticesA[edgesA[edgeA].endVertex].y * TangramConstants.visualScale)
             
             let edgeStartA = scaledStartA.applying(pieceA.transform)
             let edgeEndA = scaledEndA.applying(pieceA.transform)
@@ -156,7 +158,7 @@ class ConnectionService {
         
         for connection in pieceConnections {
             if connection.constraint.affectedPieceId == pieceId {
-                resultTransform = connection.constraint.apply(to: resultTransform, parameter: parameter)
+                resultTransform = constraintManager.applyConstraint(connection.constraint, to: resultTransform, parameter: parameter)
             }
         }
         
@@ -172,13 +174,13 @@ class ConnectionService {
             return false 
         }
         
-        // Apply the same scale factor used in the UI (50 units)
+        // Apply the visual scale factor
         let baseVerticesA = TangramGeometry.vertices(for: pieceA.type)
-        let scaledVerticesA = baseVerticesA.map { CGPoint(x: $0.x * 50, y: $0.y * 50) }
+        let scaledVerticesA = baseVerticesA.map { CGPoint(x: $0.x * TangramConstants.visualScale, y: $0.y * TangramConstants.visualScale) }
         let verticesA = GeometryEngine.transformVertices(scaledVerticesA, with: pieceA.transform)
         
         let baseVerticesB = TangramGeometry.vertices(for: pieceB.type)
-        let scaledVerticesB = baseVerticesB.map { CGPoint(x: $0.x * 50, y: $0.y * 50) }
+        let scaledVerticesB = baseVerticesB.map { CGPoint(x: $0.x * TangramConstants.visualScale, y: $0.y * TangramConstants.visualScale) }
         let verticesB = GeometryEngine.transformVertices(scaledVerticesB, with: pieceB.transform)
         
         let tolerance: CGFloat = 1e-5

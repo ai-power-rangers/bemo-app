@@ -16,6 +16,7 @@ class TangramEditorViewModel {
     // MARK: - Observable Properties
     
     var puzzle: TangramPuzzle
+    var savedPuzzles: [TangramPuzzle] = []  // Now managed by ViewModel
     var selectedPieceIds: Set<String> = []  // Changed to support multiple selection
     var validationState: ValidationState = .unknown
     var editMode: EditMode = .select
@@ -34,6 +35,9 @@ class TangramEditorViewModel {
     
     // Game delegate for communication with host
     weak var delegate: GameDelegate?
+    
+    // State change callback for Game protocol compliance
+    var onPuzzleChanged: ((TangramPuzzle) -> Void)?
     
     // MARK: - Services
     
@@ -135,6 +139,20 @@ class TangramEditorViewModel {
         self.connectionService = ConnectionService()
         self.validationService = ValidationService()
         self.persistenceService = PuzzlePersistenceService()
+        
+        // Load saved puzzles on init
+        Task {
+            await loadSavedPuzzles()
+        }
+    }
+    
+    private func loadSavedPuzzles() async {
+        do {
+            savedPuzzles = try await persistenceService.loadAllPuzzles()
+        } catch {
+            // Handle error silently for now
+            savedPuzzles = []
+        }
     }
     
     // MARK: - Piece Management
@@ -205,6 +223,7 @@ class TangramEditorViewModel {
             let piece = TangramPiece(type: type, transform: transform)
             puzzle.pieces.append(piece)
             validate()
+            notifyPuzzleChanged()
             
             // Reset state
             editorState = .idle
@@ -307,6 +326,7 @@ class TangramEditorViewModel {
         recenterPuzzle(canvasSize: currentCanvasSize)
         
         validate()
+        notifyPuzzleChanged()
     }
     
     private func updatePreview() {
@@ -343,7 +363,7 @@ class TangramEditorViewModel {
         
         // Get base vertices for the pending piece
         let baseVertices = TangramGeometry.vertices(for: pieceType)
-        let scaledVertices = baseVertices.map { CGPoint(x: $0.x * 50, y: $0.y * 50) }
+        let scaledVertices = baseVertices.map { CGPoint(x: $0.x * TangramConstants.visualScale, y: $0.y * TangramConstants.visualScale) }
         
         // Apply rotation first
         var transform = CGAffineTransform(rotationAngle: rotation)
@@ -377,6 +397,7 @@ class TangramEditorViewModel {
         puzzle.connections.removeAll { $0.pieceAId == id || $0.pieceBId == id }
         selectedPieceIds.remove(id)
         validate()
+        notifyPuzzleChanged()
     }
     
     func updatePieceTransform(id: String, transform: CGAffineTransform) {
@@ -384,6 +405,7 @@ class TangramEditorViewModel {
         
         puzzle.pieces[index].transform = transform
         validate()
+        notifyPuzzleChanged()
     }
     
     func rotatePiece(id: String, by angle: Double) {
@@ -425,6 +447,7 @@ class TangramEditorViewModel {
         
         // Revalidate
         validate()
+        notifyPuzzleChanged()
     }
     
     // MARK: - Connection Management
@@ -499,7 +522,11 @@ class TangramEditorViewModel {
     func save() async throws {
         puzzle.modifiedDate = Date()
         puzzle.solutionChecksum = generateChecksum()
-        try await persistenceService.savePuzzle(puzzle)
+        let updatedPuzzle = try await persistenceService.savePuzzle(puzzle)
+        puzzle = updatedPuzzle  // Update with thumbnail data
+        
+        // Reload saved puzzles list
+        await loadSavedPuzzles()
     }
     
     func load(puzzleId: String) async throws {
@@ -510,6 +537,9 @@ class TangramEditorViewModel {
     func deletePuzzle() async throws {
         try await persistenceService.deletePuzzle(id: puzzle.id)
         reset()
+        
+        // Reload saved puzzles list
+        await loadSavedPuzzles()
     }
     
     func listSavedPuzzles() async throws -> [PuzzleMetadata] {
@@ -534,6 +564,10 @@ class TangramEditorViewModel {
     }
     
     // MARK: - Helpers
+    
+    private func notifyPuzzleChanged() {
+        onPuzzleChanged?(puzzle)
+    }
     
     private func generateChecksum() -> String {
         // Simple checksum based on piece positions
@@ -566,6 +600,7 @@ class TangramEditorViewModel {
     func loadPuzzle(from data: TangramPuzzle) {
         puzzle = data
         validate()
+        notifyPuzzleChanged()
     }
     
     
@@ -581,9 +616,9 @@ class TangramEditorViewModel {
         var maxY = -Double.infinity
         
         for piece in puzzle.pieces {
-            // Scale vertices by 50 to match visual representation
+            // Scale vertices to match visual representation
             let baseVertices = TangramGeometry.vertices(for: piece.type)
-            let scaledVertices = baseVertices.map { CGPoint(x: $0.x * 50, y: $0.y * 50) }
+            let scaledVertices = baseVertices.map { CGPoint(x: $0.x * TangramConstants.visualScale, y: $0.y * TangramConstants.visualScale) }
             let vertices = GeometryEngine.transformVertices(scaledVertices, with: piece.transform)
             
             for vertex in vertices {
@@ -618,10 +653,10 @@ class TangramEditorViewModel {
         
         var points: [ConnectionPoint] = []
         
-        // Get base vertices and scale them by 50 (same as PieceShape does)
+        // Get base vertices and scale them (same as PieceShape does)
         let baseVertices = TangramGeometry.vertices(for: piece.type)
         let scaledVertices = baseVertices.map { vertex in
-            CGPoint(x: vertex.x * 50, y: vertex.y * 50)
+            CGPoint(x: vertex.x * TangramConstants.visualScale, y: vertex.y * TangramConstants.visualScale)
         }
         
         // Now apply the piece's transform to the scaled vertices
@@ -898,6 +933,7 @@ class TangramEditorViewModel {
         selectedPieceIds.removeAll()
         editorState = .idle
         validate()
+        notifyPuzzleChanged()
     }
     
     // MARK: - Undo/Redo

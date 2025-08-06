@@ -10,7 +10,7 @@ import CoreGraphics
 
 struct GeometryEngine {
     
-    private static let tolerance: Double = 0.0001
+    private static let tolerance: Double = TangramConstants.fineTolerance
     
     static func transformVertices(_ vertices: [CGPoint], with transform: CGAffineTransform) -> [CGPoint] {
         return vertices.map { vertex in
@@ -53,7 +53,7 @@ struct GeometryEngine {
     }
     
     static func pointOnLineSegment(_ point: CGPoint, _ start: CGPoint, _ end: CGPoint) -> Bool {
-        let epsilon: CGFloat = 1e-9
+        let epsilon = TangramConstants.ultraFineTolerance
         
         // Check if point is collinear with the line segment
         let crossProduct = (point.y - start.y) * (end.x - start.x) - (point.x - start.x) * (end.y - start.y)
@@ -107,7 +107,7 @@ struct GeometryEngine {
         guard vertices.count >= 3 else { return false }
         
         // First check if the point is exactly on a vertex (boundary point)
-        let epsilon = 1e-9
+        let epsilon = TangramConstants.ultraFineTolerance
         for vertex in vertices {
             if pointsEqual(point, vertex, tolerance: epsilon) {
                 return false // Points on vertices are not "inside"
@@ -193,7 +193,7 @@ struct GeometryEngine {
                     // We only care about interior intersection for area overlap
                     if let intersection = lineSegmentIntersection(edge1Start, edge1End, edge2Start, edge2End) {
                         // Check if intersection is not at an endpoint (which would be edge touching)
-                        let epsilon = 1e-6
+                        let epsilon = TangramConstants.edgeCoincidenceTolerance
                         let isEndpoint = pointsEqual(intersection, edge1Start, tolerance: epsilon) ||
                                        pointsEqual(intersection, edge1End, tolerance: epsilon) ||
                                        pointsEqual(intersection, edge2Start, tolerance: epsilon) ||
@@ -284,7 +284,7 @@ struct GeometryEngine {
     static func sharedVertices(_ vertices1: [CGPoint], _ vertices2: [CGPoint]) -> Set<CGPoint> {
         var shared = Set<CGPoint>()
         // Use a more generous tolerance for vertex matching to handle floating point precision
-        let tolerance: CGFloat = 0.01  // Increased from 1e-6 to handle rotation precision issues
+        let tolerance = TangramConstants.geometricTolerance  // Consistent tolerance
         
         for v1 in vertices1 {
             for v2 in vertices2 {
@@ -302,7 +302,7 @@ struct GeometryEngine {
     static func sharedEdges(_ vertices1: [CGPoint], _ vertices2: [CGPoint]) -> Set<String> {
         var shared = Set<String>()
         // Use consistent tolerance with vertex matching
-        let tolerance: CGFloat = 0.01  // Increased from 1e-6 for consistency
+        let tolerance = TangramConstants.geometricTolerance  // Consistent tolerance
         
         // Get edges for both polygons
         let edges1 = getEdges(from: vertices1)

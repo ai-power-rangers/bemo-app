@@ -109,7 +109,7 @@ struct TangramEditorCanvasView: View {
         ZStack {
             // Grid background
             Canvas { context, size in
-                let gridSize: CGFloat = 50
+                let gridSize = TangramConstants.gridSize
                 let path = Path { path in
                     // Vertical lines
                     for x in stride(from: 0, through: size.width, by: gridSize) {
