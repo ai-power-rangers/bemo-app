@@ -175,28 +175,3 @@ enum TangramGeometry {
         return sqrt(dx * dx + dy * dy)
     }
 }
-
-extension TangramGeometry {
-    static func verifyTotalArea() -> Bool {
-        var totalArea: Double = 0
-        let pieceCounts: [PieceType: Int] = [
-            .smallTriangle1: 1,
-            .smallTriangle2: 1,
-            .square: 1,
-            .mediumTriangle: 1,
-            .largeTriangle1: 1,
-            .largeTriangle2: 1,
-            .parallelogram: 1
-        ]
-        
-        for (pieceType, count) in pieceCounts {
-            totalArea += area(for: pieceType) * Double(count)
-        }
-        
-        return abs(totalArea - 8.0) < 0.0001
-    }
-    
-    static func uniquePieceTypes() -> [PieceType] {
-        return [.smallTriangle1, .square, .mediumTriangle, .largeTriangle1, .parallelogram]
-    }
-}

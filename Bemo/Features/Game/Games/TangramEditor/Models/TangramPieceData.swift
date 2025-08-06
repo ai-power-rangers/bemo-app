@@ -8,7 +8,7 @@
 import Foundation
 import CoreGraphics
 
-struct TangramPiece: Codable, Identifiable {
+struct TangramPiece: Codable, Identifiable, Equatable {
     let id: String
     let type: PieceType
     var transform: CGAffineTransform

@@ -25,6 +25,12 @@ struct PieceView: View {
                         .stroke(borderColor, lineWidth: borderWidth)
                 )
                 .transformEffect(piece.transform)
+                .onAppear {
+                    // Debug logging for piece transforms
+                    if !piece.transform.tx.isFinite || !piece.transform.ty.isFinite {
+                        print("DEBUG PieceView: WARNING - Piece \(piece.id) has non-finite transform: \(piece.transform)")
+                    }
+                }
             
             // Connection points overlay
             if showConnectionPoints && !availableConnectionPoints.isEmpty {

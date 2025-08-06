@@ -23,24 +23,24 @@ struct PendingPieceView: View {
         VStack(spacing: 12) {
             // Piece preview at actual size (50 scale)
             ZStack {
-                // Draw the piece
+                // Draw the piece - more transparent for preview
                 PieceShapeForPending(type: pieceType, scale: 50)
-                    .fill(pieceColor.opacity(0.5))
+                    .fill(pieceColor.opacity(0.3))  // More transparent
                     .overlay(
                         PieceShapeForPending(type: pieceType, scale: 50)
-                            .stroke(pieceColor, lineWidth: 3)
+                            .stroke(pieceColor.opacity(0.7), lineWidth: 2)  // Lighter stroke
                     )
-                    .rotationEffect(Angle(radians: rotation))
+                    .rotationEffect(Angle(degrees: rotation))
                 
-                // Show connection points for subsequent pieces
-                if !isFirstPiece {
-                    ForEach(viewModel.getConnectionPointsForPendingPiece(type: pieceType, scale: 50), id: \.id) { point in
+                // Show connection points only after canvas points are selected
+                if !isFirstPiece && !viewModel.selectedCanvasPoints.isEmpty {
+                    ForEach(viewModel.getConnectionPointsForPendingPiece(type: pieceType, scale: 1), id: \.id) { (point: TangramEditorViewModel.ConnectionPoint) in
                         PendingConnectionPoint(
                             point: point,
                             rotation: rotation,
                             isSelected: viewModel.selectedPendingPoints.contains { $0.id == point.id },
                             isCompatible: isPointCompatible(point),
-                            scale: 50
+                            scale: 1
                         )
                         .onTapGesture {
                             viewModel.togglePendingPoint(point)
@@ -144,9 +144,20 @@ struct PendingConnectionPoint: View {
     let scale: CGFloat
     
     var body: some View {
-        let rotatedPosition = rotatePoint(point.position, angle: rotation)
+        // The point.position is in local space (relative to piece origin)
+        // We need to rotate it, then translate to the center of the preview area
+        let rotationRadians = rotation * .pi / 180
+        let cosAngle = cos(rotationRadians)
+        let sinAngle = sin(rotationRadians)
+        
+        // Break down the rotation calculation into simpler parts
+        let rotatedX = point.position.x * cosAngle - point.position.y * sinAngle
+        let rotatedY = point.position.x * sinAngle + point.position.y * cosAngle
+        let rotatedPosition = CGPoint(x: rotatedX, y: rotatedY)
+        
+        // Center at 125,125 to match where PieceShapeForPending draws the piece
         let displayPosition = CGPoint(
-            x: 125 + rotatedPosition.x,  // Center at 125 (half of 250)
+            x: 125 + rotatedPosition.x,
             y: 125 + rotatedPosition.y
         )
         
@@ -193,14 +204,5 @@ struct PendingConnectionPoint: View {
         case .vertex: return .blue
         case .edge: return .orange
         }
-    }
-    
-    private func rotatePoint(_ point: CGPoint, angle: Double) -> CGPoint {
-        let cos = cos(angle)
-        let sin = sin(angle)
-        return CGPoint(
-            x: point.x * cos - point.y * sin,
-            y: point.x * sin + point.y * cos
-        )
     }
 }

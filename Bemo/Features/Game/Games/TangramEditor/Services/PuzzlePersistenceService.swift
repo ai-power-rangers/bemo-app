@@ -13,6 +13,7 @@ class PuzzlePersistenceService {
     private let puzzlesDirectory: URL
     private let thumbnailsDirectory: URL
     private let thumbnailGenerator = ThumbnailGenerator()
+    private let bundledPuzzlesKey = "HasImportedBundledPuzzles_v1"
     
     init() {
         // Get documents directory
@@ -23,6 +24,11 @@ class PuzzlePersistenceService {
         
         // Create directories if needed
         createDirectoriesIfNeeded()
+        
+        // Import bundled puzzles on first launch
+        Task {
+            await importBundledPuzzlesIfNeeded()
+        }
     }
     
     private func createDirectoriesIfNeeded() {
@@ -149,6 +155,79 @@ class PuzzlePersistenceService {
     func loadThumbnail(for puzzleId: String) -> Data? {
         let thumbURL = thumbnailsDirectory.appendingPathComponent("thumb_\(puzzleId).png")
         return try? Data(contentsOf: thumbURL)
+    }
+    
+    // MARK: - Bundled Puzzle Support
+    
+    private func importBundledPuzzlesIfNeeded() async {
+        // Check if we've already imported bundled puzzles
+        guard !UserDefaults.standard.bool(forKey: bundledPuzzlesKey) else { return }
+        
+        // Load bundled puzzles
+        let bundledPuzzles = loadBundledPuzzles()
+        
+        // Save each bundled puzzle to documents directory
+        for puzzle in bundledPuzzles {
+            do {
+                _ = try await savePuzzle(puzzle)
+            } catch {
+                print("Failed to import bundled puzzle \(puzzle.name): \(error)")
+            }
+        }
+        
+        // Mark as imported
+        if !bundledPuzzles.isEmpty {
+            UserDefaults.standard.set(true, forKey: bundledPuzzlesKey)
+        }
+    }
+    
+    private func loadBundledPuzzles() -> [TangramPuzzle] {
+        var puzzles: [TangramPuzzle] = []
+        
+        // Get the bundle path for official puzzles
+        guard let bundleURL = Bundle.main.url(forResource: "official", withExtension: nil, subdirectory: "Resources/Puzzles/Tangram") else {
+            print("No bundled puzzles directory found")
+            return puzzles
+        }
+        
+        // Iterate through category directories
+        let categories = ["animals", "shapes", "objects"]
+        
+        for category in categories {
+            let categoryURL = bundleURL.appendingPathComponent(category)
+            
+            // Get all JSON files in this category
+            if let jsonFiles = try? FileManager.default.contentsOfDirectory(at: categoryURL, includingPropertiesForKeys: nil).filter({ $0.pathExtension == "json" }) {
+                
+                for fileURL in jsonFiles {
+                    if let data = try? Data(contentsOf: fileURL),
+                       var puzzle = try? JSONDecoder().decode(TangramPuzzle.self, from: data) {
+                        // Ensure bundled puzzles are marked correctly
+                        puzzle.source = .bundled
+                        puzzles.append(puzzle)
+                    }
+                }
+            }
+        }
+        
+        return puzzles
+    }
+    
+    func getAllPuzzles() async throws -> [TangramPuzzle] {
+        // This returns both user and bundled puzzles
+        return try await loadAllPuzzles()
+    }
+    
+    func getUserPuzzles() async throws -> [TangramPuzzle] {
+        // Filter for user-created puzzles only
+        let allPuzzles = try await loadAllPuzzles()
+        return allPuzzles.filter { $0.source == .user }
+    }
+    
+    func getBundledPuzzles() async throws -> [TangramPuzzle] {
+        // Filter for bundled puzzles only
+        let allPuzzles = try await loadAllPuzzles()
+        return allPuzzles.filter { $0.source == .bundled }
     }
 }
 

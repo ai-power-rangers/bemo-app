@@ -109,6 +109,38 @@ class ConnectionService {
                 type: .translation(along: normalizedVector, range: 0...slidingRange),
                 affectedPieceId: pieceBId
             )
+            
+        case .vertexToEdge(let pieceAId, let vertex, let pieceBId, let edge):
+            // For vertex-to-edge connections, constrain the vertex to slide along the edge
+            guard let pieceA = pieces.first(where: { $0.id == pieceAId }),
+                  let pieceB = pieces.first(where: { $0.id == pieceBId }) else {
+                return nil
+            }
+            
+            let verticesA = TangramGeometry.vertices(for: pieceA.type)
+            let edgesB = TangramGeometry.edges(for: pieceB.type)
+            
+            guard vertex < verticesA.count, edge < edgesB.count else {
+                return nil
+            }
+            
+            let verticesB = TangramGeometry.vertices(for: pieceB.type)
+            let scaledStartB = CGPoint(x: verticesB[edgesB[edge].startVertex].x * TangramConstants.visualScale, 
+                                       y: verticesB[edgesB[edge].startVertex].y * TangramConstants.visualScale)
+            let scaledEndB = CGPoint(x: verticesB[edgesB[edge].endVertex].x * TangramConstants.visualScale, 
+                                     y: verticesB[edgesB[edge].endVertex].y * TangramConstants.visualScale)
+            
+            let edgeStartB = scaledStartB.applying(pieceB.transform)
+            let edgeEndB = scaledEndB.applying(pieceB.transform)
+            
+            let edgeVector = geometryService.edgeVector(from: edgeStartB, to: edgeEndB)
+            let normalizedVector = geometryService.normalizeVector(edgeVector)
+            let edgeLength = geometryService.distance(from: edgeStartB, to: edgeEndB)
+            
+            return Constraint(
+                type: .translation(along: normalizedVector, range: 0...edgeLength),
+                affectedPieceId: pieceAId
+            )
         }
     }
     
@@ -142,6 +174,17 @@ class ConnectionService {
             
             // Allow edge connections even with different lengths
             return true
+            
+        case .vertexToEdge(let pieceAId, let vertex, let pieceBId, let edge):
+            guard let pieceA = pieces.first(where: { $0.id == pieceAId }),
+                  let pieceB = pieces.first(where: { $0.id == pieceBId }) else {
+                return false
+            }
+            
+            let verticesA = TangramGeometry.vertices(for: pieceA.type)
+            let edgesB = TangramGeometry.edges(for: pieceB.type)
+            
+            return vertex < verticesA.count && edge < edgesB.count
         }
     }
     
@@ -241,6 +284,26 @@ class ConnectionService {
                     tolerance: tolerance
                 )
             }
+            
+        case .vertexToEdge(let pieceAId, let vertex, let pieceBId, let edge):
+            guard vertex < verticesA.count,
+                  let pieceAObj = pieces.first(where: { $0.id == pieceAId }),
+                  let pieceBObj = pieces.first(where: { $0.id == pieceBId }) else {
+                return false
+            }
+            
+            let edgesB = TangramGeometry.edges(for: pieceBObj.type)
+            guard edge < edgesB.count else {
+                return false
+            }
+            
+            let vertexPoint = verticesA[vertex]
+            let edgeDefB = edgesB[edge]
+            let edgeStartB = verticesB[edgeDefB.startVertex]
+            let edgeEndB = verticesB[edgeDefB.endVertex]
+            
+            // Check if vertex lies on the edge
+            return geometryService.pointOnLineSegment(vertexPoint, edgeStartB, edgeEndB)
         }
     }
 }

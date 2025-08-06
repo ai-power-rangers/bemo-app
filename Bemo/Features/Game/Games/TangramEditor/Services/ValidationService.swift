@@ -158,6 +158,27 @@ class ValidationService {
                isConnected(pieces: pieces, connections: connections)
     }
     
+    /// Validate puzzle and return detailed state
+    func validate(puzzle: TangramPuzzle) -> ValidationState {
+        guard !puzzle.pieces.isEmpty else {
+            return .unknown
+        }
+        
+        if hasInvalidAreaOverlaps(pieces: puzzle.pieces) {
+            return .invalid(reason: "Pieces have overlapping areas")
+        }
+        
+        if hasUnexplainedContacts(pieces: puzzle.pieces, connections: puzzle.connections) {
+            return .invalid(reason: "Pieces touching without proper connections")
+        }
+        
+        if !isConnected(pieces: puzzle.pieces, connections: puzzle.connections) {
+            return .invalid(reason: "Not all pieces are connected")
+        }
+        
+        return .valid
+    }
+    
     // MARK: - Helpers
     
     private func getTransformedVertices(for piece: TangramPiece) -> [CGPoint] {

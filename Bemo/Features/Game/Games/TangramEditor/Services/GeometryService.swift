@@ -327,50 +327,6 @@ class GeometryService {
         return shared
     }
     
-    /// Check if two edges coincide (within tolerance)
-    func edgesCoincide(_ edgeA: (CGPoint, CGPoint), _ edgeB: (CGPoint, CGPoint), tolerance: CGFloat = 1e-6) -> Bool {
-        // Check if edges are the same (forward or backward)
-        let sameDirection = pointsEqual(edgeA.0, edgeB.0, tolerance: tolerance) && 
-                           pointsEqual(edgeA.1, edgeB.1, tolerance: tolerance)
-        let reverseDirection = pointsEqual(edgeA.0, edgeB.1, tolerance: tolerance) && 
-                              pointsEqual(edgeA.1, edgeB.0, tolerance: tolerance)
-        
-        return sameDirection || reverseDirection
-    }
-    
-    /// Check if a shorter edge lies along a longer edge (partial coincidence)
-    func edgePartiallyCoincides(shorterEdge: (CGPoint, CGPoint), longerEdge: (CGPoint, CGPoint), tolerance: CGFloat = 1e-6) -> Bool {
-        // Check if both endpoints of the shorter edge lie on the line defined by the longer edge
-        let distStart = distanceFromPointToLine(shorterEdge.0, lineStart: longerEdge.0, lineEnd: longerEdge.1)
-        let distEnd = distanceFromPointToLine(shorterEdge.1, lineStart: longerEdge.0, lineEnd: longerEdge.1)
-        
-        if distStart > tolerance || distEnd > tolerance {
-            return false // Edges are not collinear
-        }
-        
-        // Check if the shorter edge is within the bounds of the longer edge
-        // Project both endpoints onto the longer edge and check if they're within [0, 1] range
-        let longerVector = edgeVector(from: longerEdge.0, to: longerEdge.1)
-        let longerLength = sqrt(Double(longerVector.dx * longerVector.dx + longerVector.dy * longerVector.dy))
-        
-        if longerLength < tolerance {
-            return false // Degenerate edge
-        }
-        
-        // Project shorter edge endpoints onto longer edge
-        let v1 = edgeVector(from: longerEdge.0, to: shorterEdge.0)
-        let v2 = edgeVector(from: longerEdge.0, to: shorterEdge.1)
-        
-        let proj1 = dotProduct(v1, longerVector) / (longerLength * longerLength)
-        let proj2 = dotProduct(v2, longerVector) / (longerLength * longerLength)
-        
-        // Check if both projections are within [0, 1] (with tolerance)
-        let minProj = min(proj1, proj2)
-        let maxProj = max(proj1, proj2)
-        
-        return minProj >= -tolerance && maxProj <= 1.0 + tolerance
-    }
-    
     /// Get all edges from a polygon
     private func getEdges(from vertices: [CGPoint]) -> [(CGPoint, CGPoint)] {
         var edges: [(CGPoint, CGPoint)] = []
@@ -459,70 +415,9 @@ class GeometryService {
     }
 }
 
+// MARK: - Edge Coincidence Methods
+
 extension GeometryService {
-    func alignTransform(
-        from sourcePoint: CGPoint,
-        sourceAngle: Double,
-        to targetPoint: CGPoint,
-        targetAngle: Double
-    ) -> CGAffineTransform {
-        let rotationDiff = targetAngle - sourceAngle
-        let rotation = rotationMatrix(angle: rotationDiff)
-        
-        let rotatedSource = sourcePoint.applying(rotation)
-        let translation = translationMatrix(
-            dx: Double(targetPoint.x - rotatedSource.x),
-            dy: Double(targetPoint.y - rotatedSource.y)
-        )
-        
-        return combineTransforms([rotation, translation])
-    }
-    
-    func vertexMatchTransform(
-        pieceVertices: [CGPoint],
-        vertexIndex: Int,
-        targetPoint: CGPoint
-    ) -> CGAffineTransform {
-        guard vertexIndex < pieceVertices.count else { return .identity }
-        
-        let vertex = pieceVertices[vertexIndex]
-        let dx = Double(targetPoint.x - vertex.x)
-        let dy = Double(targetPoint.y - vertex.y)
-        
-        return translationMatrix(dx: dx, dy: dy)
-    }
-    
-    func edgeAlignTransform(
-        pieceVertices: [CGPoint],
-        edgeStartIndex: Int,
-        targetEdgeStart: CGPoint,
-        targetEdgeEnd: CGPoint
-    ) -> CGAffineTransform {
-        guard edgeStartIndex < pieceVertices.count else { return .identity }
-        
-        let edgeEndIndex = (edgeStartIndex + 1) % pieceVertices.count
-        let pieceEdgeStart = pieceVertices[edgeStartIndex]
-        let pieceEdgeEnd = pieceVertices[edgeEndIndex]
-        
-        let pieceVector = edgeVector(from: pieceEdgeStart, to: pieceEdgeEnd)
-        let targetVector = edgeVector(from: targetEdgeStart, to: targetEdgeEnd)
-        
-        let pieceAngle = atan2(Double(pieceVector.dy), Double(pieceVector.dx))
-        let targetAngle = atan2(Double(targetVector.dy), Double(targetVector.dx))
-        let rotationAngle = (targetAngle - pieceAngle) * 180.0 / .pi
-        
-        let rotation = rotationMatrix(angle: rotationAngle)
-        let rotatedStart = pieceEdgeStart.applying(rotation)
-        
-        let translation = translationMatrix(
-            dx: Double(targetEdgeStart.x - rotatedStart.x),
-            dy: Double(targetEdgeStart.y - rotatedStart.y)
-        )
-        
-        return combineTransforms([rotation, translation])
-    }
-    
-    // MARK: - Edge Coincidence Methods
     
     /// Check if two edges coincide (same line segment)
     func edgesCoincide(_ edge1: (CGPoint, CGPoint), _ edge2: (CGPoint, CGPoint), tolerance: Double = 1e-6) -> Bool {

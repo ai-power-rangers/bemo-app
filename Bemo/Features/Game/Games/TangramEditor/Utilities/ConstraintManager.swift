@@ -208,13 +208,6 @@ class ConstraintManager {
         return result
     }
     
-    /// Calculate the angle between two vectors
-    func angleBetweenVectors(_ v1: CGVector, _ v2: CGVector) -> Double {
-        let dot = v1.dx * v2.dx + v1.dy * v2.dy
-        let det = v1.dx * v2.dy - v1.dy * v2.dx
-        return atan2(det, dot)
-    }
-    
     // MARK: - Translation Helpers
     
     /// Calculate edge vector from two points

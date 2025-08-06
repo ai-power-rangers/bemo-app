@@ -21,6 +21,8 @@ struct TangramEditorBottomBar: View {
     
     private var bottomBarContent: some View {
         HStack(spacing: 8) {
+            Spacer()
+            
             // Piece buttons
             ForEach(PieceType.allCases, id: \.self) { pieceType in
                 let isPlaced = viewModel.puzzle.pieces.contains { $0.type == pieceType }

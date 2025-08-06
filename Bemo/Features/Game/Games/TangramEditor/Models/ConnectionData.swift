@@ -22,4 +22,13 @@ struct Connection: Codable, Identifiable {
     
     var pieceAId: String { type.pieceAId }
     var pieceBId: String { type.pieceBId }
+    
+    func involvesPiece(_ pieceId: String) -> Bool {
+        return pieceAId == pieceId || pieceBId == pieceId
+    }
+    
+    // Fix typo compatibility
+    func involvespiece(_ pieceId: String) -> Bool {
+        return involvesPiece(pieceId)
+    }
 }

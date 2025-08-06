@@ -8,6 +8,26 @@
 import Foundation
 import CoreGraphics
 
+// Puzzle source tracking
+enum PuzzleSource: String, Codable {
+    case bundled = "bundled"      // Ships with app (developer-created)
+    case user = "user"            // Parent-created
+    
+    var isEditable: Bool {
+        switch self {
+        case .bundled: return false
+        case .user: return true
+        }
+    }
+    
+    var displayName: String {
+        switch self {
+        case .bundled: return "Official"
+        case .user: return "Custom"
+        }
+    }
+}
+
 struct TangramPuzzle: Codable, Identifiable {
     let id: String
     var name: String
@@ -21,11 +41,18 @@ struct TangramPuzzle: Codable, Identifiable {
     var createdBy: String?
     var thumbnailData: Data?
     var tags: [String]
+    var source: PuzzleSource  // Track where puzzle came from
+    
+    // Computed property for editability
+    var isEditable: Bool {
+        source.isEditable
+    }
     
     init(name: String, 
          category: PuzzleCategory = .custom,
-         difficulty: PuzzleDifficulty = .medium) {
-        self.id = UUID().uuidString
+         difficulty: PuzzleDifficulty = .medium,
+         source: PuzzleSource = .user) {
+        self.id = source == .bundled ? "official_\(UUID().uuidString)" : "user_\(UUID().uuidString)"
         self.name = name
         self.category = category
         self.difficulty = difficulty
@@ -35,6 +62,7 @@ struct TangramPuzzle: Codable, Identifiable {
         self.createdDate = Date()
         self.modifiedDate = Date()
         self.tags = []
+        self.source = source
     }
 }
 

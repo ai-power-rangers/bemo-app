@@ -36,6 +36,14 @@ struct PuzzleLibraryView: View {
         return puzzles.sorted { $0.modifiedDate > $1.modifiedDate }
     }
     
+    private var officialPuzzles: [TangramPuzzle] {
+        filteredPuzzles.filter { $0.source == .bundled }
+    }
+    
+    private var userPuzzles: [TangramPuzzle] {
+        filteredPuzzles.filter { $0.source == .user }
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -98,24 +106,73 @@ struct PuzzleLibraryView: View {
                 emptyStateView
             } else {
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(filteredPuzzles) { puzzle in
-                            PuzzleCardView(
-                                puzzle: puzzle,
-                                onTap: { viewModel.loadPuzzle(from: puzzle) },
-                                onDelete: {
-                                    puzzleToDelete = puzzle
-                                    showingDeleteAlert = true
-                                },
-                                onDuplicate: {
-                                    Task {
-                                        await viewModel.duplicatePuzzle(puzzle)
+                    VStack(alignment: .leading, spacing: 24) {
+                        // Official Puzzles Section
+                        if !officialPuzzles.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Label("Official Puzzles", systemImage: "checkmark.seal.fill")
+                                        .font(.headline)
+                                        .foregroundColor(.blue)
+                                    Spacer()
+                                    Text("\(officialPuzzles.count)")
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal)
+                                
+                                LazyVGrid(columns: columns, spacing: 16) {
+                                    ForEach(officialPuzzles) { puzzle in
+                                        PuzzleCardView(
+                                            puzzle: puzzle,
+                                            onTap: { viewModel.loadPuzzle(from: puzzle) },
+                                            onDelete: nil,  // Can't delete official puzzles
+                                            onDuplicate: {
+                                                Task {
+                                                    await viewModel.duplicatePuzzle(puzzle)
+                                                }
+                                            }
+                                        )
                                     }
                                 }
-                            )
+                                .padding(.horizontal)
+                            }
+                        }
+                        
+                        // User Puzzles Section
+                        if !userPuzzles.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Label("My Puzzles", systemImage: "person.circle.fill")
+                                        .font(.headline)
+                                        .foregroundColor(.green)
+                                    Spacer()
+                                    Text("\(userPuzzles.count)")
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal)
+                                
+                                LazyVGrid(columns: columns, spacing: 16) {
+                                    ForEach(userPuzzles) { puzzle in
+                                        PuzzleCardView(
+                                            puzzle: puzzle,
+                                            onTap: { viewModel.loadPuzzle(from: puzzle) },
+                                            onDelete: {
+                                                puzzleToDelete = puzzle
+                                                showingDeleteAlert = true
+                                            },
+                                            onDuplicate: {
+                                                Task {
+                                                    await viewModel.duplicatePuzzle(puzzle)
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                                .padding(.horizontal)
+                            }
                         }
                     }
-                    .padding()
+                    .padding(.vertical)
                 }
             }
         }
@@ -167,7 +224,7 @@ struct PuzzleLibraryView: View {
 struct PuzzleCardView: View {
     let puzzle: TangramPuzzle
     let onTap: () -> Void
-    let onDelete: () -> Void
+    let onDelete: (() -> Void)?  // Optional for official puzzles
     let onDuplicate: () -> Void
     
     @State private var isPressed = false
@@ -197,6 +254,27 @@ struct PuzzleCardView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(Color(.systemGray4), lineWidth: 1)
+            )
+            .overlay(
+                // Official badge for bundled puzzles
+                Group {
+                    if puzzle.source == .bundled {
+                        VStack {
+                            HStack {
+                                Spacer()
+                                Label("Official", systemImage: "checkmark.seal.fill")
+                                    .font(.caption2)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.blue)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(4)
+                                    .padding(8)
+                            }
+                            Spacer()
+                        }
+                    }
+                }
             )
             
             // Info
@@ -241,21 +319,26 @@ struct PuzzleCardView: View {
             onTap()
         }
         .onLongPressGesture(minimumDuration: 0.5) {
-            onDelete()
+            if let onDelete = onDelete {
+                onDelete()
+            }
         }
         .contextMenu {
             Button(action: onTap) {
-                Label("Edit", systemImage: "pencil")
+                Label(puzzle.source == .bundled ? "View" : "Edit", 
+                      systemImage: puzzle.source == .bundled ? "eye" : "pencil")
             }
             
             Button(action: onDuplicate) {
                 Label("Duplicate", systemImage: "doc.on.doc")
             }
             
-            Divider()
-            
-            Button(role: .destructive, action: onDelete) {
-                Label("Delete", systemImage: "trash")
+            if let onDelete = onDelete {
+                Divider()
+                
+                Button(role: .destructive, action: onDelete) {
+                    Label("Delete", systemImage: "trash")
+                }
             }
         }
     }

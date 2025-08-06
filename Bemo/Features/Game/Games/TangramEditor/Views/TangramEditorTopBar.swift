@@ -31,39 +31,30 @@ struct TangramEditorTopBar: View {
                         delegate?.gameDidRequestQuit()
                     }) {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
+                            .font(.title2)
                             .foregroundColor(.primary)
                     }
                 }
                 
-                if viewModel.navigationState == .editor {
-                    Button(action: {
-                        viewModel.toggleSettings()
-                    }) {
-                        Image(systemName: "gearshape.fill")
-                            .font(.title3)
-                            .foregroundColor(.primary)
-                    }
-                }
             }
-            .frame(width: viewModel.navigationState == .editor ? 120 : 80, alignment: .leading)
+            .frame(width: 80, alignment: .leading)
             
             Spacer(minLength: 0)
             
             // Center: Piece controls (when pending piece is active)
             if isPendingPiece {
-                HStack(spacing: 12) {
+                HStack(spacing: 16) {
                     // Cancel
                     Button(action: { viewModel.cancelPendingPiece() }) {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
+                            .font(.title2)
                             .foregroundColor(.red)
                     }
                     
                     // Rotate
-                    Button(action: { viewModel.rotatePendingPiece(by: Double.pi/4) }) {
+                    Button(action: { viewModel.rotatePendingPiece(by: 45) }) {
                         Image(systemName: "rotate.right")
-                            .font(.title3)
+                            .font(.title2)
                             .foregroundColor(.primary)
                     }
                     
@@ -71,13 +62,13 @@ struct TangramEditorTopBar: View {
                     if case .pendingFirstPiece(let type, _) = viewModel.editorState, type == .parallelogram {
                         Button(action: { viewModel.flipPendingPiece() }) {
                             Image(systemName: "arrow.left.and.right")
-                                .font(.title3)
+                                .font(.title2)
                                 .foregroundColor(.primary)
                         }
                     } else if case .pendingSubsequentPiece(let type, _) = viewModel.editorState, type == .parallelogram {
                         Button(action: { viewModel.flipPendingPiece() }) {
                             Image(systemName: "arrow.left.and.right")
-                                .font(.title3)
+                                .font(.title2)
                                 .foregroundColor(.primary)
                         }
                     }
@@ -87,22 +78,41 @@ struct TangramEditorTopBar: View {
                         viewModel.confirmPendingPiece(canvasSize: viewModel.currentCanvasSize) 
                     }) {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.title3)
+                            .font(.title2)
                             .foregroundColor(canPlacePiece() ? .green : .gray)
                     }
                     .disabled(!canPlacePiece())
                 }
             } else {
-                // Validation status when not placing piece (compact)
-                if !viewModel.puzzle.pieces.isEmpty {
-                    if viewModel.validationState.isValid {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                    } else {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.caption)
-                            .foregroundColor(.orange)
+                // Undo/Redo and validation status when not placing piece
+                HStack(spacing: 16) {
+                    // Undo button
+                    Button(action: { viewModel.undo() }) {
+                        Image(systemName: "arrow.uturn.backward.circle")
+                            .font(.title2)
+                            .foregroundColor(viewModel.canUndo ? .primary : .gray)
+                    }
+                    .disabled(!viewModel.canUndo)
+                    
+                    // Redo button  
+                    Button(action: { viewModel.redo() }) {
+                        Image(systemName: "arrow.uturn.forward.circle")
+                            .font(.title2)
+                            .foregroundColor(viewModel.canRedo ? .primary : .gray)
+                    }
+                    .disabled(!viewModel.canRedo)
+                    
+                    // Validation status
+                    if !viewModel.puzzle.pieces.isEmpty {
+                        if viewModel.validationState.isValid {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.body)
+                                .foregroundColor(.green)
+                        } else {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.body)
+                                .foregroundColor(.orange)
+                        }
                     }
                 }
             }
@@ -113,16 +123,16 @@ struct TangramEditorTopBar: View {
             HStack {
                 if viewModel.validationState.isValid && viewModel.puzzle.pieces.count >= 2 {
                     Button(action: { viewModel.requestSave() }) {
-                        Text("Save")
-                            .font(.caption)
+                        Label("Save", systemImage: "square.and.arrow.down")
+                            .font(.subheadline)
                             .fontWeight(.medium)
                     }
                     .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    .controlSize(.regular)
                     .tint(.green)
                 }
             }
-            .frame(width: 60, alignment: .trailing)
+            .frame(width: 100, alignment: .trailing)
         }
         .padding(.horizontal)
         .padding(.vertical, 12)
