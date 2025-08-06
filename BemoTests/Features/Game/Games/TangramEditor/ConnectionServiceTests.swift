@@ -320,8 +320,9 @@ class ConnectionServiceTests: XCTestCase {
     
     func testPartialEdgeConnectionSatisfaction() {
         // Small edge sliding on larger edge
+        // Both triangles positioned so their bottom edges are aligned at y=0
         let smallTriangle = TangramPiece(type: .smallTriangle1, transform: .identity)
-        let largeTriangle = TangramPiece(type: .largeTriangle1, transform: CGAffineTransform(translationX: 0, y: 1))
+        let largeTriangle = TangramPiece(type: .largeTriangle1, transform: .identity)
         let pieces = [smallTriangle, largeTriangle]
         
         let connection = Connection(
@@ -343,7 +344,7 @@ class ConnectionServiceTests: XCTestCase {
         
         // Move small triangle to middle of large edge
         var slidTriangle = smallTriangle
-        slidTriangle.transform = CGAffineTransform(translationX: 0.5, y: 1)
+        slidTriangle.transform = CGAffineTransform(translationX: 0.5, y: 0)
         let slidPieces = [slidTriangle, largeTriangle]
         
         XCTAssertTrue(connectionService.isConnectionSatisfied(connection, pieces: slidPieces),

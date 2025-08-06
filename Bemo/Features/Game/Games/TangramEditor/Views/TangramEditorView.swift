@@ -12,78 +12,277 @@ struct TangramEditorView: View {
     
     @State private var selectedConstraintValue: Double = 0
     @State private var canvasSize: CGSize = .zero
+    @State private var showControls = false
+    @State private var showSaveAlert = false
+    @State private var puzzleName = ""
     
     var body: some View {
-        HStack(spacing: 0) {
-            // Left Panel - Piece Palette
-            piecePanel
-                .frame(width: 200)
-                .background(Color.gray.opacity(0.1))
-            
-            // Center - Canvas
-            GeometryReader { geometry in
-                ZStack {
-                    canvasView
+        ZStack {
+            VStack(spacing: 0) {
+                // Top bar - Status and controls
+                topBar
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .padding(.top) // Add top safe area padding
+                    .background(Color.gray.opacity(0.05))
+                
+                // Main Canvas
+                GeometryReader { geometry in
+                    ZStack {
+                        canvasView
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.white)
+                    .onAppear {
+                        canvasSize = geometry.size
+                        viewModel.currentCanvasSize = geometry.size
+                        initializeEditor()
+                    }
+                    .onChange(of: geometry.size) { newSize in
+                        canvasSize = newSize
+                        viewModel.currentCanvasSize = newSize
+                    }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.white)
-                .onAppear {
-                    canvasSize = geometry.size
-                    initializeEditor()
-                }
+                
+                // Bottom Panel - Piece Palette
+                bottomPiecePanel
+                    .padding(.horizontal)
+                    .padding(.vertical, 12)
+                    .background(Color.gray.opacity(0.1))
             }
             
-            // Right Panel - Controls and Status
+            // Pending Piece View (top-right corner)
+            VStack {
+                HStack {
+                    Spacer()
+                    if case .pendingFirstPiece(let type, let rotation) = viewModel.editorState {
+                        PendingPieceView(
+                            viewModel: viewModel,
+                            pieceType: type,
+                            rotation: rotation,
+                            isFirstPiece: true,
+                            canvasSize: canvasSize
+                        )
+                        .padding()
+                    } else if case .pendingSubsequentPiece(let type, let rotation) = viewModel.editorState {
+                        PendingPieceView(
+                            viewModel: viewModel,
+                            pieceType: type,
+                            rotation: rotation,
+                            isFirstPiece: false,
+                            canvasSize: canvasSize
+                        )
+                        .padding()
+                    }
+                }
+                Spacer()
+            }
+        }
+        .sheet(isPresented: $showControls) {
             controlPanel
-                .frame(width: 300)
-                .background(Color.gray.opacity(0.05))
+                .presentationDetents([.medium])
+        }
+        .alert("Save Puzzle", isPresented: $showSaveAlert) {
+            TextField("Puzzle Name", text: $puzzleName)
+            Button("Save") {
+                if !puzzleName.isEmpty {
+                    viewModel.puzzle.name = puzzleName
+                    Task {
+                        try? await viewModel.save()
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Enter a name for your puzzle")
         }
     }
     
-    // MARK: - Piece Panel
+    // MARK: - Top Bar
     
-    private var piecePanel: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Pieces")
-                .font(.headline)
-                .padding(.horizontal)
+    private var topBar: some View {
+        HStack(spacing: 12) {
+            // Validation Status (left side)
+            validationStatusCompact
             
-            ScrollView {
-                VStack(spacing: 15) {
-                    ForEach(PieceType.allCases, id: \.self) { pieceType in
-                        Button(action: {
-                            if viewModel.puzzle.pieces.isEmpty {
-                                // First piece - place at center
-                                let centerX = canvasSize.width / 2
-                                let centerY = canvasSize.height / 2
-                                viewModel.addPiece(type: pieceType, at: CGPoint(x: centerX, y: centerY))
-                            } else {
-                                // Add piece temporarily at origin for connection workflow
-                                viewModel.addPiece(type: pieceType, at: .zero)
-                                // Start connection mode - user will select existing piece first
-                                viewModel.startConnectionMode()
-                                // The new piece is already selected in addPiece
-                            }
-                        }) {
-                            HStack {
-                                PiecePreview(type: pieceType)
-                                    .frame(width: 40, height: 40)
-                                Text(pieceType.displayName)
-                                    .font(.caption)
-                                Spacer()
-                            }
-                            .padding(8)
-                            .background(Color.blue.opacity(0.1))
-                            .cornerRadius(8)
-                        }
+            Spacer()
+            
+            // Selection actions (center)
+            if !viewModel.selectedPieceIds.isEmpty {
+                HStack(spacing: 8) {
+                    Button(action: { viewModel.clearSelection() }) {
+                        Image(systemName: "xmark.circle")
+                            .font(.caption)
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    
+                    Button(action: { viewModel.removeSelectedPieces() }) {
+                        Image(systemName: "trash")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .tint(.red)
+                    
+                    Text("\(viewModel.selectedPieceIds.count)")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                 }
-                .padding(.horizontal)
             }
             
             Spacer()
+            
+            // Action buttons (right side)
+            HStack(spacing: 8) {
+                // Save button (only when valid)
+                if viewModel.validationState.isValid && viewModel.puzzle.pieces.count >= 2 {
+                    Button(action: { showSaveAlert = true }) {
+                        Label("Save", systemImage: "square.and.arrow.down")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(.green)
+                }
+                
+                // Controls button
+                Button(action: { showControls.toggle() }) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.title3)
+                }
+            }
         }
-        .padding(.vertical)
+    }
+    
+    private var connectionStateCompact: some View {
+        HStack(spacing: 8) {
+            switch viewModel.editorState {
+            case .idle:
+                if viewModel.puzzle.pieces.count > 0 {
+                    Text("Select a piece to add")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    EmptyView()
+                }
+            case .pendingFirstPiece:
+                Label("Configure and place first piece", systemImage: "1.circle.fill")
+                    .foregroundColor(.blue)
+            case .selectingCanvasPoints:
+                HStack {
+                    Label("Select 1-2 connection points (\(viewModel.selectedCanvasPoints.count) selected)", systemImage: "hand.tap.fill")
+                        .foregroundColor(.orange)
+                    if !viewModel.selectedCanvasPoints.isEmpty {
+                        Button("Clear") {
+                            viewModel.selectedCanvasPoints.removeAll()
+                        }
+                        .font(.caption)
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                    }
+                }
+            case .pendingSubsequentPiece:
+                Label("Match connection points on new piece", systemImage: "link.circle.fill")
+                    .foregroundColor(.blue)
+            case .previewingPlacement:
+                Label("Preview placement", systemImage: "eye.fill")
+                    .foregroundColor(.green)
+            case .error(let msg):
+                Text(msg)
+                    .foregroundColor(.red)
+                    .font(.caption)
+            }
+        }
+        .font(.caption)
+    }
+    
+    private var validationStatusCompact: some View {
+        HStack(spacing: 4) {
+            if viewModel.puzzle.pieces.isEmpty {
+                // No pieces yet
+                EmptyView()
+            } else if viewModel.validationState.isValid {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                Text("Valid Puzzle")
+                    .foregroundColor(.green)
+            } else {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Invalid")
+                        .foregroundColor(.orange)
+                    if let firstError = viewModel.validationState.errors.first {
+                        Text(firstError)
+                            .font(.caption2)
+                            .foregroundColor(.orange.opacity(0.8))
+                            .lineLimit(1)
+                    }
+                }
+            }
+        }
+        .font(.caption)
+    }
+    
+    // MARK: - Bottom Piece Panel
+    
+    private var bottomPiecePanel: some View {
+        HStack(spacing: 8) {
+            // Piece buttons
+            ForEach(PieceType.allCases, id: \.self) { pieceType in
+                let isPlaced = viewModel.puzzle.pieces.contains { $0.type == pieceType }
+                Button(action: {
+                    if !isPlaced {
+                        addPiece(type: pieceType)
+                    }
+                }) {
+                    Text(shortName(for: pieceType))
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .frame(width: 44, height: 44)
+                        .background(isPlaced ? Color.gray.opacity(0.1) : pieceType.color.opacity(0.2))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(isPlaced ? Color.gray : pieceType.color, lineWidth: 2)
+                        )
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .disabled(isPlaced)
+                .opacity(isPlaced ? 0.5 : 1.0)
+            }
+            
+            Spacer()
+            
+            // Quick action - reset only
+            Button(action: { viewModel.reset() }) {
+                Image(systemName: "arrow.counterclockwise")
+                    .font(.title3)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(.red)
+        }
+        .frame(height: 60)
+    }
+    
+    private func shortName(for type: PieceType) -> String {
+        switch type {
+        case .smallTriangle1, .smallTriangle2: return "T-S"
+        case .mediumTriangle: return "T-M"
+        case .largeTriangle1, .largeTriangle2: return "T-L"
+        case .square: return "S"
+        case .parallelogram: return "P"
+        }
+    }
+    
+    private func pieceColor(for type: PieceType) -> Color {
+        return type.color
+    }
+    
+    private func addPiece(type: PieceType) {
+        viewModel.startAddingPiece(type: type)
     }
     
     // MARK: - Canvas View
@@ -94,25 +293,52 @@ struct TangramEditorView: View {
             ForEach(viewModel.puzzle.pieces) { piece in
                 PieceView(
                     piece: piece,
-                    isSelected: viewModel.selectedPieceId == piece.id,
-                    isAnchor: viewModel.anchorPieceId == piece.id,
-                    connectionPoints: viewModel.selectedPieceId == piece.id ? viewModel.highlightedPoints : []
+                    isSelected: viewModel.selectedPieceIds.contains(piece.id),
+                    pieceColor: pieceColor(for: piece.type)
                 )
+                .onTapGesture(count: 2) {
+                    // Double tap selects all
+                    viewModel.selectAllPieces()
+                }
                 .onTapGesture {
-                    handlePieceTap(piece)
+                    // Single tap toggles selection
+                    viewModel.selectPiece(id: piece.id)
                 }
             }
             
-            // Connection point indicators
-            ForEach(viewModel.highlightedPoints, id: \.position) { point in
-                ConnectionPointIndicator(
-                    point: point,
-                    isHighlighted: true,
-                    isCompatible: true
-                )
-                .onTapGesture {
-                    viewModel.selectConnectionPoint(point)
+            // Show connection points when selecting on canvas or when placing subsequent piece
+            switch viewModel.editorState {
+            case .selectingCanvasPoints, .pendingSubsequentPiece:
+                ForEach(viewModel.availableConnectionPoints, id: \.id) { point in
+                    ConnectionPointView(
+                        point: point,
+                        isSelected: viewModel.selectedCanvasPoints.contains { $0.id == point.id },
+                        isVertex: {
+                            if case .vertex = point.type { return true }
+                            return false
+                        }()
+                    )
+                    .onTapGesture {
+                        if case .selectingCanvasPoints = viewModel.editorState {
+                            viewModel.toggleCanvasPoint(point)
+                        }
+                    }
                 }
+            default:
+                EmptyView()
+            }
+            
+            // Show preview of piece placement
+            if let transform = viewModel.previewTransform,
+               case .pendingSubsequentPiece(let type, _) = viewModel.editorState {
+                PieceShape(type: type)
+                    .fill(pieceColor(for: type).opacity(0.3))
+                    .overlay(
+                        PieceShape(type: type)
+                            .stroke(Color.green, style: StrokeStyle(lineWidth: 2, dash: [5, 5]))
+                    )
+                    .transformEffect(transform)
+                    .allowsHitTesting(false)
             }
             
             // Connection lines
@@ -123,95 +349,52 @@ struct TangramEditorView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
-    // MARK: - Control Panel
+    // MARK: - Control Panel (Modal)
     
     private var controlPanel: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Connection State Display
-            connectionStateView
-            
-            Divider()
-            
-            // Validation Status
-            validationStatusView
-            
-            Divider()
-            
-            // Edit Mode Controls
-            editModeControls
-            
-            Divider()
-            
-            // Connections List
-            if !viewModel.puzzle.connections.isEmpty {
-                connectionsListView
-                Divider()
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Edit Mode Controls
+                    editModeControls
+                    
+                    Divider()
+                    
+                    // Validation Details
+                    validationDetailsView
+                    
+                    Divider()
+                    
+                    // Connections List
+                    if !viewModel.puzzle.connections.isEmpty {
+                        connectionsListView
+                        Divider()
+                    }
+                    
+                    // Constraint Controls (show for single selection)
+                    if viewModel.selectedPieceIds.count == 1,
+                       let selectedId = viewModel.selectedPieceIds.first,
+                       let selectedPiece = viewModel.puzzle.pieces.first(where: { $0.id == selectedId }) {
+                        constraintControls(for: selectedPiece)
+                        Divider()
+                    }
+                    
+                    // Action Buttons
+                    actionButtons
+                }
+                .padding()
             }
-            
-            // Constraint Controls
-            if let selectedPiece = viewModel.puzzle.pieces.first(where: { $0.id == viewModel.selectedPieceId }) {
-                constraintControls(for: selectedPiece)
-            }
-            
-            Spacer()
-            
-            // Action Buttons
-            actionButtons
-        }
-        .padding()
-    }
-    
-    private var connectionStateView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Connection State")
-                .font(.headline)
-            
-            Group {
-                switch viewModel.connectionState {
-                case .idle:
-                    Text("Idle")
-                        .foregroundColor(.gray)
-                case .selectingFirstPiece:
-                    Text("Select first piece")
-                        .foregroundColor(.blue)
-                case .selectedFirstPiece(let pieceId, let point):
-                    VStack(alignment: .leading) {
-                        Text("First piece selected")
-                            .foregroundColor(.green)
-                        if let point = point {
-                            Text("Point: \(describePoint(point))")
-                                .font(.caption)
-                        }
-                    }
-                case .selectingSecondPiece(let firstId, let firstPoint):
-                    VStack(alignment: .leading) {
-                        Text("Select second piece")
-                            .foregroundColor(.blue)
-                        Text("First: \(describePoint(firstPoint))")
-                            .font(.caption)
-                    }
-                case .readyToConnect(let pending):
-                    VStack(alignment: .leading) {
-                        Text("Ready to connect!")
-                            .foregroundColor(.green)
-                        Button("Create Connection") {
-                            viewModel.confirmConnection()
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                case .error(let message):
-                    Text("Error: \(message)")
-                        .foregroundColor(.red)
+            .navigationTitle("Editor Controls")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { showControls = false }
                 }
             }
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.gray.opacity(0.05))
-            .cornerRadius(4)
         }
     }
     
-    private var validationStatusView: some View {
+    private var validationDetailsView: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Validation")
                 .font(.headline)
@@ -243,17 +426,21 @@ struct TangramEditorView: View {
                 set: { viewModel.editMode = $0 }
             )) {
                 Text("Select").tag(TangramEditorViewModel.EditMode.select)
-                Text("Connect").tag(TangramEditorViewModel.EditMode.connect)
                 Text("Rotate").tag(TangramEditorViewModel.EditMode.rotate)
                 Text("Move").tag(TangramEditorViewModel.EditMode.move)
             }
             .pickerStyle(SegmentedPickerStyle())
             
-            if viewModel.editMode == .connect {
-                Button("Cancel Connection") {
-                    viewModel.cancelConnectionMode()
+            // Show cancel button if we're in a pending state
+            switch viewModel.editorState {
+            case .pendingFirstPiece, .pendingSubsequentPiece:
+                Button("Cancel Adding Piece") {
+                    viewModel.cancelPendingPiece()
+                    showControls = false
                 }
                 .buttonStyle(.bordered)
+            default:
+                EmptyView()
             }
         }
     }
@@ -364,25 +551,26 @@ struct TangramEditorView: View {
     
     private var actionButtons: some View {
         VStack(spacing: 10) {
-            Button("Re-center Puzzle") {
-                viewModel.recenterPuzzle(canvasSize: canvasSize)
-            }
-            .buttonStyle(.borderedProminent)
-            .frame(maxWidth: .infinity)
+            Text("Actions")
+                .font(.headline)
             
-            Button("Reset Puzzle") {
-                viewModel.reset()
-            }
-            .buttonStyle(.bordered)
-            .frame(maxWidth: .infinity)
-            
-            Button("Remove Selected") {
-                if let selectedId = viewModel.selectedPieceId {
-                    viewModel.removePiece(id: selectedId)
+            if !viewModel.selectedPieceIds.isEmpty {
+                Button("Remove Selected (\(viewModel.selectedPieceIds.count))") {
+                    viewModel.removeSelectedPieces()
+                    showControls = false
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .frame(maxWidth: .infinity)
+            }
+            
+            Button("Clear All Pieces") {
+                viewModel.reset()
+                showControls = false
             }
             .buttonStyle(.bordered)
-            .disabled(viewModel.selectedPieceId == nil)
+            .tint(.red)
+            .disabled(viewModel.puzzle.pieces.isEmpty)
             .frame(maxWidth: .infinity)
         }
     }
@@ -390,29 +578,7 @@ struct TangramEditorView: View {
     // MARK: - Helpers
     
     private func initializeEditor() {
-        if viewModel.puzzle.pieces.isEmpty {
-            // Add first piece at center
-            let centerX = canvasSize.width / 2
-            let centerY = canvasSize.height / 2
-            viewModel.addPiece(type: .largeTriangle1, at: CGPoint(x: centerX, y: centerY))
-        }
-    }
-    
-    private func handlePieceTap(_ piece: TangramPiece) {
-        if viewModel.editMode == .connect {
-            viewModel.selectPieceForConnection(pieceId: piece.id)
-        } else {
-            viewModel.selectPiece(id: piece.id)
-        }
-    }
-    
-    private func describePoint(_ point: TangramEditorViewModel.ConnectionPoint) -> String {
-        switch point.type {
-        case .vertex(let index):
-            return "Vertex \(index)"
-        case .edge(let index):
-            return "Edge \(index)"
-        }
+        // Don't auto-add pieces - let user choose what to add
     }
     
     private func getSharedVertex(pieceA: String, vertexA: Int, pieceB: String, vertexB: Int) -> CGPoint? {
@@ -427,12 +593,11 @@ struct TangramEditorView: View {
 struct PieceView: View {
     let piece: TangramPiece
     let isSelected: Bool
-    let isAnchor: Bool
-    let connectionPoints: [TangramEditorViewModel.ConnectionPoint]
+    let pieceColor: Color
     
     var body: some View {
         PieceShape(type: piece.type)
-            .fill(pieceColor(for: piece.type))
+            .fill(pieceColor)
             .overlay(
                 PieceShape(type: piece.type)
                     .stroke(borderColor, lineWidth: borderWidth)
@@ -441,27 +606,11 @@ struct PieceView: View {
     }
     
     private var borderColor: Color {
-        if isAnchor {
-            return .orange
-        } else if isSelected {
-            return .blue
-        } else {
-            return .black
-        }
+        isSelected ? .blue : .black
     }
     
     private var borderWidth: Double {
-        isSelected || isAnchor ? 3 : 1
-    }
-    
-    private func pieceColor(for type: PieceType) -> Color {
-        switch type {
-        case .smallTriangle1, .smallTriangle2: return .blue.opacity(0.7)
-        case .mediumTriangle: return .green.opacity(0.7)
-        case .largeTriangle1, .largeTriangle2: return .red.opacity(0.7)
-        case .square: return .yellow.opacity(0.7)
-        case .parallelogram: return .purple.opacity(0.7)
-        }
+        isSelected ? 4 : 1
     }
 }
 
@@ -494,25 +643,35 @@ struct PiecePreview: View {
     }
 }
 
-struct ConnectionPointIndicator: View {
+struct ConnectionPointView: View {
     let point: TangramEditorViewModel.ConnectionPoint
-    let isHighlighted: Bool
-    let isCompatible: Bool
+    let isSelected: Bool
+    let isVertex: Bool
     
     var body: some View {
         Group {
-            switch point.type {
-            case .vertex:
+            if isVertex {
+                // Vertex indicator - simple circle
                 Circle()
-                    .fill(isCompatible ? Color.blue : Color.red)
-                    .frame(width: 12, height: 12)
-            case .edge:
+                    .fill(isSelected ? Color.blue.opacity(0.4) : Color.gray.opacity(0.2))
+                    .overlay(
+                        Circle()
+                            .stroke(isSelected ? Color.blue : Color.gray, lineWidth: 2)
+                    )
+                    .frame(width: 16, height: 16)
+            } else {
+                // Edge indicator - simple square
                 Rectangle()
-                    .fill(isCompatible ? Color.orange : Color.red)
-                    .frame(width: 16, height: 8)
+                    .fill(isSelected ? Color.orange.opacity(0.4) : Color.gray.opacity(0.2))
+                    .overlay(
+                        Rectangle()
+                            .stroke(isSelected ? Color.orange : Color.gray, lineWidth: 2)
+                    )
+                    .frame(width: 16, height: 16)
             }
         }
-        .opacity(isHighlighted ? 1.0 : 0.5)
+        .scaleEffect(isSelected ? 1.3 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: isSelected)
         .position(point.position)
     }
 }

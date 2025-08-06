@@ -514,4 +514,47 @@ extension GeometryEngine {
         
         return combineTransforms([rotation, translation])
     }
+    
+    // MARK: - Edge Coincidence Methods
+    
+    /// Check if two edges coincide (same line segment)
+    static func edgesCoincide(_ edge1: (CGPoint, CGPoint), _ edge2: (CGPoint, CGPoint), tolerance: Double = 1e-6) -> Bool {
+        // Check if both endpoints match (in either order)
+        let forwardMatch = pointsEqual(edge1.0, edge2.0, tolerance: tolerance) && 
+                          pointsEqual(edge1.1, edge2.1, tolerance: tolerance)
+        let reverseMatch = pointsEqual(edge1.0, edge2.1, tolerance: tolerance) && 
+                          pointsEqual(edge1.1, edge2.0, tolerance: tolerance)
+        return forwardMatch || reverseMatch
+    }
+    
+    /// Check if a shorter edge lies along a longer edge
+    static func edgePartiallyCoincides(shorterEdge: (CGPoint, CGPoint), longerEdge: (CGPoint, CGPoint), tolerance: Double = 1e-6) -> Bool {
+        // Check if both points of the shorter edge lie on the longer edge line segment
+        let onLine1 = pointOnLineSegment(shorterEdge.0, lineStart: longerEdge.0, lineEnd: longerEdge.1, tolerance: tolerance)
+        let onLine2 = pointOnLineSegment(shorterEdge.1, lineStart: longerEdge.0, lineEnd: longerEdge.1, tolerance: tolerance)
+        return onLine1 && onLine2
+    }
+    
+    /// Check if a point lies on a line segment
+    static func pointOnLineSegment(_ point: CGPoint, lineStart: CGPoint, lineEnd: CGPoint, tolerance: Double = 1e-6) -> Bool {
+        // Check if point is collinear with the line segment
+        let crossProduct = (point.y - lineStart.y) * (lineEnd.x - lineStart.x) - 
+                          (point.x - lineStart.x) * (lineEnd.y - lineStart.y)
+        
+        if abs(crossProduct) > tolerance {
+            return false // Not on the line
+        }
+        
+        // Check if point is within the segment bounds
+        let dotProduct = (point.x - lineStart.x) * (lineEnd.x - lineStart.x) + 
+                        (point.y - lineStart.y) * (lineEnd.y - lineStart.y)
+        let squaredLength = (lineEnd.x - lineStart.x) * (lineEnd.x - lineStart.x) + 
+                           (lineEnd.y - lineStart.y) * (lineEnd.y - lineStart.y)
+        
+        if dotProduct < -tolerance || dotProduct > squaredLength + tolerance {
+            return false // Outside the segment
+        }
+        
+        return true
+    }
 }

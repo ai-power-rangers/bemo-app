@@ -16,12 +16,18 @@ class TangramEditorViewModel {
     // MARK: - Observable Properties
     
     var puzzle: TangramPuzzle
-    var selectedPieceId: String?
-    var anchorPieceId: String?
+    var selectedPieceIds: Set<String> = []  // Changed to support multiple selection
     var validationState: ValidationState = .unknown
     var editMode: EditMode = .select
-    var connectionState: ConnectionCreationState = .idle
-    var highlightedPoints: [ConnectionPoint] = []
+    var editorState: EditorState = .idle
+    
+    // Piece placement properties
+    var selectedCanvasPoints: [ConnectionPoint] = []  // Points selected on canvas pieces
+    var selectedPendingPoints: [ConnectionPoint] = []  // Points selected on pending piece
+    var availableConnectionPoints: [ConnectionPoint] = []  // All available points
+    var pendingPieceRotation: Double = 0  // Rotation for pending piece
+    var previewTransform: CGAffineTransform?  // Transform for preview
+    var currentCanvasSize: CGSize = CGSize(width: 800, height: 800)  // Track canvas size
     
     // MARK: - Services
     
@@ -36,36 +42,40 @@ class TangramEditorViewModel {
         case select
         case move
         case rotate
-        case connect
     }
     
-    enum ConnectionCreationState {
+    enum EditorState {
         case idle
-        case selectingFirstPiece
-        case selectedFirstPiece(pieceId: String, point: ConnectionPoint?)
-        case selectingSecondPiece(firstPieceId: String, firstPoint: ConnectionPoint)
-        case readyToConnect(connection: PendingConnection)
+        case pendingFirstPiece(type: PieceType, rotation: Double)  // First piece being configured
+        case selectingCanvasPoints  // Selecting connection points on existing pieces
+        case pendingSubsequentPiece(type: PieceType, rotation: Double)  // Subsequent piece being configured
+        case previewingPlacement(piece: TangramPiece, connections: [(canvasPoint: ConnectionPoint, piecePoint: ConnectionPoint)])  // Preview before placement
         case error(String)
     }
     
-    struct ConnectionPoint: Equatable {
-        enum PointType: Equatable {
+    struct ConnectionPoint: Equatable, Hashable {
+        enum PointType: Equatable, Hashable {
             case vertex(index: Int)
             case edge(index: Int)
         }
         let type: PointType
         let position: CGPoint
         let pieceId: String
+        
+        var id: String {
+            switch type {
+            case .vertex(let index):
+                return "\(pieceId)_v\(index)"
+            case .edge(let index):
+                return "\(pieceId)_e\(index)"
+            }
+        }
+        
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(id)
+        }
     }
     
-    struct PendingConnection {
-        let pieceAId: String
-        let pieceBId: String
-        let pointA: ConnectionPoint
-        let pointB: ConnectionPoint
-        let connectionType: ConnectionType
-        let possibleConstraints: [ConstraintType]
-    }
     
     enum ValidationState {
         case unknown
@@ -94,23 +104,243 @@ class TangramEditorViewModel {
     
     // MARK: - Piece Management
     
-    func addPiece(type: PieceType, at position: CGPoint = .zero) {
-        let transform = CGAffineTransform(translationX: position.x, y: position.y)
+    func startAddingPiece(type: PieceType) {
+        // Check if this piece type has already been placed
+        if isPieceTypeAlreadyPlaced(type) {
+            editorState = .error("\(type.displayName) has already been placed")
+            return
+        }
+        
+        if puzzle.pieces.isEmpty {
+            // First piece - show in pending view
+            editorState = .pendingFirstPiece(type: type, rotation: 0)
+            pendingPieceRotation = 0
+        } else {
+            // Subsequent pieces - first need to select connection points on canvas
+            if selectedCanvasPoints.isEmpty {
+                // Show all connection points for selection
+                editorState = .selectingCanvasPoints
+                availableConnectionPoints = getAllCanvasConnectionPoints()
+            } else {
+                // Canvas points already selected, show pending piece
+                editorState = .pendingSubsequentPiece(type: type, rotation: 0)
+                pendingPieceRotation = 0
+            }
+        }
+    }
+    
+    private func isPieceTypeAlreadyPlaced(_ type: PieceType) -> Bool {
+        return puzzle.pieces.contains { $0.type == type }
+    }
+    
+    func rotatePendingPiece(by angle: Double) {
+        pendingPieceRotation += angle
+        
+        // Update state with new rotation
+        switch editorState {
+        case .pendingFirstPiece(let type, _):
+            editorState = .pendingFirstPiece(type: type, rotation: pendingPieceRotation)
+        case .pendingSubsequentPiece(let type, _):
+            editorState = .pendingSubsequentPiece(type: type, rotation: pendingPieceRotation)
+            updatePreview()
+        default:
+            break
+        }
+    }
+    
+    func flipPendingPiece() {
+        // Only flip parallelogram - flip is a 180 degree rotation around X axis
+        // In 2D this is represented as scaling Y by -1
+        // For simplicity, we'll rotate by 180 degrees
+        rotatePendingPiece(by: Double.pi)
+    }
+    
+    func confirmPendingPiece(canvasSize: CGSize? = nil) {
+        // Update canvas size if provided
+        if let size = canvasSize {
+            currentCanvasSize = size
+        }
+        
+        switch editorState {
+        case .pendingFirstPiece(let type, let rotation):
+            // Place first piece at true center with rotation
+            let canvasCenter = CGPoint(x: currentCanvasSize.width / 2, y: currentCanvasSize.height / 2)
+            var transform = CGAffineTransform(translationX: canvasCenter.x, y: canvasCenter.y)
+            transform = transform.rotated(by: rotation)
+            let piece = TangramPiece(type: type, transform: transform)
+            puzzle.pieces.append(piece)
+            validate()
+            
+            // Reset state
+            editorState = .idle
+            pendingPieceRotation = 0
+            
+        case .pendingSubsequentPiece(let type, let rotation):
+            // Place piece with connections
+            if !selectedCanvasPoints.isEmpty && !selectedPendingPoints.isEmpty {
+                placePieceWithConnections(type: type, rotation: rotation)
+            }
+            
+        default:
+            break
+        }
+    }
+    
+    func cancelPendingPiece() {
+        editorState = .idle
+        pendingPieceRotation = 0
+        selectedPendingPoints.removeAll()
+        previewTransform = nil
+    }
+    
+    func toggleCanvasPoint(_ point: ConnectionPoint) {
+        if let index = selectedCanvasPoints.firstIndex(where: { $0.id == point.id }) {
+            // Deselect
+            selectedCanvasPoints.remove(at: index)
+        } else {
+            // Select (max 2 points)
+            if selectedCanvasPoints.count < 2 {
+                selectedCanvasPoints.append(point)
+            }
+        }
+    }
+    
+    func togglePendingPoint(_ point: ConnectionPoint) {
+        if let index = selectedPendingPoints.firstIndex(where: { $0.id == point.id }) {
+            // Deselect
+            selectedPendingPoints.remove(at: index)
+        } else {
+            // Only select if we have matching type with canvas points
+            if canSelectPendingPoint(point) {
+                selectedPendingPoints.append(point)
+                updatePreview()
+            }
+        }
+    }
+    
+    private func canSelectPendingPoint(_ point: ConnectionPoint) -> Bool {
+        // Check if point type matches selected canvas points
+        for canvasPoint in selectedCanvasPoints {
+            if arePointTypesCompatible(point.type, canvasPoint.type) {
+                return selectedPendingPoints.count < selectedCanvasPoints.count
+            }
+        }
+        return false
+    }
+    
+    private func placePieceWithConnections(type: PieceType, rotation: Double) {
+        guard !selectedCanvasPoints.isEmpty && !selectedPendingPoints.isEmpty else { return }
+        
+        // Calculate transform based on connection points
+        let transform = calculatePlacementTransform(
+            pieceType: type,
+            rotation: rotation,
+            canvasPoints: selectedCanvasPoints,
+            pendingPoints: selectedPendingPoints
+        )
+        
+        // Create the piece
         let piece = TangramPiece(type: type, transform: transform)
         puzzle.pieces.append(piece)
         
-        // If this is not the first piece, we'll need to connect it
-        if puzzle.pieces.count > 1 {
-            // Store the new piece ID for connection
-            selectedPieceId = piece.id
+        // Create connections
+        for (canvasPoint, pendingPoint) in zip(selectedCanvasPoints, selectedPendingPoints) {
+            let connectionType = createConnectionType(
+                pieceA: canvasPoint.pieceId,
+                pointA: canvasPoint,
+                pieceB: piece.id,
+                pointB: pendingPoint
+            )
+            
+            if let connection = connectionService.createConnection(
+                type: connectionType,
+                pieces: puzzle.pieces
+            ) {
+                puzzle.connections.append(connection)
+            }
         }
+        
+        // Reset state
+        editorState = .idle
+        selectedCanvasPoints.removeAll()
+        selectedPendingPoints.removeAll()
+        pendingPieceRotation = 0
+        previewTransform = nil
+        availableConnectionPoints.removeAll()
+        
+        // Auto-recenter after placement with correct canvas size
+        recenterPuzzle(canvasSize: currentCanvasSize)
         
         validate()
     }
     
+    private func updatePreview() {
+        guard case .pendingSubsequentPiece(let type, let rotation) = editorState else {
+            previewTransform = nil
+            return
+        }
+        
+        // Only show preview if we have matching points
+        guard !selectedPendingPoints.isEmpty && selectedPendingPoints.count == selectedCanvasPoints.count else {
+            previewTransform = nil
+            return
+        }
+        
+        // Calculate preview transform
+        previewTransform = calculatePlacementTransform(
+            pieceType: type,
+            rotation: rotation,
+            canvasPoints: selectedCanvasPoints,
+            pendingPoints: selectedPendingPoints
+        )
+    }
+    
+    private func calculatePlacementTransform(
+        pieceType: PieceType,
+        rotation: Double,
+        canvasPoints: [ConnectionPoint],
+        pendingPoints: [ConnectionPoint]
+    ) -> CGAffineTransform {
+        guard let firstCanvasPoint = canvasPoints.first,
+              let firstPendingPoint = pendingPoints.first else {
+            return CGAffineTransform.identity
+        }
+        
+        // Get base vertices for the pending piece
+        let baseVertices = TangramGeometry.vertices(for: pieceType)
+        let scaledVertices = baseVertices.map { CGPoint(x: $0.x * 50, y: $0.y * 50) }
+        
+        // Apply rotation first
+        var transform = CGAffineTransform(rotationAngle: rotation)
+        
+        // Get the position of the pending point after rotation
+        let pendingPos: CGPoint
+        switch firstPendingPoint.type {
+        case .vertex(let index):
+            pendingPos = scaledVertices[index].applying(transform)
+        case .edge(let index):
+            let edges = TangramGeometry.edges(for: pieceType)
+            let edge = edges[index]
+            let start = scaledVertices[edge.startVertex].applying(transform)
+            let end = scaledVertices[edge.endVertex].applying(transform)
+            pendingPos = CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
+        }
+        
+        // Calculate translation to align points
+        let dx = firstCanvasPoint.position.x - pendingPos.x
+        let dy = firstCanvasPoint.position.y - pendingPos.y
+        
+        // Apply translation
+        transform = transform.concatenating(CGAffineTransform(translationX: dx, y: dy))
+        
+        return transform
+    }
+    
+    
     func removePiece(id: String) {
         puzzle.pieces.removeAll { $0.id == id }
         puzzle.connections.removeAll { $0.pieceAId == id || $0.pieceBId == id }
+        selectedPieceIds.remove(id)
         validate()
     }
     
@@ -131,27 +361,38 @@ class TangramEditorViewModel {
         validate()
     }
     
-    func selectPiece(id: String?) {
-        selectedPieceId = id
+    func selectPiece(id: String) {
+        // Toggle selection
+        if selectedPieceIds.contains(id) {
+            selectedPieceIds.remove(id)
+        } else {
+            selectedPieceIds.insert(id)
+        }
     }
     
-    func setAnchorPiece(id: String?) {
-        anchorPieceId = id
+    func selectAllPieces() {
+        selectedPieceIds = Set(puzzle.pieces.map { $0.id })
+    }
+    
+    func clearSelection() {
+        selectedPieceIds.removeAll()
+    }
+    
+    func removeSelectedPieces() {
+        // Remove pieces and their connections
+        puzzle.pieces.removeAll { selectedPieceIds.contains($0.id) }
+        puzzle.connections.removeAll { connection in
+            selectedPieceIds.contains(connection.pieceAId) || selectedPieceIds.contains(connection.pieceBId)
+        }
+        
+        // Clear selection
+        selectedPieceIds.removeAll()
+        
+        // Revalidate
+        validate()
     }
     
     // MARK: - Connection Management
-    
-    func createConnection(type: ConnectionType) {
-        guard let connection = connectionService.createConnection(
-            type: type,
-            pieces: puzzle.pieces
-        ) else {
-            return
-        }
-        
-        puzzle.connections.append(connection)
-        validate()
-    }
     
     func removeConnection(id: String) {
         puzzle.connections.removeAll { $0.id == id }
@@ -165,6 +406,12 @@ class TangramEditorViewModel {
     // MARK: - Validation
     
     func validate() {
+        // Skip validation if no pieces
+        guard !puzzle.pieces.isEmpty else {
+            validationState = .unknown
+            return
+        }
+        
         let hasAreaOverlaps = validationService.hasInvalidAreaOverlaps(pieces: puzzle.pieces)
         let hasUnexplainedContacts = validationService.hasUnexplainedContacts(
             pieces: puzzle.pieces,
@@ -177,20 +424,17 @@ class TangramEditorViewModel {
         
         var errors: [String] = []
         
+        // Priority order for errors
+        if !isConnected && puzzle.pieces.count > 1 {
+            errors.append("Orphaned pieces - not all connected")
+        }
+        
         if hasAreaOverlaps {
-            errors.append("Pieces have area overlap")
+            errors.append("Pieces overlapping")
         }
         
         if hasUnexplainedContacts {
-            errors.append("Pieces touch without connection")
-        }
-        
-        if !isConnected && puzzle.pieces.count > 1 {
-            errors.append("Not all pieces are connected")
-        }
-        
-        if puzzle.name.isEmpty {
-            errors.append("Puzzle name is required")
+            errors.append("Pieces touching without connection")
         }
         
         validationState = errors.isEmpty ? .valid : .invalid(errors)
@@ -269,10 +513,15 @@ class TangramEditorViewModel {
     
     func reset() {
         puzzle = TangramPuzzle(name: "New Puzzle")
-        selectedPieceId = nil
-        anchorPieceId = nil
+        selectedPieceIds.removeAll()
         validationState = .unknown
         editMode = .select
+        editorState = .idle
+        selectedCanvasPoints.removeAll()
+        selectedPendingPoints.removeAll()
+        availableConnectionPoints.removeAll()
+        pendingPieceRotation = 0
+        previewTransform = nil
     }
     
     func currentPuzzleData() -> TangramPuzzle {
@@ -284,181 +533,10 @@ class TangramEditorViewModel {
         validate()
     }
     
-    // MARK: - Connection Creation Workflow
     
-    func startConnectionMode() {
-        editMode = .connect
-        connectionState = .selectingFirstPiece
-        highlightedPoints = []
-    }
-    
-    func cancelConnectionMode() {
-        connectionState = .idle
-        editMode = .select
-        highlightedPoints = []
-        selectedPieceId = nil
-        anchorPieceId = nil
-    }
-    
-    func selectPieceForConnection(pieceId: String) {
-        switch connectionState {
-        case .idle, .selectingFirstPiece:
-            connectionState = .selectedFirstPiece(pieceId: pieceId, point: nil)
-            anchorPieceId = pieceId
-            highlightedPoints = getConnectionPoints(for: pieceId)
-            
-        case .selectedFirstPiece(let firstId, let firstPoint) where firstPoint != nil:
-            if pieceId == firstId {
-                connectionState = .selectedFirstPiece(pieceId: firstId, point: nil)
-                highlightedPoints = getConnectionPoints(for: firstId)
-            } else {
-                connectionState = .selectingSecondPiece(
-                    firstPieceId: firstId,
-                    firstPoint: firstPoint!
-                )
-                selectedPieceId = pieceId
-                highlightedPoints = getCompatiblePoints(for: pieceId, matching: firstPoint!)
-            }
-            
-        case .selectingSecondPiece(let firstId, let firstPoint):
-            if pieceId == firstId {
-                connectionState = .selectedFirstPiece(pieceId: firstId, point: firstPoint)
-                highlightedPoints = getConnectionPoints(for: firstId)
-                selectedPieceId = nil
-            } else {
-                selectedPieceId = pieceId
-                highlightedPoints = getCompatiblePoints(for: pieceId, matching: firstPoint)
-            }
-            
-        default:
-            break
-        }
-    }
-    
-    func selectConnectionPoint(_ point: ConnectionPoint) {
-        switch connectionState {
-        case .selectedFirstPiece(let pieceId, _):
-            connectionState = .selectedFirstPiece(pieceId: pieceId, point: point)
-            anchorPieceId = pieceId
-            
-        case .selectingSecondPiece(let firstId, let firstPoint):
-            if arePointsCompatible(firstPoint, point) {
-                let pending = createPendingConnection(
-                    firstPiece: firstId,
-                    firstPoint: firstPoint,
-                    secondPiece: point.pieceId,
-                    secondPoint: point
-                )
-                connectionState = .readyToConnect(connection: pending)
-            } else {
-                connectionState = .error("Incompatible connection points")
-            }
-            
-        default:
-            break
-        }
-    }
-    
-    func confirmConnection(with constraintType: ConstraintType? = nil) {
-        guard case .readyToConnect(let pending) = connectionState else { return }
-        
-        let constraint = constraintType ?? getDefaultConstraint(for: pending.connectionType)
-        
-        // Snap the second piece to the connection point before creating the connection
-        snapPieceToConnection(pending)
-        
-        let connection = Connection(
-            type: pending.connectionType,
-            constraint: Constraint(type: constraint, affectedPieceId: pending.pieceBId)
-        )
-        
-        puzzle.connections.append(connection)
-        
-        // Re-center all pieces after connection (using default canvas size)
-        recenterPuzzle()
-        
-        connectionState = .idle
-        editMode = .select
-        highlightedPoints = []
-        selectedPieceId = nil
-        anchorPieceId = nil
-        
-        validate()
-    }
-    
-    private func snapPieceToConnection(_ pending: PendingConnection) {
-        guard let pieceAIndex = puzzle.pieces.firstIndex(where: { $0.id == pending.pieceAId }),
-              let pieceBIndex = puzzle.pieces.firstIndex(where: { $0.id == pending.pieceBId }) else { return }
-        
-        let pieceA = puzzle.pieces[pieceAIndex]
-        let pieceB = puzzle.pieces[pieceBIndex]
-        
-        switch pending.connectionType {
-        case .vertexToVertex(_, let vertexA, _, let vertexB):
-            // Get the transformed vertices
-            let verticesA = GeometryEngine.transformVertices(
-                TangramGeometry.vertices(for: pieceA.type),
-                with: pieceA.transform
-            )
-            let verticesB = GeometryEngine.transformVertices(
-                TangramGeometry.vertices(for: pieceB.type),
-                with: pieceB.transform
-            )
-            
-            // Calculate the translation needed to align vertexB with vertexA
-            let targetPoint = verticesA[vertexA]
-            let currentPoint = verticesB[vertexB]
-            let dx = targetPoint.x - currentPoint.x
-            let dy = targetPoint.y - currentPoint.y
-            
-            // Apply the translation to pieceB
-            var newTransform = pieceB.transform
-            newTransform.tx += dx
-            newTransform.ty += dy
-            puzzle.pieces[pieceBIndex].transform = newTransform
-            
-        case .edgeToEdge(_, let edgeA, _, let edgeB):
-            // Get edges
-            let edgesA = TangramGeometry.edges(for: pieceA.type)
-            let edgesB = TangramGeometry.edges(for: pieceB.type)
-            
-            let verticesA = GeometryEngine.transformVertices(
-                TangramGeometry.vertices(for: pieceA.type),
-                with: pieceA.transform
-            )
-            let verticesB = GeometryEngine.transformVertices(
-                TangramGeometry.vertices(for: pieceB.type),
-                with: pieceB.transform
-            )
-            
-            // Get edge midpoints
-            let edgeAStart = verticesA[edgesA[edgeA].startVertex]
-            let edgeAEnd = verticesA[edgesA[edgeA].endVertex]
-            let edgeAMid = CGPoint(
-                x: (edgeAStart.x + edgeAEnd.x) / 2,
-                y: (edgeAStart.y + edgeAEnd.y) / 2
-            )
-            
-            let edgeBStart = verticesB[edgesB[edgeB].startVertex]
-            let edgeBEnd = verticesB[edgesB[edgeB].endVertex]
-            let edgeBMid = CGPoint(
-                x: (edgeBStart.x + edgeBEnd.x) / 2,
-                y: (edgeBStart.y + edgeBEnd.y) / 2
-            )
-            
-            // Calculate translation to align edge midpoints
-            let dx = edgeAMid.x - edgeBMid.x
-            let dy = edgeAMid.y - edgeBMid.y
-            
-            // Apply the translation
-            var newTransform = pieceB.transform
-            newTransform.tx += dx
-            newTransform.ty += dy
-            puzzle.pieces[pieceBIndex].transform = newTransform
-        }
-    }
-    
-    func recenterPuzzle(canvasSize: CGSize = CGSize(width: 800, height: 800)) {
+    func recenterPuzzle(canvasSize: CGSize? = nil) {
+        // Use provided size or stored size
+        let size = canvasSize ?? currentCanvasSize
         guard !puzzle.pieces.isEmpty else { return }
         
         // Calculate the bounding box of all pieces
@@ -468,10 +546,10 @@ class TangramEditorViewModel {
         var maxY = -Double.infinity
         
         for piece in puzzle.pieces {
-            let vertices = GeometryEngine.transformVertices(
-                TangramGeometry.vertices(for: piece.type),
-                with: piece.transform
-            )
+            // Scale vertices by 50 to match visual representation
+            let baseVertices = TangramGeometry.vertices(for: piece.type)
+            let scaledVertices = baseVertices.map { CGPoint(x: $0.x * 50, y: $0.y * 50) }
+            let vertices = GeometryEngine.transformVertices(scaledVertices, with: piece.transform)
             
             for vertex in vertices {
                 minX = min(minX, vertex.x)
@@ -486,8 +564,8 @@ class TangramEditorViewModel {
         let centerY = (minY + maxY) / 2
         
         // Target is the center of the canvas
-        let targetX = canvasSize.width / 2
-        let targetY = canvasSize.height / 2
+        let targetX = size.width / 2
+        let targetY = size.height / 2
         
         // Calculate translation needed
         let dx = targetX - centerX
@@ -500,14 +578,24 @@ class TangramEditorViewModel {
         }
     }
     
-    private func getConnectionPoints(for pieceId: String) -> [ConnectionPoint] {
+    func getConnectionPoints(for pieceId: String) -> [ConnectionPoint] {
         guard let piece = puzzle.pieces.first(where: { $0.id == pieceId }) else { return [] }
         
         var points: [ConnectionPoint] = []
-        let vertices = getTransformedVertices(for: pieceId) ?? []
+        
+        // Get base vertices and scale them by 50 (same as PieceShape does)
+        let baseVertices = TangramGeometry.vertices(for: piece.type)
+        let scaledVertices = baseVertices.map { vertex in
+            CGPoint(x: vertex.x * 50, y: vertex.y * 50)
+        }
+        
+        // Now apply the piece's transform to the scaled vertices
+        let transformedVertices = GeometryEngine.transformVertices(scaledVertices, with: piece.transform)
+        
         let edges = TangramGeometry.edges(for: piece.type)
         
-        for (index, vertex) in vertices.enumerated() {
+        // Add vertex connection points
+        for (index, vertex) in transformedVertices.enumerated() {
             points.append(ConnectionPoint(
                 type: .vertex(index: index),
                 position: vertex,
@@ -515,9 +603,10 @@ class TangramEditorViewModel {
             ))
         }
         
+        // Add edge midpoint connection points
         for (index, edge) in edges.enumerated() {
-            let start = vertices[edge.startVertex]
-            let end = vertices[edge.endVertex]
+            let start = transformedVertices[edge.startVertex]
+            let end = transformedVertices[edge.endVertex]
             let midpoint = CGPoint(
                 x: (start.x + end.x) / 2,
                 y: (start.y + end.y) / 2
@@ -532,112 +621,6 @@ class TangramEditorViewModel {
         return points
     }
     
-    private func getCompatiblePoints(for pieceId: String, matching firstPoint: ConnectionPoint) -> [ConnectionPoint] {
-        let allPoints = getConnectionPoints(for: pieceId)
-        
-        return allPoints.filter { point in
-            switch (firstPoint.type, point.type) {
-            case (.vertex, .vertex), (.edge, .edge):
-                return true
-            default:
-                return false
-            }
-        }
-    }
-    
-    private func arePointsCompatible(_ point1: ConnectionPoint, _ point2: ConnectionPoint) -> Bool {
-        switch (point1.type, point2.type) {
-        case (.vertex, .vertex):
-            return true
-        case (.edge, .edge):
-            return true
-        default:
-            return false
-        }
-    }
-    
-    private func createPendingConnection(
-        firstPiece: String,
-        firstPoint: ConnectionPoint,
-        secondPiece: String,
-        secondPoint: ConnectionPoint
-    ) -> PendingConnection {
-        
-        let connectionType: ConnectionType
-        
-        switch (firstPoint.type, secondPoint.type) {
-        case let (.vertex(v1), .vertex(v2)):
-            connectionType = .vertexToVertex(
-                pieceA: firstPiece,
-                vertexA: v1,
-                pieceB: secondPiece,
-                vertexB: v2
-            )
-            
-        case let (.edge(e1), .edge(e2)):
-            connectionType = .edgeToEdge(
-                pieceA: firstPiece,
-                edgeA: e1,
-                pieceB: secondPiece,
-                edgeB: e2
-            )
-            
-        default:
-            fatalError("Invalid connection point combination")
-        }
-        
-        let constraints = calculatePossibleConstraints(for: connectionType)
-        
-        return PendingConnection(
-            pieceAId: firstPiece,
-            pieceBId: secondPiece,
-            pointA: firstPoint,
-            pointB: secondPoint,
-            connectionType: connectionType,
-            possibleConstraints: constraints
-        )
-    }
-    
-    private func calculatePossibleConstraints(for connectionType: ConnectionType) -> [ConstraintType] {
-        switch connectionType {
-        case .vertexToVertex:
-            return [
-                .rotation(around: .zero, range: -Double.pi...Double.pi),
-                .fixed
-            ]
-            
-        case .edgeToEdge(let pieceA, let edgeA, let pieceB, let edgeB):
-            guard let piece1 = puzzle.pieces.first(where: { $0.id == pieceA }),
-                  let piece2 = puzzle.pieces.first(where: { $0.id == pieceB }) else {
-                return [.fixed]
-            }
-            
-            let edges1 = TangramGeometry.edges(for: piece1.type)
-            let edges2 = TangramGeometry.edges(for: piece2.type)
-            
-            let length1 = edges1[edgeA].length
-            let length2 = edges2[edgeB].length
-            
-            if abs(length1 - length2) > 0.01 {
-                let slideRange = abs(length1 - length2)
-                return [
-                    .translation(along: CGVector(dx: 1, dy: 0), range: 0...slideRange),
-                    .fixed
-                ]
-            } else {
-                return [.fixed]
-            }
-        }
-    }
-    
-    private func getDefaultConstraint(for connectionType: ConnectionType) -> ConstraintType {
-        switch connectionType {
-        case .vertexToVertex:
-            return .rotation(around: .zero, range: -Double.pi...Double.pi)
-        case .edgeToEdge:
-            return .fixed
-        }
-    }
     
     // MARK: - Constraint-Aware Transformations
     
@@ -698,6 +681,170 @@ class TangramEditorViewModel {
                 connection.pieceAId == pieceId || connection.pieceBId == pieceId
             }
             .map { $0.constraint }
+    }
+    
+    // MARK: - Pending Piece Helpers
+    
+    private func getAllCanvasConnectionPoints() -> [ConnectionPoint] {
+        var allPoints: [ConnectionPoint] = []
+        
+        for piece in puzzle.pieces {
+            let piecePoints = getConnectionPoints(for: piece.id)
+            allPoints.append(contentsOf: piecePoints)
+        }
+        
+        return allPoints
+    }
+    
+    private func findCompatiblePoints(for point: ConnectionPoint) -> [ConnectionPoint] {
+        var compatiblePoints: [ConnectionPoint] = []
+        
+        for piece in puzzle.pieces {
+            let piecePoints = getConnectionPoints(for: piece.id)
+            
+            for canvasPoint in piecePoints {
+                // Check if points are compatible (vertex-to-vertex or edge-to-edge)
+                if arePointTypesCompatible(point.type, canvasPoint.type) {
+                    compatiblePoints.append(canvasPoint)
+                }
+            }
+        }
+        
+        return compatiblePoints
+    }
+    
+    private func arePointTypesCompatible(_ type1: ConnectionPoint.PointType, _ type2: ConnectionPoint.PointType) -> Bool {
+        switch (type1, type2) {
+        case (.vertex, .vertex), (.edge, .edge):
+            return true
+        default:
+            return false
+        }
+    }
+    
+    private func calculateConnectionTransform(
+        newPieceType: PieceType,
+        newPiecePoint: ConnectionPoint,
+        existingPieceId: String,
+        existingPoint: ConnectionPoint
+    ) -> CGAffineTransform {
+        
+        guard let existingPiece = puzzle.pieces.first(where: { $0.id == existingPieceId }) else {
+            return CGAffineTransform.identity
+        }
+        
+        // Get the base vertices for both pieces
+        let newPieceVertices = TangramGeometry.vertices(for: newPieceType)
+        let existingVertices = GeometryEngine.transformVertices(
+            TangramGeometry.vertices(for: existingPiece.type),
+            with: existingPiece.transform
+        )
+        
+        // Calculate the target position based on point types
+        let targetPosition: CGPoint
+        
+        switch (newPiecePoint.type, existingPoint.type) {
+        case let (.vertex(newIndex), .vertex(existingIndex)):
+            // Align vertices
+            targetPosition = existingVertices[existingIndex]
+            let newVertex = newPieceVertices[newIndex]
+            
+            // Calculate transform to move newVertex to targetPosition
+            let dx = targetPosition.x - newVertex.x
+            let dy = targetPosition.y - newVertex.y
+            return CGAffineTransform(translationX: dx, y: dy)
+            
+        case let (.edge(newEdgeIndex), .edge(existingEdgeIndex)):
+            // Align edge midpoints
+            let existingEdges = TangramGeometry.edges(for: existingPiece.type)
+            let newEdges = TangramGeometry.edges(for: newPieceType)
+            
+            let existingEdge = existingEdges[existingEdgeIndex]
+            let newEdge = newEdges[newEdgeIndex]
+            
+            let existingStart = existingVertices[existingEdge.startVertex]
+            let existingEnd = existingVertices[existingEdge.endVertex]
+            let existingMid = CGPoint(
+                x: (existingStart.x + existingEnd.x) / 2,
+                y: (existingStart.y + existingEnd.y) / 2
+            )
+            
+            let newStart = newPieceVertices[newEdge.startVertex]
+            let newEnd = newPieceVertices[newEdge.endVertex]
+            let newMid = CGPoint(
+                x: (newStart.x + newEnd.x) / 2,
+                y: (newStart.y + newEnd.y) / 2
+            )
+            
+            // Calculate transform to align midpoints
+            let dx = existingMid.x - newMid.x
+            let dy = existingMid.y - newMid.y
+            return CGAffineTransform(translationX: dx, y: dy)
+            
+        default:
+            return CGAffineTransform.identity
+        }
+    }
+    
+    private func createConnectionType(
+        pieceA: String,
+        pointA: ConnectionPoint,
+        pieceB: String,
+        pointB: ConnectionPoint
+    ) -> ConnectionType {
+        switch (pointA.type, pointB.type) {
+        case let (.vertex(indexA), .vertex(indexB)):
+            return .vertexToVertex(
+                pieceA: pieceA,
+                vertexA: indexA,
+                pieceB: pieceB,
+                vertexB: indexB
+            )
+        case let (.edge(indexA), .edge(indexB)):
+            return .edgeToEdge(
+                pieceA: pieceA,
+                edgeA: indexA,
+                pieceB: pieceB,
+                edgeB: indexB
+            )
+        default:
+            fatalError("Incompatible connection types")
+        }
+    }
+    
+    func getConnectionPointsForPendingPiece(type: PieceType, scale: CGFloat = 1) -> [ConnectionPoint] {
+        var points: [ConnectionPoint] = []
+        let vertices = TangramGeometry.vertices(for: type)
+        let edges = TangramGeometry.edges(for: type)
+        
+        // Scale vertices for display
+        let scaledVertices = vertices.map { CGPoint(x: $0.x * scale, y: $0.y * scale) }
+        
+        // Add vertices
+        for (index, vertex) in scaledVertices.enumerated() {
+            points.append(ConnectionPoint(
+                type: .vertex(index: index),
+                position: vertex,
+                pieceId: "pending"  // Special ID for pending piece
+            ))
+        }
+        
+        // Add edges
+        for (index, edge) in edges.enumerated() {
+            let start = scaledVertices[edge.startVertex]
+            let end = scaledVertices[edge.endVertex]
+            let midpoint = CGPoint(
+                x: (start.x + end.x) / 2,
+                y: (start.y + end.y) / 2
+            )
+            points.append(ConnectionPoint(
+                type: .edge(index: index),
+                position: midpoint,
+                pieceId: "pending"
+            ))
+        }
+        
+        return points
     }
     
     // MARK: - Undo/Redo (Future)
