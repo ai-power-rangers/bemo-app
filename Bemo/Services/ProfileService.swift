@@ -23,6 +23,9 @@ class ProfileService {
     // Optional Supabase integration - will be injected after initialization
     private weak var supabaseService: SupabaseService?
     
+    // Optional error tracking - will be injected after initialization
+    private weak var errorTrackingService: ErrorTrackingService?
+    
     // Returns active profile or nil if no profiles exist
     var currentProfile: UserProfile? {
         return activeProfile
@@ -49,6 +52,10 @@ class ProfileService {
         self.supabaseService = supabaseService
     }
     
+    func setErrorTrackingService(_ errorTrackingService: ErrorTrackingService) {
+        self.errorTrackingService = errorTrackingService
+    }
+    
     func syncWithSupabase() {
         guard let supabaseService = supabaseService else {
             print("Supabase service not available - skipping profile sync")
@@ -72,6 +79,10 @@ class ProfileService {
                 }
             } catch {
                 print("Profile sync from Supabase failed (non-critical): \(error)")
+                errorTrackingService?.trackError(error, context: ErrorContext(
+                    feature: "ProfileService",
+                    action: "syncFromSupabase"
+                ))
             }
         }
     }
@@ -173,9 +184,16 @@ class ProfileService {
                     xpAwarded: xpGained,
                     eventData: ["source": "manual_update"]
                 )
-            } catch {
-                print("Failed to track XP gain event (non-critical): \(error)")
-            }
+                            } catch {
+                    print("Failed to track XP gain event (non-critical): \(error)")
+                    errorTrackingService?.trackError(error, context: ErrorContext(
+                        feature: "ProfileService",
+                        action: "trackXPGain",
+                        metadata: [
+                            "profileId": profileId
+                        ]
+                    ))
+                }
         }
     }
     
@@ -198,6 +216,11 @@ class ProfileService {
             userDefaults.set(data, forKey: activeProfileKey)
         } catch {
             print("Failed to save active profile: \(error)")
+            errorTrackingService?.trackError(error, context: ErrorContext(
+                feature: "ProfileService",
+                action: "saveActiveProfile",
+                metadata: ["profileId": profile.id]
+            ))
         }
     }
     
@@ -209,6 +232,10 @@ class ProfileService {
             activeProfile = try decoder.decode(UserProfile.self, from: data)
         } catch {
             print("Failed to load active profile: \(error)")
+            errorTrackingService?.trackError(error, context: ErrorContext(
+                feature: "ProfileService",
+                action: "loadActiveProfile"
+            ))
         }
     }
     
@@ -219,6 +246,11 @@ class ProfileService {
             userDefaults.set(data, forKey: childProfilesKey)
         } catch {
             print("Failed to save child profiles: \(error)")
+            errorTrackingService?.trackError(error, context: ErrorContext(
+                feature: "ProfileService",
+                action: "saveChildProfiles",
+                metadata: ["profileCount": childProfiles.count]
+            ))
         }
     }
     
@@ -230,6 +262,10 @@ class ProfileService {
             childProfiles = try decoder.decode([UserProfile].self, from: data)
         } catch {
             print("Failed to load child profiles: \(error)")
+            errorTrackingService?.trackError(error, context: ErrorContext(
+                feature: "ProfileService",
+                action: "loadChildProfiles"
+            ))
         }
     }
     
@@ -262,6 +298,11 @@ class ProfileService {
                 print("Profile synced to Supabase: \(profile.name)")
             } catch {
                 print("Profile sync to Supabase failed (non-critical): \(error)")
+                errorTrackingService?.trackError(error, context: ErrorContext(
+                    feature: "ProfileService",
+                    action: "syncProfileToSupabase",
+                    metadata: ["profileId": profile.id]
+                ))
                 // Don't affect main profile functionality
             }
         }
@@ -280,6 +321,11 @@ class ProfileService {
                 print("Profile deletion synced to Supabase: \(profileId)")
             } catch {
                 print("Profile deletion sync to Supabase failed (non-critical): \(error)")
+                errorTrackingService?.trackError(error, context: ErrorContext(
+                    feature: "ProfileService",
+                    action: "syncProfileDeletionToSupabase",
+                    metadata: ["profileId": profileId]
+                ))
                 // Don't affect main profile functionality
             }
         }

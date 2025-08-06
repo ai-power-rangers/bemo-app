@@ -34,6 +34,9 @@ class AuthenticationService: NSObject {
     // Optional Supabase integration - will be injected after initialization
     private weak var supabaseService: SupabaseService?
     
+    // Optional error tracking - will be injected after initialization
+    private weak var errorTrackingService: ErrorTrackingService?
+    
     enum AuthenticationError: Error, LocalizedError {
         case cancelled
         case failed
@@ -72,6 +75,10 @@ class AuthenticationService: NSObject {
     
     func setSupabaseService(_ supabaseService: SupabaseService) {
         self.supabaseService = supabaseService
+    }
+    
+    func setErrorTrackingService(_ errorTrackingService: ErrorTrackingService) {
+        self.errorTrackingService = errorTrackingService
     }
     
     // MARK: - Authentication Methods
@@ -120,6 +127,10 @@ class AuthenticationService: NSObject {
                 print("Supabase sign out successful")
             } catch {
                 print("Supabase sign out failed (non-critical): \(error)")
+                errorTrackingService?.trackError(error, context: ErrorContext(
+                    feature: "AuthenticationService",
+                    action: "supabaseSignOut"
+                ))
                 // Don't affect main sign out flow
             }
         }
@@ -208,6 +219,14 @@ class AuthenticationService: NSObject {
                 // Use the actual identity token and nonce for Supabase
                 guard let nonce = user.nonce else {
                     print("Error: Nonce missing for Supabase sync")
+                    errorTrackingService?.trackError(
+                        AuthenticationError.unknown,
+                        context: ErrorContext(
+                            feature: "AuthenticationService",
+                            action: "syncWithSupabase",
+                            metadata: ["error": "nonce_missing"]
+                        )
+                    )
                     return
                 }
                 
@@ -221,6 +240,11 @@ class AuthenticationService: NSObject {
                 print("Supabase sync successful for user: \(user.id)")
             } catch {
                 print("Supabase sync failed (non-critical): \(error)")
+                errorTrackingService?.trackError(error, context: ErrorContext(
+                    feature: "AuthenticationService",
+                    action: "supabaseSync",
+                    metadata: ["hasEmail": user.email != nil]
+                ))
                 // Don't affect main authentication flow
             }
         }
@@ -322,6 +346,14 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
             guard let identityToken = appleIDCredential.identityToken,
                   let tokenString = String(data: identityToken, encoding: .utf8) else {
                 print("Error: Failed to get identity token")
+                errorTrackingService?.trackError(
+                    AuthenticationError.invalidCredential,
+                    context: ErrorContext(
+                        feature: "AuthenticationService",
+                        action: "handleAppleIDCredential",
+                        metadata: ["error": "no_identity_token"]
+                    )
+                )
                 authenticationError = .invalidCredential
                 return
             }
@@ -329,6 +361,14 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
             // Get the nonce - REQUIRED for Supabase
             guard let nonce = currentNonce else {
                 print("Error: Invalid state. Nonce not found.")
+                errorTrackingService?.trackError(
+                    AuthenticationError.unknown,
+                    context: ErrorContext(
+                        feature: "AuthenticationService",
+                        action: "handleAppleIDCredential",
+                        metadata: ["error": "invalid_nonce_state"]
+                    )
+                )
                 authenticationError = .unknown
                 return
             }
@@ -376,6 +416,12 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
         }
         
         print("Authentication error: \(error.localizedDescription)")
+        
+        errorTrackingService?.trackError(error, context: ErrorContext(
+            feature: "AuthenticationService",
+            action: "appleSignIn",
+            metadata: ["errorCode": authenticationError?.localizedDescription ?? "unknown"]
+        ))
     }
 }
 

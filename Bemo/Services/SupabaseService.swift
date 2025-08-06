@@ -17,6 +17,7 @@ import Observation
 class SupabaseService {
     private let client: SupabaseClient
     private let authService: AuthenticationService
+    private let errorTracking: ErrorTrackingService?
     
     // Observable state
     private(set) var isConnected = false
@@ -26,8 +27,9 @@ class SupabaseService {
     // Connection state
     private(set) var authStateChangeTask: Task<Void, Never>?
     
-    init(authService: AuthenticationService) {
+    init(authService: AuthenticationService, errorTracking: ErrorTrackingService? = nil) {
         self.authService = authService
+        self.errorTracking = errorTracking
         
         // Initialize Supabase client with configuration from AppConfiguration
         let config = AppConfiguration.shared
@@ -122,6 +124,11 @@ class SupabaseService {
         } catch {
             syncError = error
             print("Supabase: Sign-in failed - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "signInWithApple",
+                metadata: ["hasEmail": email != nil]
+            ))
             throw error
         }
     }
@@ -133,6 +140,10 @@ class SupabaseService {
         } catch {
             syncError = error
             print("Supabase: Sign-out failed - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "signOut"
+            ))
             throw error
         }
     }
@@ -198,6 +209,11 @@ class SupabaseService {
         } catch {
             syncError = error
             print("Supabase: Failed to sync child profile - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "syncChildProfile",
+                metadata: ["profileId": profile.id]
+            ))
             throw error
         }
     }
@@ -224,6 +240,10 @@ class SupabaseService {
         } catch {
             syncError = error
             print("Supabase: Failed to fetch child profiles - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "fetchChildProfiles"
+            ))
             throw error
         }
     }
@@ -246,6 +266,11 @@ class SupabaseService {
         } catch {
             syncError = error
             print("Supabase: Failed to delete child profile - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "deleteChildProfile",
+                metadata: ["profileId": profileId]
+            ))
             throw error
         }
     }
@@ -285,6 +310,15 @@ class SupabaseService {
         } catch {
             syncError = error
             print("Supabase: Failed to track learning event - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "trackLearningEvent",
+                metadata: [
+                    "eventType": eventType,
+                    "gameId": gameId,
+                    "childProfileId": childProfileId
+                ]
+            ))
             throw error
         }
     }
@@ -318,6 +352,14 @@ class SupabaseService {
         } catch {
             syncError = error
             print("Supabase: Failed to start game session - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "startGameSession",
+                metadata: [
+                    "gameId": gameId,
+                    "childProfileId": childProfileId
+                ]
+            ))
             throw error
         }
     }
@@ -350,6 +392,14 @@ class SupabaseService {
         } catch {
             syncError = error
             print("Supabase: Failed to end game session - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "endGameSession",
+                metadata: [
+                    "sessionId": sessionId,
+                    "finalXPEarned": finalXPEarned
+                ]
+            ))
             throw error
         }
     }
@@ -382,6 +432,11 @@ class SupabaseService {
         } catch {
             syncError = error
             print("Supabase: Failed to get learning stats - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "getLearningStats",
+                metadata: ["childProfileId": childProfileId]
+            ))
             throw error
         }
     }
@@ -397,6 +452,10 @@ class SupabaseService {
                 try await channel.subscribeWithError()
             } catch {
                 print("Failed to subscribe to realtime channel: \(error)")
+                errorTracking?.trackError(error, context: ErrorContext(
+                    feature: "Supabase",
+                    action: "subscribeToRealtime"
+                ))
             }
         }
         

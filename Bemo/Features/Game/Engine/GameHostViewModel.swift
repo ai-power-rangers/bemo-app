@@ -29,6 +29,7 @@ class GameHostViewModel {
     private let cvService: CVService
     private let profileService: ProfileService
     private let supabaseService: SupabaseService
+    private let errorTrackingService: ErrorTrackingService?
     private var currentSessionId: String?
     private let currentChildProfileId: String
     private let onQuit: () -> Void
@@ -40,6 +41,7 @@ class GameHostViewModel {
         cvService: CVService,
         profileService: ProfileService,
         supabaseService: SupabaseService,
+        errorTrackingService: ErrorTrackingService? = nil,
         currentChildProfileId: String,
         onQuit: @escaping () -> Void
     ) {
@@ -47,6 +49,7 @@ class GameHostViewModel {
         self.cvService = cvService
         self.profileService = profileService
         self.supabaseService = supabaseService
+        self.errorTrackingService = errorTrackingService
         self.currentChildProfileId = currentChildProfileId
         self.onQuit = onQuit
         
@@ -89,6 +92,14 @@ class GameHostViewModel {
                 print("Game session started: \(currentSessionId ?? "unknown")")
             } catch {
                 print("Failed to start game session: \(error)")
+                errorTrackingService?.trackError(error, context: ErrorContext(
+                    feature: "GameHost",
+                    action: "startGameSession",
+                    metadata: [
+                        "gameId": game.id,
+                        "profileId": currentChildProfileId
+                    ]
+                ))
             }
         }
     }
@@ -118,6 +129,15 @@ class GameHostViewModel {
                     )
                 } catch {
                     print("Failed to end game session: \(error)")
+                    errorTrackingService?.trackError(error, context: ErrorContext(
+                        feature: "GameHost",
+                        action: "endGameSession",
+                        metadata: [
+                            "sessionId": sessionId,
+                            "totalSessionXP": totalSessionXP,
+                            "levelsCompleted": levelsCompleted
+                        ]
+                    ))
                 }
             }
         }
@@ -188,6 +208,15 @@ extension GameHostViewModel: GameDelegate {
                 
             } catch {
                 print("Failed to track level completion: \(error)")
+                errorTrackingService?.trackError(error, context: ErrorContext(
+                    feature: "GameHost",
+                    action: "trackLevelCompletion",
+                    metadata: [
+                        "gameId": game.id,
+                        "xpAwarded": xpAwarded,
+                        "levelsCompleted": levelsCompleted
+                    ]
+                ))
             }
         }
         
@@ -204,6 +233,16 @@ extension GameHostViewModel: GameDelegate {
     }
     
     func gameDidEncounterError(_ error: Error) {
+        errorTrackingService?.trackError(error, context: ErrorContext(
+            feature: "Game",
+            action: "gameplay",
+            metadata: [
+                "gameId": game.id,
+                "levelsCompleted": levelsCompleted,
+                "sessionId": currentSessionId ?? "none"
+            ]
+        ))
+        
         errorMessage = error.localizedDescription
         showError = true
     }
@@ -230,6 +269,14 @@ extension GameHostViewModel: GameDelegate {
                     )
                 } catch {
                     print("Failed to track frustration: \(error)")
+                    errorTrackingService?.trackError(error, context: ErrorContext(
+                        feature: "GameHost",
+                        action: "trackFrustration",
+                        metadata: [
+                            "frustrationLevel": level,
+                            "gameId": game.id
+                        ]
+                    ))
                 }
             }
         }

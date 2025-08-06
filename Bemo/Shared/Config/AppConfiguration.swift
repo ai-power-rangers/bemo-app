@@ -58,6 +58,32 @@ class AppConfiguration {
         return key
     }
     
+    // MARK: - Sentry Configuration
+    
+    var sentryDSN: String {
+        guard let dsn = Bundle.main.object(forInfoDictionaryKey: "SentryDSN") as? String,
+              !dsn.isEmpty,
+              dsn != "YOUR_SENTRY_DSN" else {
+            print("[AppConfiguration] SentryDSN value from Info.plist: \(Bundle.main.object(forInfoDictionaryKey: "SentryDSN") ?? "nil")")
+            print("[AppConfiguration] Sentry DSN not configured - error tracking disabled")
+            return ""
+        }
+        
+        // Remove any escape characters
+        let cleanedDSN = dsn.replacingOccurrences(of: "\\", with: "")
+        
+        print("[AppConfiguration] SentryDSN loaded: \(cleanedDSN)")
+        return cleanedDSN
+    }
+    
+    var sentryEnvironment: String {
+        if isDebugBuild {
+            return "debug"
+        } else {
+            return Bundle.main.object(forInfoDictionaryKey: "SentryEnvironment") as? String ?? "production"
+        }
+    }
+    
     // MARK: - Debug Helpers
     
     var isDebugBuild: Bool {
