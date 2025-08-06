@@ -82,8 +82,27 @@ struct PendingPieceView: View {
                 Text("Select connection points on canvas")
                     .foregroundColor(.orange)
             } else if viewModel.selectedPendingPoints.count == viewModel.selectedCanvasPoints.count {
-                Text("Ready to place!")
-                    .foregroundColor(.green)
+                // Check if types match properly
+                let canvasVertexCount = viewModel.selectedCanvasPoints.filter { 
+                    if case .vertex = $0.type { return true } else { return false }
+                }.count
+                let canvasEdgeCount = viewModel.selectedCanvasPoints.filter { 
+                    if case .edge = $0.type { return true } else { return false }
+                }.count
+                let pendingVertexCount = viewModel.selectedPendingPoints.filter { 
+                    if case .vertex = $0.type { return true } else { return false }
+                }.count
+                let pendingEdgeCount = viewModel.selectedPendingPoints.filter { 
+                    if case .edge = $0.type { return true } else { return false }
+                }.count
+                
+                if canvasVertexCount == pendingVertexCount && canvasEdgeCount == pendingEdgeCount {
+                    Text("Ready to place!")
+                        .foregroundColor(.green)
+                } else {
+                    Text("Type mismatch! Need \(canvasVertexCount) vertex + \(canvasEdgeCount) edge")
+                        .foregroundColor(.red)
+                }
             } else {
                 Text("Match \(viewModel.selectedCanvasPoints.count) point\(viewModel.selectedCanvasPoints.count == 1 ? "" : "s") on this piece")
                     .foregroundColor(.blue)

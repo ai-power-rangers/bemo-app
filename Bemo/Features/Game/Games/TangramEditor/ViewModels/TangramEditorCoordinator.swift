@@ -47,10 +47,44 @@ class TangramEditorCoordinator {
             return .failure(.invalidConnections)
         }
         
-        // Create connection pairs
-        let connections = zip(canvasConnections, pieceConnections).map { 
-            (canvasPoint: $0, piecePoint: $1) 
+        // Create connection pairs by matching types, not by selection order
+        // Group connections by type
+        let canvasVertices = canvasConnections.filter { 
+            if case .vertex = $0.type { return true } else { return false }
         }
+        let canvasEdges = canvasConnections.filter { 
+            if case .edge = $0.type { return true } else { return false }
+        }
+        
+        let pieceVertices = pieceConnections.filter { 
+            if case .vertex = $0.type { return true } else { return false }
+        }
+        let pieceEdges = pieceConnections.filter { 
+            if case .edge = $0.type { return true } else { return false }
+        }
+        
+        // Validate that we have matching counts for each type
+        guard canvasVertices.count == pieceVertices.count,
+              canvasEdges.count == pieceEdges.count else {
+            print("DEBUG: Connection type mismatch - canvas vertices: \(canvasVertices.count), piece vertices: \(pieceVertices.count), canvas edges: \(canvasEdges.count), piece edges: \(pieceEdges.count)")
+            return .failure(.invalidConnections)
+        }
+        
+        // Pair vertices with vertices and edges with edges
+        var connections: [(canvasPoint: PiecePlacementService.ConnectionPoint, 
+                          piecePoint: PiecePlacementService.ConnectionPoint)] = []
+        
+        // Add vertex-to-vertex connections first (for prioritization)
+        for (canvasVertex, pieceVertex) in zip(canvasVertices, pieceVertices) {
+            connections.append((canvasPoint: canvasVertex, piecePoint: pieceVertex))
+        }
+        
+        // Then add edge-to-edge connections
+        for (canvasEdge, pieceEdge) in zip(canvasEdges, pieceEdges) {
+            connections.append((canvasPoint: canvasEdge, piecePoint: pieceEdge))
+        }
+        
+        print("DEBUG: Created \(connections.count) connections with proper type matching")
         
         // Calculate piece placement
         guard let newPiece = placementService.placeConnectedPiece(

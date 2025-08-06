@@ -130,29 +130,54 @@ class PiecePlacementService {
             print("DEBUG PPS: Final transform: \(transform)")
             
         } else if connections.count >= 2 {
-            // Multi-point connection - prioritize vertex connections for alignment
-            // Sort connections to put vertex-to-vertex connections first
-            let sortedConnections = connections.sorted { (a, b) in
-                // Prioritize vertex connections over edge connections
-                switch (a.piecePoint.type, b.piecePoint.type) {
-                case (.vertex, .edge): return true
-                case (.edge, .vertex): return false
-                default: return false  // Keep original order for same types
+            // Multi-point connection - prioritize vertex-to-vertex connections for alignment
+            // A vertex-to-vertex connection is more precise than edge-to-edge
+            
+            // Create array with indices to maintain correspondence with localPiecePositions
+            let indexedConnections = connections.enumerated().map { (index: $0, connection: $1) }
+            
+            // Sort to prioritize vertex-to-vertex connections
+            let sortedIndexedConnections = indexedConnections.sorted { (a, b) in
+                // Check if each connection is vertex-to-vertex
+                let aIsVertexToVertex = switch (a.connection.canvasPoint.type, a.connection.piecePoint.type) {
+                case (.vertex, .vertex): true
+                default: false
+                }
+                
+                let bIsVertexToVertex = switch (b.connection.canvasPoint.type, b.connection.piecePoint.type) {
+                case (.vertex, .vertex): true
+                default: false
+                }
+                
+                // Vertex-to-vertex connections come first
+                if aIsVertexToVertex && !bIsVertexToVertex {
+                    return true
+                } else if !aIsVertexToVertex && bIsVertexToVertex {
+                    return false
+                } else {
+                    // Keep original order for same types
+                    return a.index < b.index
                 }
             }
             
-            let sortedLocalPositions = sortedConnections.map { conn in
-                connections.firstIndex(where: { $0.piecePoint.id == conn.piecePoint.id })
-            }.compactMap { index in
-                index.map { localPiecePositions[$0] }
-            }
+            // Extract sorted connections and their corresponding local positions
+            let sortedConnections = sortedIndexedConnections.map { $0.connection }
+            let sortedLocalPositions = sortedIndexedConnections.map { localPiecePositions[$0.index] }
             
             // Use only the first point for placement (like the old implementation)
             // This ensures at least one connection is perfect
             let canvasPos = sortedConnections[0].canvasPoint.position
             let localPiecePos = sortedLocalPositions[0]
             
-            print("DEBUG PPS: Multi-point connection - using first point for alignment")
+            // Log which connection type we're using for primary alignment
+            let primaryConnectionType = switch (sortedConnections[0].canvasPoint.type, sortedConnections[0].piecePoint.type) {
+            case (.vertex, .vertex): "vertex-to-vertex"
+            case (.edge, .edge): "edge-to-edge"
+            case (.vertex, .edge): "vertex-to-edge"
+            case (.edge, .vertex): "edge-to-vertex"
+            }
+            
+            print("DEBUG PPS: Multi-point connection - using \(primaryConnectionType) for alignment")
             print("DEBUG PPS: Canvas position: \(canvasPos)")
             print("DEBUG PPS: Local piece position: \(localPiecePos)")
             

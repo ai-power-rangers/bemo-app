@@ -47,6 +47,12 @@ struct TangramEditorContainerView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: viewModel.navigationState)
+        .sheet(isPresented: .init(
+            get: { viewModel.showSaveDialog },
+            set: { viewModel.showSaveDialog = $0 }
+        )) {
+            SavePuzzleDialog(viewModel: viewModel)
+        }
     }
 }
 
