@@ -21,9 +21,17 @@ class GameHostViewModel {
     var progress: Float = 0.0
     var showProgress = false
     
+    // Session-wide tracking properties
+    private var totalSessionXP: Int = 0
+    private var levelsCompleted: Int = 0
+    
     private let game: Game
     private let cvService: CVService
     private let profileService: ProfileService
+    private let supabaseService: SupabaseService
+    private let errorTrackingService: ErrorTrackingService?
+    private var currentSessionId: String?
+    private let currentChildProfileId: String
     private let onQuit: () -> Void
     
     private var cancellables = Set<AnyCancellable>()
@@ -32,11 +40,17 @@ class GameHostViewModel {
         game: Game,
         cvService: CVService,
         profileService: ProfileService,
+        supabaseService: SupabaseService,
+        errorTrackingService: ErrorTrackingService? = nil,
+        currentChildProfileId: String,
         onQuit: @escaping () -> Void
     ) {
         self.game = game
         self.cvService = cvService
         self.profileService = profileService
+        self.supabaseService = supabaseService
+        self.errorTrackingService = errorTrackingService
+        self.currentChildProfileId = currentChildProfileId
         self.onQuit = onQuit
         
         // Defer game view creation until after initialization
@@ -63,8 +77,31 @@ class GameHostViewModel {
         // Reset game state
         game.reset()
         
-        // Log session start
-        print("Game session started: \(game.title)")
+        // Start game session in Supabase
+        Task {
+            do {
+                currentSessionId = try await supabaseService.startGameSession(
+                    childProfileId: currentChildProfileId,
+                    gameId: game.id,
+                    sessionData: [
+                        "game_title": game.title,
+                        "device_type": "iOS",
+                        "cv_enabled": true
+                    ]
+                )
+                print("Game session started: \(currentSessionId ?? "unknown")")
+            } catch {
+                print("Failed to start game session: \(error)")
+                errorTrackingService?.trackError(error, context: ErrorContext(
+                    feature: "GameHost",
+                    action: "startGameSession",
+                    metadata: [
+                        "gameId": game.id,
+                        "profileId": currentChildProfileId
+                    ]
+                ))
+            }
+        }
     }
     
     func endSession() {
@@ -76,29 +113,61 @@ class GameHostViewModel {
             // TODO: Persist game state
             print("Game state saved")
         }
+        
+        // End game session in Supabase
+        if let sessionId = currentSessionId {
+            Task {
+                do {
+                    try await supabaseService.endGameSession(
+                        sessionId: sessionId,
+                        finalXPEarned: totalSessionXP,
+                        finalLevelsCompleted: levelsCompleted,
+                        finalSessionData: [
+                            "completion_reason": "user_quit",
+                            "final_progress": progress
+                        ]
+                    )
+                } catch {
+                    print("Failed to end game session: \(error)")
+                    errorTrackingService?.trackError(error, context: ErrorContext(
+                        feature: "GameHost",
+                        action: "endGameSession",
+                        metadata: [
+                            "sessionId": sessionId,
+                            "totalSessionXP": totalSessionXP,
+                            "levelsCompleted": levelsCompleted
+                        ]
+                    ))
+                }
+            }
+        }
     }
     
     private func handleRecognizedPieces(_ pieces: [RecognizedPiece]) {
         // Process pieces through the game
         let outcome = game.processRecognizedPieces(pieces)
         
-        // Handle the outcome
+        // Track the outcome in Supabase
+        //not implemented until we figure out what we want to track
+        Task {
+            //            await trackOutcome(outcome)
+        }
+        
+        // Handle the outcome locally
         switch outcome {
         case .correctPlacement(let points):
-            // Award points through gamification service
-            break
+            totalSessionXP += points
+        case .levelComplete(let xpAwarded):
+            levelsCompleted += 1
+            totalSessionXP += xpAwarded
         case .incorrectPlacement:
             // Provide feedback (handled by game's view)
             break
-            
-        case .levelComplete(let xpAwarded):
-            // Level completed - delegate will be called by game
-            break
-            
         case .noAction:
             // No action needed
             break
         case .specialAchievement(name: let name, bonusXP: let bonusXP):
+            totalSessionXP += bonusXP
             break
         case .hintUsed:
             break
@@ -106,7 +175,7 @@ class GameHostViewModel {
             break
         }
     }
-    
+        
     func handleQuitRequest() {
         endSession()
         onQuit()
@@ -121,10 +190,37 @@ class GameHostViewModel {
 // MARK: - GameDelegate
 extension GameHostViewModel: GameDelegate {
     func gameDidCompleteLevel(xpAwarded: Int) {
-        // Award XP through gamification service
+        Task {
+            do {
+                try await supabaseService.trackLearningEvent(
+                    childProfileId: currentChildProfileId,
+                    eventType: "level_completed",
+                    gameId: game.id,
+                    xpAwarded: xpAwarded,
+                    eventData: [
+                        "levels_completed_total": levelsCompleted
+                    ],
+                    sessionId: currentSessionId
+                )
+                
+                // Update local profile XP
+                profileService.updateXP(xpAwarded, for: currentChildProfileId)
+                
+            } catch {
+                print("Failed to track level completion: \(error)")
+                errorTrackingService?.trackError(error, context: ErrorContext(
+                    feature: "GameHost",
+                    action: "trackLevelCompletion",
+                    metadata: [
+                        "gameId": game.id,
+                        "xpAwarded": xpAwarded,
+                        "levelsCompleted": levelsCompleted
+                    ]
+                ))
+            }
+        }
         
-        // Show celebration or transition to next level
-        print("Level completed! XP award not implemented: \(xpAwarded)")
+        print("Level completed! XP awarded: \(xpAwarded)")
     }
     
     func gameDidRequestQuit() {
@@ -137,6 +233,16 @@ extension GameHostViewModel: GameDelegate {
     }
     
     func gameDidEncounterError(_ error: Error) {
+        errorTrackingService?.trackError(error, context: ErrorContext(
+            feature: "Game",
+            action: "gameplay",
+            metadata: [
+                "gameId": game.id,
+                "levelsCompleted": levelsCompleted,
+                "sessionId": currentSessionId ?? "none"
+            ]
+        ))
+        
         errorMessage = error.localizedDescription
         showError = true
     }
@@ -147,10 +253,32 @@ extension GameHostViewModel: GameDelegate {
     }
     
     func gameDidDetectFrustration(level: Float) {
-        // Handle frustration detection
         if level > 0.7 {
-            // Offer help or easier mode
-            print("High frustration detected: \(level)")
+            Task {
+                do {
+                    try await supabaseService.trackLearningEvent(
+                        childProfileId: currentChildProfileId,
+                        eventType: "frustration_detected",
+                        gameId: game.id,
+                        xpAwarded: 0,
+                        eventData: [
+                            "frustration_level": level,
+                            "levels_completed": levelsCompleted
+                        ],
+                        sessionId: currentSessionId
+                    )
+                } catch {
+                    print("Failed to track frustration: \(error)")
+                    errorTrackingService?.trackError(error, context: ErrorContext(
+                        feature: "GameHost",
+                        action: "trackFrustration",
+                        metadata: [
+                            "frustrationLevel": level,
+                            "gameId": game.id
+                        ]
+                    ))
+                }
+            }
         }
     }
 }

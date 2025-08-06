@@ -30,7 +30,12 @@ class AnalyticsService {
         )
         
         config.debug = configuration.isDebugBuild
-        
+        config.debug = configuration.isDebugBuild
+        config.captureScreenViews = true  // Track screen navigation
+        config.captureApplicationLifecycleEvents = true  // Track app lifecycle
+        config.captureElementInteractions = false  // Disable to reduce noise in games
+        config.flushAt = 10  // Batch events for efficiency
+
         PostHogSDK.shared.setup(config)
     }
     

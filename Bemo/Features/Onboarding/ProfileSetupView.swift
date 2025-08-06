@@ -223,7 +223,8 @@ struct ProfileSetupView_Previews: PreviewProvider {
                 appleUserIdentifier: "test",
                 email: "test@example.com",
                 fullName: nil,
-                accessToken: "token"
+                accessToken: "token",
+                nonce: nil
             ),
             profileService: ProfileService(),
             apiService: APIService(),

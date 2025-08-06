@@ -15,6 +15,7 @@ import AuthenticationServices
 import Security
 import UIKit
 import Observation
+import CryptoKit
 
 @Observable
 class AuthenticationService: NSObject {
@@ -26,6 +27,15 @@ class AuthenticationService: NSObject {
     private let accessTokenKey = "access_token"
     private let refreshTokenKey = "refresh_token"
     private let userIdKey = "user_id"
+    
+    // Nonce storage for Apple Sign-In
+    private var currentNonce: String?
+    
+    // Optional Supabase integration - will be injected after initialization
+    private weak var supabaseService: SupabaseService?
+    
+    // Optional error tracking - will be injected after initialization
+    private weak var errorTrackingService: ErrorTrackingService?
     
     enum AuthenticationError: Error, LocalizedError {
         case cancelled
@@ -61,11 +71,25 @@ class AuthenticationService: NSObject {
         checkAuthenticationState()
     }
     
+    // MARK: - Supabase Integration
+    
+    func setSupabaseService(_ supabaseService: SupabaseService) {
+        self.supabaseService = supabaseService
+    }
+    
+    func setErrorTrackingService(_ errorTrackingService: ErrorTrackingService) {
+        self.errorTrackingService = errorTrackingService
+    }
+    
     // MARK: - Authentication Methods
     
     func signInWithApple() {
+        let nonce = randomNonceString()
+        currentNonce = nonce
+        
         let request = ASAuthorizationAppleIDProvider().createRequest()
         request.requestedScopes = [.fullName, .email]
+        request.nonce = sha256(nonce)
         
         let authorizationController = ASAuthorizationController(authorizationRequests: [request])
         authorizationController.delegate = self
@@ -85,6 +109,31 @@ class AuthenticationService: NSObject {
         authenticationError = nil
         
         print("User signed out successfully")
+        
+        // Sign out from Supabase if available (non-blocking)
+        syncSupabaseSignOut()
+    }
+    
+    private func syncSupabaseSignOut() {
+        guard let supabaseService = supabaseService else {
+            print("Supabase service not available - skipping sign out sync")
+            return
+        }
+        
+        // Background sync - don't block existing functionality
+        Task {
+            do {
+                try await supabaseService.signOut()
+                print("Supabase sign out successful")
+            } catch {
+                print("Supabase sign out failed (non-critical): \(error)")
+                errorTrackingService?.trackError(error, context: ErrorContext(
+                    feature: "AuthenticationService",
+                    action: "supabaseSignOut"
+                ))
+                // Don't affect main sign out flow
+            }
+        }
     }
     
     func refreshTokenIfNeeded() async {
@@ -131,7 +180,8 @@ class AuthenticationService: NSObject {
             appleUserIdentifier: userId, // This would be stored separately in a real app
             email: nil, // Email might not be available after first sign-in
             fullName: nil,
-            accessToken: accessToken
+            accessToken: accessToken,
+            nonce: nil 
         )
         
         isAuthenticated = true
@@ -152,6 +202,52 @@ class AuthenticationService: NSObject {
         authenticationError = nil
         
         print("Authentication successful for user: \(user.id)")
+        
+        // Sync with Supabase if available (non-blocking)
+        syncWithSupabase(user: user)
+    }
+    
+    private func syncWithSupabase(user: AuthenticatedUser) {
+        guard let supabaseService = supabaseService else {
+            print("Supabase service not available - skipping sync")
+            return
+        }
+        
+        // Background sync - don't block existing functionality
+        Task {
+            do {
+                // Use the actual identity token and nonce for Supabase
+                guard let nonce = user.nonce else {
+                    print("Error: Nonce missing for Supabase sync")
+                    errorTrackingService?.trackError(
+                        AuthenticationError.unknown,
+                        context: ErrorContext(
+                            feature: "AuthenticationService",
+                            action: "syncWithSupabase",
+                            metadata: ["error": "nonce_missing"]
+                        )
+                    )
+                    return
+                }
+                
+                try await supabaseService.signInWithAppleIdentity(
+                    user.appleUserIdentifier,
+                    identityToken: user.accessToken,
+                    nonce: nonce,
+                    email: user.email,
+                    fullName: user.fullName
+                )
+                print("Supabase sync successful for user: \(user.id)")
+            } catch {
+                print("Supabase sync failed (non-critical): \(error)")
+                errorTrackingService?.trackError(error, context: ErrorContext(
+                    feature: "AuthenticationService",
+                    action: "supabaseSync",
+                    metadata: ["hasEmail": user.email != nil]
+                ))
+                // Don't affect main authentication flow
+            }
+        }
     }
     
     // MARK: - Keychain Methods
@@ -206,6 +302,35 @@ class AuthenticationService: NSObject {
         
         SecItemDelete(query as CFDictionary)
     }
+    
+    // MARK: - Nonce Helpers for Apple Sign-In
+    
+    private func randomNonceString(length: Int = 32) -> String {
+        precondition(length > 0)
+        var randomBytes = [UInt8](repeating: 0, count: length)
+        let errorCode = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+        if errorCode != errSecSuccess {
+            fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
+        }
+        
+        let charset: [Character] =
+            Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        
+        let nonce = randomBytes.map { byte in
+            charset[Int(byte) % charset.count]
+        }
+        
+        return String(nonce)
+    }
+    
+    private func sha256(_ input: String) -> String {
+        let inputData = Data(input.utf8)
+        let hashedData = SHA256.hash(data: inputData)
+        let hashString = hashedData.compactMap {
+            String(format: "%02x", $0)
+        }.joined()
+        return hashString
+    }
 }
 
 // MARK: - ASAuthorizationControllerDelegate
@@ -217,23 +342,56 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
             let email = appleIDCredential.email
             let fullName = appleIDCredential.fullName
             
-            // In a real app, you would send the authorization code to your backend
-            // to exchange for access and refresh tokens
-            let authorizationCode = appleIDCredential.authorizationCode
-            let identityToken = appleIDCredential.identityToken
+            // Get the identity token - REQUIRED for Supabase
+            guard let identityToken = appleIDCredential.identityToken,
+                  let tokenString = String(data: identityToken, encoding: .utf8) else {
+                print("Error: Failed to get identity token")
+                errorTrackingService?.trackError(
+                    AuthenticationError.invalidCredential,
+                    context: ErrorContext(
+                        feature: "AuthenticationService",
+                        action: "handleAppleIDCredential",
+                        metadata: ["error": "no_identity_token"]
+                    )
+                )
+                authenticationError = .invalidCredential
+                return
+            }
             
-            // For now, we'll create a mock access token
-            let accessToken = "mock_access_token_\(userIdentifier)"
+            // Get the nonce - REQUIRED for Supabase
+            guard let nonce = currentNonce else {
+                print("Error: Invalid state. Nonce not found.")
+                errorTrackingService?.trackError(
+                    AuthenticationError.unknown,
+                    context: ErrorContext(
+                        feature: "AuthenticationService",
+                        action: "handleAppleIDCredential",
+                        metadata: ["error": "invalid_nonce_state"]
+                    )
+                )
+                authenticationError = .unknown
+                return
+            }
+            
+            // Check if this is first time login (Apple provides email and fullName only on first login)
+            let isFirstTimeLogin = (email != nil || fullName != nil)
+            if isFirstTimeLogin {
+                print("First time login detected. Email: \(email ?? "none"), Name: \(fullName?.givenName ?? "none")")
+            }
             
             let user = AuthenticatedUser(
                 id: userIdentifier,
                 appleUserIdentifier: userIdentifier,
                 email: email,
                 fullName: fullName,
-                accessToken: accessToken
+                accessToken: tokenString,
+                nonce: nonce
             )
             
             handleSuccessfulAuthentication(user: user)
+            
+            // Clear the nonce after use
+            currentNonce = nil
         }
     }
     
@@ -258,6 +416,12 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
         }
         
         print("Authentication error: \(error.localizedDescription)")
+        
+        errorTrackingService?.trackError(error, context: ErrorContext(
+            feature: "AuthenticationService",
+            action: "appleSignIn",
+            metadata: ["errorCode": authenticationError?.localizedDescription ?? "unknown"]
+        ))
     }
 }
 
@@ -281,6 +445,7 @@ struct AuthenticatedUser: Codable {
     let email: String?
     let fullName: PersonNameComponents?
     let accessToken: String
+    var nonce: String?
     
     // Custom encoding/decoding for PersonNameComponents
     enum CodingKeys: String, CodingKey {
@@ -315,11 +480,12 @@ struct AuthenticatedUser: Codable {
         }
     }
     
-    init(id: String, appleUserIdentifier: String, email: String?, fullName: PersonNameComponents?, accessToken: String) {
+    init(id: String, appleUserIdentifier: String, email: String?, fullName: PersonNameComponents?, accessToken: String, nonce: String?) {
         self.id = id
         self.appleUserIdentifier = appleUserIdentifier
         self.email = email
         self.fullName = fullName
         self.accessToken = accessToken
+        self.nonce = nonce // Add this line
     }
 }
