@@ -26,9 +26,4 @@ struct Connection: Codable, Identifiable {
     func involvesPiece(_ pieceId: String) -> Bool {
         return pieceAId == pieceId || pieceBId == pieceId
     }
-    
-    // Fix typo compatibility
-    func involvespiece(_ pieceId: String) -> Bool {
-        return involvesPiece(pieceId)
-    }
 }

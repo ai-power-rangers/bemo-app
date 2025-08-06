@@ -81,7 +81,8 @@ The traditional tangram puzzle consists of **7 geometric pieces** that can be ar
 - **Different length edges**: Shorter edge can slide along longer edge
 - **Partial overlap**: A 1-unit edge can connect anywhere along a √2 or 2-unit edge
 - **Multiple pieces on one edge**: Several small edges can line up along one large edge
-- **Sliding constraint**: Shorter piece can slide along the longer edge
+- **Auto-rotation**: System automatically aligns edges when connecting (anti-parallel)
+- **Sliding range**: Stationary edge length minus sliding edge length
 - **Example**: Square's 1-unit edge can slide along medium triangle's √2 edge
 
 #### 2. Vertex-to-Vertex Connections
@@ -96,6 +97,42 @@ The traditional tangram puzzle consists of **7 geometric pieces** that can be ar
 - **Complex junctions**: Multiple pieces can form intricate connection patterns
 - **Constraint stacking**: Multiple connections can fully constrain a piece
 - **Example**: Small triangle vertex touching middle of square's edge
+
+### Connection Rules Matrix
+
+| Connections | Post-Placement Behavior | Constraints |
+|------------|------------------------|-------------|
+| **2+ Points** | **LOCKED** | No manipulation allowed |
+| **1 Vertex** | **ROTATABLE** | Rotate around vertex, snap at 45° intervals |
+| **1 Edge** | **SLIDABLE** | Slide along edge, snap at 0%, 50%, 100% |
+| **0 Points** | **ERROR** | Invalid state - shouldn't occur |
+
+### Post-Placement Manipulation
+
+#### Rotation Mode (Single Vertex Connection)
+- **Activation**: Single vertex-to-vertex connection
+- **Behavior**: Piece rotates around the connected vertex
+- **Constraints**: 
+  - Cannot overlap other pieces
+  - Snaps at 45° intervals (0°, 45°, 90°, 135°, etc.)
+  - Visual arc indicator shows rotation range
+  - Ghost preview during rotation
+
+#### Sliding Mode (Single Edge Connection)
+- **Activation**: Single edge-to-edge connection
+- **Behavior**: Piece slides along the connected edge
+- **Range**: 0 to (longerEdgeLength - shorterEdgeLength)
+- **Constraints**:
+  - Cannot overlap other pieces
+  - Snap points at 0%, 50%, 100% of range
+  - Visual track shows valid slide range
+  - Ghost preview during sliding
+
+#### Locked Mode (Multiple Connections)
+- **Activation**: 2 or more connection points
+- **Behavior**: Piece is fully constrained by geometry
+- **Visual**: Lock icon indicates no manipulation possible
+- **Rationale**: Multiple constraints leave no degrees of freedom
 
 ### Invalid Configurations
 
@@ -183,3 +220,33 @@ The traditional tangram puzzle consists of **7 geometric pieces** that can be ar
 The tangram originated in China during the Song Dynasty (960-1279) and became popular worldwide in the 19th century. The mathematical precision of the piece relationships has made it a valuable tool for teaching geometry, spatial reasoning, and problem-solving.
 
 The name "tangram" possibly derives from the Cantonese "tang" (Chinese) and the Greek "gramma" (something drawn), though its Chinese name "qiqiaoban" means "seven boards of skill."
+
+## Implementation Details
+
+### Multi-Point Alignment Algorithm
+When placing a piece with multiple connection points:
+1. **Single connection**: Simple translation and rotation to align
+2. **Two connections**: Calculate rotation to align vector between points, then translate
+3. **Edge-to-edge**: Auto-rotate to make edges anti-parallel (facing each other)
+
+### Manipulation System Architecture
+```
+ManipulationMode determines post-placement behavior:
+- Analyze connections for each placed piece
+- Single vertex → Enable rotation gesture
+- Single edge → Enable slide gesture  
+- Multiple points → Lock piece (no gestures)
+```
+
+### Visual Feedback Components
+- **Ghost preview**: Semi-transparent piece showing manipulation result
+- **Snap indicators**: Green highlights when near snap positions
+- **Rotation arc**: Blue circle showing rotation pivot and range
+- **Slide track**: Orange dashed line showing valid slide range
+- **Lock icon**: Gray lock for pieces with 2+ connections
+
+### Coordinate System
+- **Normalized space**: Piece definitions (0-2 range)
+- **Visual space**: Screen rendering (×50 scale factor)
+- **World space**: Final transformed positions
+- **Transform order**: Rotation → Translation (world space)

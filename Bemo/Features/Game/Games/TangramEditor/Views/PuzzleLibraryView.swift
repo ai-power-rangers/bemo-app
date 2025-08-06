@@ -345,5 +345,5 @@ struct PuzzleCardView: View {
 }
 
 #Preview {
-    PuzzleLibraryView(viewModel: TangramEditorViewModel(puzzle: nil))
+    PuzzleLibraryView(viewModel: .preview())
 }

@@ -182,9 +182,7 @@ class ValidationService {
     // MARK: - Helpers
     
     private func getTransformedVertices(for piece: TangramPiece) -> [CGPoint] {
-        let baseVertices = TangramGeometry.vertices(for: piece.type)
-        // Apply the visual scale factor
-        let scaledVertices = baseVertices.map { CGPoint(x: $0.x * TangramConstants.visualScale, y: $0.y * TangramConstants.visualScale) }
-        return geometryService.transformVertices(scaledVertices, with: piece.transform)
+        // Use centralized coordinate system for world vertices
+        return TangramCoordinateSystem.getWorldVertices(for: piece)
     }
 }

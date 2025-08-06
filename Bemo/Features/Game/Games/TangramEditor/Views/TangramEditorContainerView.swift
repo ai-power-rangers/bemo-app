@@ -35,6 +35,14 @@ struct TangramEditorContainerView: View {
                             insertion: .move(edge: .trailing),
                             removal: .move(edge: .leading)
                         ))
+                    
+                case .settings:
+                    // Settings view placeholder - to be implemented
+                    Text("Settings")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color(.systemGroupedBackground))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -57,5 +65,5 @@ struct TangramEditorContainerView: View {
 }
 
 #Preview {
-    TangramEditorContainerView(viewModel: TangramEditorViewModel(puzzle: nil))
+    TangramEditorContainerView(viewModel: .preview())
 }

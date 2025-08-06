@@ -26,8 +26,8 @@ class PuzzlePersistenceService {
         createDirectoriesIfNeeded()
         
         // Import bundled puzzles on first launch
-        Task {
-            await importBundledPuzzlesIfNeeded()
+        Task { [weak self] in
+            await self?.importBundledPuzzlesIfNeeded()
         }
     }
     
@@ -59,6 +59,15 @@ class PuzzlePersistenceService {
         
         // Update index
         try await updatePuzzleIndex(updatedPuzzle)
+        
+        // DEVELOPER MODE: Export for bundling
+        #if DEBUG
+        // TODO: Implement exportForBundling method if needed for development
+        // This would export modified bundled puzzles for inclusion in the app bundle
+        // if updatedPuzzle.source == .bundled {
+        //     exportForBundling(puzzle: updatedPuzzle, data: data)
+        // }
+        #endif
         
         return updatedPuzzle
     }

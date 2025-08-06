@@ -16,28 +16,104 @@ class TangramEditorViewModel {
     // MARK: - Type Aliases
     typealias ConnectionPoint = PiecePlacementService.ConnectionPoint
     
-    // MARK: - UI State (Observable)
+    // MARK: - Manipulation Mode
+    enum ManipulationMode: Equatable {
+        case locked                                             // 2+ connections - no movement allowed
+        case rotatable(pivot: CGPoint, snapAngles: [Double])   // 1 vertex connection - can rotate
+        case slidable(edge: Edge, range: ClosedRange<Double>, snapPositions: [Double])  // 1 edge connection - can slide
+        
+        struct Edge: Equatable {
+            let start: CGPoint
+            let end: CGPoint
+            let vector: CGVector  // Normalized direction vector
+        }
+    }
+    
+    // MARK: - Business State (Observable)
     
     var puzzle: TangramPuzzle
     var savedPuzzles: [TangramPuzzle] = []
-    var selectedPieceIds: Set<String> = []
     var validationState: ValidationState = .unknown
-    var editMode: EditMode = .select
     var editorState: EditorState = .idle
-    var navigationState: NavigationState = .library
-    
-    // UI-specific state
-    var selectedCanvasPoints: [ConnectionPoint] = []
-    var selectedPendingPoints: [ConnectionPoint] = []
     var availableConnectionPoints: [ConnectionPoint] = []
-    var pendingPieceRotation: Double = 0
-    var pendingPieceType: PieceType? = nil  // Track the piece type being added
-    var previewTransform: CGAffineTransform?
-    var previewPiece: TangramPiece?
-    private var cachedPendingPiece: TangramPiece? = nil  // Cache to maintain consistent IDs
-    var currentCanvasSize: CGSize = CGSize(width: 800, height: 800)
-    var showSettings = false
-    var showSaveDialog = false
+    var pieceManipulationModes: [String: ManipulationMode] = [:]  // PieceId -> Mode
+    
+    // MARK: - UI State (Observable)
+    
+    var uiState = TangramEditorUIState()
+    
+    // Forwarding properties for backward compatibility
+    var selectedPieceIds: Set<String> { 
+        get { uiState.selectedPieceIds }
+        set { uiState.selectedPieceIds = newValue }
+    }
+    var editMode: TangramEditorUIState.EditMode { 
+        get { uiState.editMode }
+        set { uiState.editMode = newValue }
+    }
+    var navigationState: TangramEditorUIState.NavigationState { 
+        get { uiState.navigationState }
+        set { uiState.navigationState = newValue }
+    }
+    var selectedCanvasPoints: [ConnectionPoint] { 
+        get { uiState.selectedCanvasPoints }
+        set { uiState.selectedCanvasPoints = newValue }
+    }
+    var selectedPendingPoints: [ConnectionPoint] { 
+        get { uiState.selectedPendingPoints }
+        set { uiState.selectedPendingPoints = newValue }
+    }
+    var pendingPieceRotation: Double { 
+        get { uiState.pendingPieceRotation }
+        set { uiState.pendingPieceRotation = newValue }
+    }
+    var pendingPieceType: PieceType? { 
+        get { uiState.pendingPieceType }
+        set { uiState.pendingPieceType = newValue }
+    }
+    var previewTransform: CGAffineTransform? { 
+        get { uiState.previewTransform }
+        set { uiState.previewTransform = newValue }
+    }
+    var previewPiece: TangramPiece? { 
+        get { uiState.previewPiece }
+        set { uiState.previewPiece = newValue }
+    }
+    var currentCanvasSize: CGSize { 
+        get { uiState.currentCanvasSize }
+        set { uiState.currentCanvasSize = newValue }
+    }
+    var showSettings: Bool { 
+        get { uiState.showSettings }
+        set { uiState.showSettings = newValue }
+    }
+    var showSaveDialog: Bool { 
+        get { uiState.showSaveDialog }
+        set { uiState.showSaveDialog = newValue }
+    }
+    var manipulatingPieceId: String? { 
+        get { uiState.manipulatingPieceId }
+        set { uiState.manipulatingPieceId = newValue }
+    }
+    var ghostTransform: CGAffineTransform? { 
+        get { uiState.ghostTransform }
+        set { uiState.ghostTransform = newValue }
+    }
+    var showSnapIndicator: Bool { 
+        get { uiState.showSnapIndicator }
+        set { uiState.showSnapIndicator = newValue }
+    }
+    var showErrorAlert: Bool { 
+        get { uiState.showErrorAlert }
+        set { uiState.showErrorAlert = newValue }
+    }
+    var errorMessage: String { 
+        get { uiState.errorMessage }
+        set { uiState.errorMessage = newValue }
+    }
+    
+    // Error handling state (keeping separate for now)
+    var currentError: TangramEditorError? = nil
     
     // Delegate
     weak var delegate: GameDelegate?
@@ -54,26 +130,41 @@ class TangramEditorViewModel {
     // MARK: - Initialization
     
     init(puzzle: TangramPuzzle? = nil,
-         coordinator: TangramEditorCoordinator? = nil,
-         placementService: PiecePlacementService? = nil,
-         persistenceService: PuzzlePersistenceService? = nil,
-         undoManager: UndoRedoManager? = nil,
-         validationService: ValidationService? = nil) {
+         coordinator: TangramEditorCoordinator,
+         placementService: PiecePlacementService,
+         persistenceService: PuzzlePersistenceService,
+         undoManager: UndoRedoManager,
+         validationService: ValidationService) {
         
-        // Initialize services with defaults if not provided
-        self.coordinator = coordinator ?? TangramEditorCoordinator()
-        self.placementService = placementService ?? PiecePlacementService()
-        self.persistenceService = persistenceService ?? PuzzlePersistenceService()
-        self.undoManager = undoManager ?? UndoRedoManager()
-        self.validationService = validationService ?? ValidationService()
+        // Initialize services (now required, no defaults)
+        self.coordinator = coordinator
+        self.placementService = placementService
+        self.persistenceService = persistenceService
+        self.undoManager = undoManager
+        self.validationService = validationService
         
         // Initialize puzzle
         self.puzzle = puzzle ?? TangramPuzzle(name: "New Puzzle")
         
         // Load saved puzzles on init
-        Task {
-            await loadSavedPuzzles()
+        Task { [weak self] in
+            await self?.loadSavedPuzzles()
         }
+    }
+    
+    // MARK: - Error Handling
+    
+    private func handleError(_ error: TangramEditorError) {
+        currentError = error
+        uiState.showError(error.userMessage)
+        
+        // Log error for debugging (in production this could go to error tracking)
+        print("[TangramEditor] Error: \(error.errorDescription ?? "Unknown error")")
+    }
+    
+    func dismissError() {
+        uiState.dismissError()
+        currentError = nil
     }
     
     // MARK: - UI Actions
@@ -109,20 +200,14 @@ class TangramEditorViewModel {
                 canvasSize: size
             )
             puzzle.pieces.append(piece)
-            print("DEBUG: Added first piece at transform: \(piece.transform)")
-            print("DEBUG: Total pieces now: \(puzzle.pieces.count)")
             editorState = .idle
             clearSelectionState()
+            updateManipulationModes()  // Update manipulation modes after adding piece
             validate()
             notifyPuzzleChanged()
             
         case .pendingSubsequentPiece(let type, let rotation):
             // Place connected piece (convert degrees to radians)
-            print("DEBUG: About to place connected piece of type \(type)")
-            print("DEBUG: Current piece count: \(puzzle.pieces.count)")
-            print("DEBUG: Selected canvas points: \(selectedCanvasPoints)")
-            print("DEBUG: Selected pending points: \(selectedPendingPoints)")
-            
             let result = coordinator.placeConnectedPiece(
                 type: type,
                 rotation: rotation * .pi / 180,
@@ -134,29 +219,30 @@ class TangramEditorViewModel {
             
             switch result {
             case .success(let newPiece):
-                print("DEBUG: Successfully placed piece with transform: \(newPiece.transform)")
-                print("DEBUG: Total pieces after placement: \(puzzle.pieces.count)")
                 editorState = .idle
                 clearSelectionState()
-                
-                // Print all piece transforms before recentering
-                print("DEBUG: Piece transforms before recentering:")
-                for (index, piece) in puzzle.pieces.enumerated() {
-                    print("DEBUG: Piece \(index) (\(piece.type)): \(piece.transform)")
-                }
+                updateManipulationModes()  // Update manipulation modes after adding piece
                 
                 // TODO: Fix recentering - pieces going off screen
                 // recenterPuzzle()  // Temporarily disabled
                 
-                // Print all piece transforms after recentering
-                print("DEBUG: Piece transforms after recentering:")
-                for (index, piece) in puzzle.pieces.enumerated() {
-                    print("DEBUG: Piece \(index) (\(piece.type)): \(piece.transform)")
+            case .failure(let coordinatorError):
+                // Convert coordinator error to TangramEditorError
+                let editorError: TangramEditorError
+                switch coordinatorError {
+                case .invalidConnections:
+                    editorError = .invalidConnectionPoints("Connection types don't match")
+                case .placementCalculationFailed:
+                    editorError = .placementCalculationFailed("Could not calculate valid placement")
+                case .overlappingPieces:
+                    editorError = .overlappingPieces("Piece would overlap with existing pieces")
+                case .validationFailed:
+                    editorError = .validationFailed("Placement validation failed")
+                default:
+                    editorError = .invalidPlacement("Unknown placement error")
                 }
-                
-            case .failure(let error):
-                print("DEBUG: Failed to place piece: \(error)")
-                editorState = .error(error.localizedDescription)
+                handleError(editorError)
+                // Don't change editor state to error - keep current state
             }
             
         default:
@@ -280,7 +366,7 @@ class TangramEditorViewModel {
     // MARK: - Selection Management
     
     func selectPiece(id: String) {
-        if editMode == .select {
+        if uiState.editMode == .select {
             selectedPieceIds.insert(id)
         }
     }
@@ -306,7 +392,7 @@ class TangramEditorViewModel {
     func removePiece(id: String) {
         undoManager.saveState(puzzle: puzzle)
         puzzle.pieces.removeAll { $0.id == id }
-        puzzle.connections.removeAll { $0.involvespiece(id) }
+        puzzle.connections.removeAll { $0.involvesPiece(id) }
         validate()
         notifyPuzzleChanged()
     }
@@ -316,7 +402,7 @@ class TangramEditorViewModel {
         let idsToRemove = selectedPieceIds
         puzzle.pieces.removeAll { idsToRemove.contains($0.id) }
         puzzle.connections.removeAll { connection in
-            idsToRemove.contains { connection.involvespiece($0) }
+            idsToRemove.contains { connection.involvesPiece($0) }
         }
         selectedPieceIds.removeAll()
         validate()
@@ -385,14 +471,14 @@ class TangramEditorViewModel {
         selectedPieceIds.removeAll()
         validate()
         notifyPuzzleChanged()
-        navigationState = .editor
+        uiState.navigationState = .editor
     }
     
     func createNewPuzzle() {
         reset()
         puzzle = TangramPuzzle(name: "New Puzzle", category: .custom, difficulty: .medium)
         editorState = .idle
-        navigationState = .editor
+        uiState.navigationState = .editor
     }
     
     func deletePuzzle(_ puzzleToDelete: TangramPuzzle) async {
@@ -445,7 +531,7 @@ class TangramEditorViewModel {
         puzzle = TangramPuzzle(name: "New Puzzle")
         selectedPieceIds.removeAll()
         validationState = .unknown
-        editMode = .select
+        uiState.editMode = .select
         editorState = .idle
         clearSelectionState()
         undoManager.clearHistory()
@@ -464,64 +550,31 @@ class TangramEditorViewModel {
     
     func recenterPuzzle() {
         guard !puzzle.pieces.isEmpty else { 
-            print("DEBUG: recenterPuzzle called but no pieces exist")
             return 
         }
         
         // Don't recenter if canvas size is not properly set
         guard currentCanvasSize.width > 0 && currentCanvasSize.height > 0 else {
-            print("DEBUG: recenterPuzzle called but canvas size invalid: \(currentCanvasSize)")
             return
         }
         
-        print("DEBUG: recenterPuzzle starting with \(puzzle.pieces.count) pieces")
-        print("DEBUG: currentCanvasSize: \(currentCanvasSize)")
-        
-        // Calculate the bounding box of all pieces
-        var minX = CGFloat.greatestFiniteMagnitude
-        var maxX = -CGFloat.greatestFiniteMagnitude
-        var minY = CGFloat.greatestFiniteMagnitude
-        var maxY = -CGFloat.greatestFiniteMagnitude
-        
-        for (index, piece) in puzzle.pieces.enumerated() {
-            let vertices = TangramGeometry.vertices(for: piece.type)
-            // Scale vertices to match what PieceShape creates
-            let scaledVertices = vertices.map { 
-                CGPoint(x: $0.x * TangramConstants.visualScale, 
-                        y: $0.y * TangramConstants.visualScale)
-            }
-            // Apply the transform to get final screen positions
-            let transformed = scaledVertices.map { $0.applying(piece.transform) }
-            
-            print("DEBUG: Piece \(index) vertices: \(vertices)")
-            print("DEBUG: Piece \(index) transform: \(piece.transform)")
-            print("DEBUG: Piece \(index) transformed vertices: \(transformed)")
-            
-            for vertex in transformed {
-                minX = min(minX, vertex.x)
-                maxX = max(maxX, vertex.x)
-                minY = min(minY, vertex.y)
-                maxY = max(maxY, vertex.y)
-            }
+        // Use centralized coordinate system to get current center
+        guard let currentCenter = TangramCoordinateSystem.getCenter(of: puzzle.pieces) else {
+            return
         }
         
-        print("DEBUG: Bounding box - minX: \(minX), maxX: \(maxX), minY: \(minY), maxY: \(maxY)")
+        // Calculate target center
+        let targetCenter = CGPoint(
+            x: currentCanvasSize.width / 2,
+            y: currentCanvasSize.height / 2
+        )
         
-        // Calculate center offset
-        let centerX = (minX + maxX) / 2
-        let centerY = (minY + maxY) / 2
-        let targetX = currentCanvasSize.width / 2
-        let targetY = currentCanvasSize.height / 2
-        let dx = targetX - centerX
-        let dy = targetY - centerY
+        // Calculate translation needed
+        let dx = targetCenter.x - currentCenter.x
+        let dy = targetCenter.y - currentCenter.y
         
-        print("DEBUG: Current center: (\(centerX), \(centerY))")
-        print("DEBUG: Target center: (\(targetX), \(targetY))")
-        print("DEBUG: Translation needed: dx=\(dx), dy=\(dy)")
-        
-        // Check for NaN or infinite values
+        // Check for valid translation values
         if !dx.isFinite || !dy.isFinite {
-            print("DEBUG: ERROR - dx or dy is not finite! dx=\(dx), dy=\(dy)")
             return
         }
         
@@ -529,16 +582,13 @@ class TangramEditorViewModel {
         undoManager.saveState(puzzle: puzzle)
         for i in 0..<puzzle.pieces.count {
             let oldTransform = puzzle.pieces[i].transform
-            // CRITICAL: Don't use translatedBy - it applies in rotated space!
-            // Instead, directly modify tx and ty for world-space translation
+            // Use direct world-space translation (centralized system pattern)
             var newTransform = puzzle.pieces[i].transform
             newTransform.tx += dx
             newTransform.ty += dy
             puzzle.pieces[i].transform = newTransform
-            print("DEBUG: Updated piece \(i) transform from \(oldTransform) to \(puzzle.pieces[i].transform)")
         }
         
-        print("DEBUG: recenterPuzzle completed")
         notifyPuzzleChanged()
     }
     
@@ -546,7 +596,288 @@ class TangramEditorViewModel {
         guard let piece = puzzle.pieces.first(where: { $0.id == pieceId }) else {
             return []
         }
-        return placementService.getConnectionPoints(for: piece)
+        // Use centralized coordinate system directly for better performance
+        return TangramCoordinateSystem.getConnectionPoints(for: piece)
+    }
+    
+    // MARK: - Manipulation Mode Management
+    
+    /// Determine manipulation mode for a piece based on its connections
+    func determineManipulationMode(for pieceId: String) -> ManipulationMode {
+        guard let piece = puzzle.pieces.first(where: { $0.id == pieceId }) else {
+            return .locked
+        }
+        
+        // Find connections involving this piece
+        let pieceConnections = puzzle.connections.filter { connection in
+            connection.pieceAId == pieceId || connection.pieceBId == pieceId
+        }
+        
+        // Multiple connections = locked
+        if pieceConnections.count >= 2 {
+            return .locked
+        }
+        
+        // Single connection - determine type
+        if let connection = pieceConnections.first {
+            switch connection.type {
+            case .vertexToVertex(let pieceAId, let vertexA, let pieceBId, let vertexB):
+                // Get the pivot point (vertex in world space)
+                let isPieceA = pieceId == pieceAId
+                let vertexIndex = isPieceA ? vertexA : vertexB
+                let worldVertices = TangramCoordinateSystem.getWorldVertices(for: piece)
+                
+                guard vertexIndex < worldVertices.count else {
+                    return .locked
+                }
+                
+                let pivot = worldVertices[vertexIndex]
+                // Snap at 45° intervals
+                let snapAngles = [0, 45, 90, 135, 180, 225, 270, 315].map { Double($0) }
+                
+                return .rotatable(pivot: pivot, snapAngles: snapAngles)
+                
+            case .edgeToEdge(let pieceAId, let edgeA, let pieceBId, let edgeB):
+                // Determine which piece is sliding and which is stationary
+                let isPieceA = pieceId == pieceAId
+                
+                // Get the stationary piece (the one we're sliding along)
+                guard let stationaryPiece = puzzle.pieces.first(where: { 
+                    $0.id == (isPieceA ? pieceBId : pieceAId) 
+                }) else {
+                    return .locked
+                }
+                
+                // Get edge info for the STATIONARY piece (the track we slide along)
+                let stationaryWorldVertices = TangramCoordinateSystem.getWorldVertices(for: stationaryPiece)
+                let stationaryEdges = TangramGeometry.edges(for: stationaryPiece.type)
+                let stationaryEdgeIndex = isPieceA ? edgeB : edgeA
+                
+                guard stationaryEdgeIndex < stationaryEdges.count else {
+                    return .locked
+                }
+                
+                let stationaryEdgeDef = stationaryEdges[stationaryEdgeIndex]
+                let stationaryEdgeStart = stationaryWorldVertices[stationaryEdgeDef.startVertex]
+                let stationaryEdgeEnd = stationaryWorldVertices[stationaryEdgeDef.endVertex]
+                
+                // Calculate the stationary edge vector (this is our sliding track)
+                let dx = stationaryEdgeEnd.x - stationaryEdgeStart.x
+                let dy = stationaryEdgeEnd.y - stationaryEdgeStart.y
+                let stationaryEdgeLength = sqrt(dx * dx + dy * dy)
+                let normalizedVector = CGVector(dx: dx / stationaryEdgeLength, dy: dy / stationaryEdgeLength)
+                
+                // Get the sliding piece's edge length
+                let slidingEdges = TangramGeometry.edges(for: piece.type)
+                let slidingEdgeIndex = isPieceA ? edgeA : edgeB
+                guard slidingEdgeIndex < slidingEdges.count else {
+                    return .locked
+                }
+                
+                let slidingEdgeLength = slidingEdges[slidingEdgeIndex].length * TangramConstants.visualScale
+                
+                // The sliding range is the stationary edge length minus the sliding edge length
+                // This allows the sliding piece to move from one end to the other
+                let slideRange = max(0, stationaryEdgeLength - slidingEdgeLength)
+                
+                // Snap at 0%, 50%, 100% of the range
+                let snapPositions = [0.0, 0.5, 1.0]
+                
+                return .slidable(
+                    edge: ManipulationMode.Edge(
+                        start: stationaryEdgeStart,
+                        end: stationaryEdgeEnd,
+                        vector: normalizedVector
+                    ),
+                    range: 0...slideRange,
+                    snapPositions: snapPositions
+                )
+                
+            case .vertexToEdge:
+                // Vertex on edge - for now, lock it
+                // Could potentially allow sliding along the edge
+                return .locked
+            }
+        }
+        
+        // No connections - shouldn't happen for placed pieces
+        return .locked
+    }
+    
+    /// Update manipulation modes for all pieces
+    func updateManipulationModes() {
+        pieceManipulationModes.removeAll()
+        
+        for piece in puzzle.pieces {
+            let mode = determineManipulationMode(for: piece.id)
+            pieceManipulationModes[piece.id] = mode
+        }
+    }
+    
+    // MARK: - Manipulation Handlers
+    
+    /// Handle rotation gesture for a piece with single vertex connection
+    func handleRotation(pieceId: String, angle: Double) {
+        guard let mode = pieceManipulationModes[pieceId],
+              let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else {
+            return
+        }
+        
+        switch mode {
+        case .rotatable(let pivot, let snapAngles):
+            let piece = puzzle.pieces[pieceIndex]
+            
+            // Convert angle to degrees for snapping
+            let angleDegrees = angle * 180 / .pi
+            
+            // Find nearest snap angle
+            let snappedAngle = snapAngles.min(by: { 
+                abs($0 - angleDegrees) < abs($1 - angleDegrees) 
+            }) ?? angleDegrees
+            
+            // Convert back to radians
+            let snappedRadians = snappedAngle * .pi / 180
+            
+            // Create rotation transform around pivot
+            var transform = CGAffineTransform.identity
+            transform = transform.translatedBy(x: pivot.x, y: pivot.y)
+            transform = transform.rotated(by: snappedRadians)
+            transform = transform.translatedBy(x: -pivot.x, y: -pivot.y)
+            
+            // Apply to piece's base transform
+            let newTransform = piece.transform.concatenating(transform)
+            
+            // Check for overlaps with validation service
+            let testPiece = TangramPiece(type: piece.type, transform: newTransform)
+            let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
+            
+            var hasOverlap = false
+            for other in otherPieces {
+                if validationService.hasAreaOverlap(pieceA: testPiece, pieceB: other) {
+                    hasOverlap = true
+                    break
+                }
+            }
+            
+            if !hasOverlap {
+                // Update ghost preview
+                ghostTransform = newTransform
+                showSnapIndicator = abs(angle - snappedRadians) < 0.1
+                
+                // Store as manipulating piece
+                manipulatingPieceId = pieceId
+            }
+            
+        default:
+            break
+        }
+    }
+    
+    /// Confirm the rotation and apply it to the piece
+    func confirmRotation() {
+        guard let pieceId = manipulatingPieceId,
+              let transform = ghostTransform,
+              let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else {
+            return
+        }
+        
+        undoManager.saveState(puzzle: puzzle)
+        puzzle.pieces[pieceIndex].transform = transform
+        
+        // Clear manipulation state
+        manipulatingPieceId = nil
+        ghostTransform = nil
+        showSnapIndicator = false
+        
+        validate()
+        notifyPuzzleChanged()
+    }
+    
+    /// Handle sliding gesture for a piece with single edge connection
+    func handleSlide(pieceId: String, distance: Double) {
+        guard let mode = pieceManipulationModes[pieceId],
+              let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else {
+            return
+        }
+        
+        switch mode {
+        case .slidable(let edge, let range, let snapPositions):
+            let piece = puzzle.pieces[pieceIndex]
+            
+            // Clamp distance to valid range
+            let clampedDistance = max(range.lowerBound, min(range.upperBound, distance))
+            
+            // Find nearest snap position
+            let normalizedDistance = (clampedDistance - range.lowerBound) / (range.upperBound - range.lowerBound)
+            let snappedPosition = snapPositions.min(by: {
+                abs($0 - normalizedDistance) < abs($1 - normalizedDistance)
+            }) ?? normalizedDistance
+            
+            // Convert back to actual distance
+            let snappedDistance = range.lowerBound + snappedPosition * (range.upperBound - range.lowerBound)
+            
+            // Calculate translation along edge vector
+            let translation = CGVector(
+                dx: edge.vector.dx * snappedDistance,
+                dy: edge.vector.dy * snappedDistance
+            )
+            
+            // Create new transform
+            var newTransform = piece.transform
+            newTransform.tx += translation.dx
+            newTransform.ty += translation.dy
+            
+            // Check for overlaps
+            let testPiece = TangramPiece(type: piece.type, transform: newTransform)
+            let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
+            
+            var hasOverlap = false
+            for other in otherPieces {
+                if validationService.hasAreaOverlap(pieceA: testPiece, pieceB: other) {
+                    hasOverlap = true
+                    break
+                }
+            }
+            
+            if !hasOverlap {
+                // Update ghost preview
+                ghostTransform = newTransform
+                showSnapIndicator = snapPositions.contains(snappedPosition)
+                
+                // Store as manipulating piece
+                manipulatingPieceId = pieceId
+            }
+            
+        default:
+            break
+        }
+    }
+    
+    /// Confirm the slide and apply it to the piece
+    func confirmSlide() {
+        guard let pieceId = manipulatingPieceId,
+              let transform = ghostTransform,
+              let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else {
+            return
+        }
+        
+        undoManager.saveState(puzzle: puzzle)
+        puzzle.pieces[pieceIndex].transform = transform
+        
+        // Clear manipulation state
+        manipulatingPieceId = nil
+        ghostTransform = nil
+        showSnapIndicator = false
+        
+        validate()
+        notifyPuzzleChanged()
+    }
+    
+    /// Cancel any ongoing manipulation
+    func cancelManipulation() {
+        manipulatingPieceId = nil
+        ghostTransform = nil
+        showSnapIndicator = false
     }
     
     // MARK: - Private Helpers
@@ -567,12 +898,8 @@ class TangramEditorViewModel {
     }
     
     private func clearSelectionState() {
-        selectedCanvasPoints.removeAll()
-        selectedPendingPoints.removeAll()
+        uiState.clearSelectionState()
         availableConnectionPoints.removeAll()
-        previewTransform = nil
-        previewPiece = nil
-        cachedPendingPiece = nil  // Clear cached piece
     }
     
     private func notifyPuzzleChanged() {
@@ -587,17 +914,6 @@ class TangramEditorViewModel {
     }
     
     // MARK: - Nested Types
-    
-    enum NavigationState {
-        case library
-        case editor
-    }
-    
-    enum EditMode {
-        case select
-        case move
-        case rotate
-    }
     
     enum EditorState: Equatable {
         case idle

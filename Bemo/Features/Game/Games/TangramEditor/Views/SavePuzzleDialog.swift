@@ -211,5 +211,5 @@ struct SavePuzzleDialog: View {
 }
 
 #Preview {
-    SavePuzzleDialog(viewModel: TangramEditorViewModel(puzzle: nil))
+    SavePuzzleDialog(viewModel: .preview())
 }

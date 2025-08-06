@@ -51,19 +51,16 @@ class ConnectionService {
                 return nil 
             }
             
-            let verticesA = TangramGeometry.vertices(for: pieceA.type)
-            let verticesB = TangramGeometry.vertices(for: pieceB.type)
+            // Use centralized coordinate system for vertex positions
+            let worldVerticesA = TangramCoordinateSystem.getWorldVertices(for: pieceA)
+            let worldVerticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
             
-            guard vertexA < verticesA.count, vertexB < verticesB.count else { 
+            guard vertexA < worldVerticesA.count, vertexB < worldVerticesB.count else { 
                 return nil 
             }
             
-            // Apply the visual scale factor
-            let scaledVertexA = CGPoint(x: verticesA[vertexA].x * TangramConstants.visualScale, y: verticesA[vertexA].y * TangramConstants.visualScale)
-            let scaledVertexB = CGPoint(x: verticesB[vertexB].x * TangramConstants.visualScale, y: verticesB[vertexB].y * TangramConstants.visualScale)
-            
-            let worldVertexA = scaledVertexA.applying(pieceA.transform)
-            let worldVertexB = scaledVertexB.applying(pieceB.transform)
+            let worldVertexA = worldVerticesA[vertexA]
+            let worldVertexB = worldVerticesB[vertexB]
             
             if geometryService.pointsEqual(worldVertexA, worldVertexB) {
                 return Constraint(
@@ -87,27 +84,34 @@ class ConnectionService {
                 return nil 
             }
             
-            let edgeLengthA = edgesA[edgeA].length
-            let edgeLengthB = edgesB[edgeB].length
+            // Use centralized coordinate system for edge positions
+            let worldVerticesA = TangramCoordinateSystem.getWorldVertices(for: pieceA)
+            let worldVerticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
             
-            let verticesA = TangramGeometry.vertices(for: pieceA.type)
+            let edgeStartA = worldVerticesA[edgesA[edgeA].startVertex]
+            let edgeEndA = worldVerticesA[edgesA[edgeA].endVertex]
             
-            // Apply the visual scale factor
-            let scaledStartA = CGPoint(x: verticesA[edgesA[edgeA].startVertex].x * TangramConstants.visualScale, y: verticesA[edgesA[edgeA].startVertex].y * TangramConstants.visualScale)
-            let scaledEndA = CGPoint(x: verticesA[edgesA[edgeA].endVertex].x * TangramConstants.visualScale, y: verticesA[edgesA[edgeA].endVertex].y * TangramConstants.visualScale)
+            // Calculate actual edge lengths in world space
+            let edgeLengthA = geometryService.distance(from: edgeStartA, to: edgeEndA)
+            let edgeStartB = worldVerticesB[edgesB[edgeB].startVertex]
+            let edgeEndB = worldVerticesB[edgesB[edgeB].endVertex]
+            let edgeLengthB = geometryService.distance(from: edgeStartB, to: edgeEndB)
             
-            let edgeStartA = scaledStartA.applying(pieceA.transform)
-            let edgeEndA = scaledEndA.applying(pieceA.transform)
+            // Determine which edge is longer (the track) and which is sliding
+            let (trackStart, trackEnd, trackLength, slidingLength, affectedPiece) = 
+                edgeLengthA > edgeLengthB ? 
+                (edgeStartA, edgeEndA, edgeLengthA, edgeLengthB, pieceBId) :
+                (edgeStartB, edgeEndB, edgeLengthB, edgeLengthA, pieceAId)
             
-            let edgeVector = geometryService.edgeVector(from: edgeStartA, to: edgeEndA)
+            let edgeVector = geometryService.edgeVector(from: trackStart, to: trackEnd)
             let normalizedVector = geometryService.normalizeVector(edgeVector)
             
-            // Calculate sliding range based on edge length difference
-            let slidingRange: Double = max(0, edgeLengthA - edgeLengthB)
+            // Sliding range is the track length minus the sliding piece length
+            let slidingRange: Double = max(0, trackLength - slidingLength)
             
             return Constraint(
                 type: .translation(along: normalizedVector, range: 0...slidingRange),
-                affectedPieceId: pieceBId
+                affectedPieceId: affectedPiece
             )
             
         case .vertexToEdge(let pieceAId, let vertex, let pieceBId, let edge):
@@ -117,21 +121,17 @@ class ConnectionService {
                 return nil
             }
             
-            let verticesA = TangramGeometry.vertices(for: pieceA.type)
+            // Use centralized coordinate system for vertex and edge positions
+            let worldVerticesA = TangramCoordinateSystem.getWorldVertices(for: pieceA)
+            let worldVerticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
             let edgesB = TangramGeometry.edges(for: pieceB.type)
             
-            guard vertex < verticesA.count, edge < edgesB.count else {
+            guard vertex < worldVerticesA.count, edge < edgesB.count else {
                 return nil
             }
             
-            let verticesB = TangramGeometry.vertices(for: pieceB.type)
-            let scaledStartB = CGPoint(x: verticesB[edgesB[edge].startVertex].x * TangramConstants.visualScale, 
-                                       y: verticesB[edgesB[edge].startVertex].y * TangramConstants.visualScale)
-            let scaledEndB = CGPoint(x: verticesB[edgesB[edge].endVertex].x * TangramConstants.visualScale, 
-                                     y: verticesB[edgesB[edge].endVertex].y * TangramConstants.visualScale)
-            
-            let edgeStartB = scaledStartB.applying(pieceB.transform)
-            let edgeEndB = scaledEndB.applying(pieceB.transform)
+            let edgeStartB = worldVerticesB[edgesB[edge].startVertex]
+            let edgeEndB = worldVerticesB[edgesB[edge].endVertex]
             
             let edgeVector = geometryService.edgeVector(from: edgeStartB, to: edgeEndB)
             let normalizedVector = geometryService.normalizeVector(edgeVector)
@@ -218,14 +218,9 @@ class ConnectionService {
             return false 
         }
         
-        // Apply the visual scale factor
-        let baseVerticesA = TangramGeometry.vertices(for: pieceA.type)
-        let scaledVerticesA = baseVerticesA.map { CGPoint(x: $0.x * TangramConstants.visualScale, y: $0.y * TangramConstants.visualScale) }
-        let verticesA = geometryService.transformVertices(scaledVerticesA, with: pieceA.transform)
-        
-        let baseVerticesB = TangramGeometry.vertices(for: pieceB.type)
-        let scaledVerticesB = baseVerticesB.map { CGPoint(x: $0.x * TangramConstants.visualScale, y: $0.y * TangramConstants.visualScale) }
-        let verticesB = geometryService.transformVertices(scaledVerticesB, with: pieceB.transform)
+        // Use centralized coordinate system for world vertices
+        let verticesA = TangramCoordinateSystem.getWorldVertices(for: pieceA)
+        let verticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
         
         let tolerance: CGFloat = 1e-5
         

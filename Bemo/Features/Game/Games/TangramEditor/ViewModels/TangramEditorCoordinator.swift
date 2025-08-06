@@ -96,31 +96,23 @@ class TangramEditorCoordinator {
             return .failure(.placementCalculationFailed)
         }
         
-        // Validate placement doesn't overlap
-        // Need to scale vertices before transformation to match rendering
-        let baseNewVertices = TangramGeometry.vertices(for: type)
-        let scaledNewVertices = baseNewVertices.map { 
-            CGPoint(x: $0.x * TangramConstants.visualScale, 
-                    y: $0.y * TangramConstants.visualScale)
-        }
-        let newVertices = geometryService.transformVertices(
-            scaledNewVertices,
-            with: newPiece.transform
-        )
+        // Validate placement doesn't overlap using centralized coordinate system
+        let newVertices = TangramCoordinateSystem.getWorldVertices(for: newPiece)
+        
+        print("DEBUG OVERLAP: Checking overlap for new piece \(type)")
+        print("DEBUG OVERLAP: New piece vertices: \(newVertices)")
         
         for existingPiece in existingPieces {
-            let baseExistingVertices = TangramGeometry.vertices(for: existingPiece.type)
-            let scaledExistingVertices = baseExistingVertices.map { 
-                CGPoint(x: $0.x * TangramConstants.visualScale, 
-                        y: $0.y * TangramConstants.visualScale)
-            }
-            let existingVertices = geometryService.transformVertices(
-                scaledExistingVertices,
-                with: existingPiece.transform
-            )
+            let existingVertices = TangramCoordinateSystem.getWorldVertices(for: existingPiece)
+            
+            print("DEBUG OVERLAP: Checking against \(existingPiece.type)")
+            print("DEBUG OVERLAP: Existing vertices: \(existingVertices)")
             
             if geometryService.polygonsOverlap(newVertices, existingVertices) {
+                print("ERROR: Overlap detected between new \(type) and existing \(existingPiece.type)")
                 return .failure(.overlappingPieces)
+            } else {
+                print("DEBUG OVERLAP: No overlap with \(existingPiece.type)")
             }
         }
         
@@ -158,28 +150,12 @@ class TangramEditorCoordinator {
         piece: TangramPiece,
         existingPieces: [TangramPiece]
     ) -> Bool {
-        // Scale vertices before transformation to match rendering
-        let basePieceVertices = TangramGeometry.vertices(for: piece.type)
-        let scaledPieceVertices = basePieceVertices.map { 
-            CGPoint(x: $0.x * TangramConstants.visualScale, 
-                    y: $0.y * TangramConstants.visualScale)
-        }
-        let pieceVertices = geometryService.transformVertices(
-            scaledPieceVertices,
-            with: piece.transform
-        )
+        // Use centralized coordinate system for overlap checking
+        let pieceVertices = TangramCoordinateSystem.getWorldVertices(for: piece)
         
         // Check for overlaps
         for existing in existingPieces {
-            let baseExistingVertices = TangramGeometry.vertices(for: existing.type)
-            let scaledExistingVertices = baseExistingVertices.map { 
-                CGPoint(x: $0.x * TangramConstants.visualScale, 
-                        y: $0.y * TangramConstants.visualScale)
-            }
-            let existingVertices = geometryService.transformVertices(
-                scaledExistingVertices,
-                with: existing.transform
-            )
+            let existingVertices = TangramCoordinateSystem.getWorldVertices(for: existing)
             
             if geometryService.polygonsOverlap(pieceVertices, existingVertices) {
                 return false
@@ -275,7 +251,7 @@ class TangramEditorCoordinator {
         
         // Find connections involving this piece
         for connection in puzzle.connections {
-            if connection.involvespiece(pieceId) {
+            if connection.involvesPiece(pieceId) {
                 constraints.append(connection.constraint)
             }
         }

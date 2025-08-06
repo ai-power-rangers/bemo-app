@@ -135,6 +135,13 @@ struct TangramEditorCanvasView: View {
                 )
             }
         }
+        .alert("Placement Error", isPresented: $viewModel.showErrorAlert) {
+            Button("OK") { 
+                viewModel.dismissError() 
+            }
+        } message: {
+            Text(viewModel.errorMessage)
+        }
     }
     
     // MARK: - Canvas View
@@ -177,12 +184,35 @@ struct TangramEditorCanvasView: View {
     private func pieceWithInteractions(_ piece: TangramPiece) -> some View {
         ZStack {
             PieceView(
-                piece: piece,
+                piece: viewModel.manipulatingPieceId == piece.id && viewModel.ghostTransform != nil ? 
+                    TangramPiece(type: piece.type, transform: viewModel.ghostTransform!) : piece,
                 isSelected: viewModel.selectedPieceIds.contains(piece.id),
-                isGhost: false,
+                isGhost: viewModel.manipulatingPieceId == piece.id,
                 showConnectionPoints: false,
                 availableConnectionPoints: [],
-                selectedConnectionPoints: []
+                selectedConnectionPoints: [],
+                manipulationMode: viewModel.pieceManipulationModes[piece.id],
+                onRotation: { angle in
+                    viewModel.handleRotation(pieceId: piece.id, angle: angle)
+                },
+                onSlide: { distance in
+                    viewModel.handleSlide(pieceId: piece.id, distance: distance)
+                },
+                onManipulationEnd: {
+                    if viewModel.manipulatingPieceId == piece.id {
+                        // Determine if it was rotation or slide based on mode
+                        if let mode = viewModel.pieceManipulationModes[piece.id] {
+                            switch mode {
+                            case .rotatable:
+                                viewModel.confirmRotation()
+                            case .slidable:
+                                viewModel.confirmSlide()
+                            case .locked:
+                                break
+                            }
+                        }
+                    }
+                }
             )
             .onTapGesture(count: 2) {
                 if canSelectPieces {
@@ -370,5 +400,5 @@ struct PendingPieceOverlay: View {
 }
 
 #Preview {
-    TangramEditorCanvasView(viewModel: TangramEditorViewModel())
+    TangramEditorCanvasView(viewModel: .preview())
 }

@@ -29,38 +29,21 @@ class PiecePlacementService {
     
     /// Place first piece at center of canvas
     func placeFirstPiece(type: PieceType, rotation: Double, canvasSize: CGSize) -> TangramPiece {
-        let centerX = canvasSize.width / 2
-        let centerY = canvasSize.height / 2
+        let canvasCenter = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
         
-        // Get the piece's bounding box to find its center
-        let vertices = TangramGeometry.vertices(for: type)
-        let scaledVertices = vertices.map { 
-            CGPoint(x: $0.x * TangramConstants.visualScale, 
-                    y: $0.y * TangramConstants.visualScale)
-        }
-        
-        // Find the center of the piece geometry
-        let minX = scaledVertices.map { $0.x }.min() ?? 0
-        let maxX = scaledVertices.map { $0.x }.max() ?? 0
-        let minY = scaledVertices.map { $0.y }.min() ?? 0
-        let maxY = scaledVertices.map { $0.y }.max() ?? 0
-        let pieceCenter = CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2)
-        
-        // Create transform that:
-        // 1. Translates piece center to origin
-        // 2. Rotates around origin
-        // 3. Translates to canvas center
-        var transform = CGAffineTransform.identity
-        transform = transform.translatedBy(x: centerX, y: centerY)
-        transform = transform.rotated(by: rotation)
-        transform = transform.translatedBy(x: -pieceCenter.x, y: -pieceCenter.y)
+        // Use centralized coordinate system for transform creation
+        let transform = TangramCoordinateSystem.createCenteringTransform(
+            type: type,
+            targetCenter: canvasCenter,
+            rotation: rotation
+        )
         
         let piece = TangramPiece(type: type, transform: transform)
-        print("DEBUG PPS: Piece center: \(pieceCenter)")
-        print("DEBUG PPS: Canvas center: (\(centerX), \(centerY))")
+        
+        print("DEBUG PPS: Canvas center: \(canvasCenter)")
         print("DEBUG PPS: Final piece transform: \(transform)")
         print("DEBUG PPS: Final piece bounds check:")
-        let transformedVertices = scaledVertices.map { $0.applying(transform) }
+        let transformedVertices = TangramCoordinateSystem.getWorldVertices(for: piece)
         print("DEBUG PPS: Transformed vertices: \(transformedVertices)")
         
         return piece
@@ -79,141 +62,59 @@ class PiecePlacementService {
         // We need to use the actual local positions based on the piece geometry
         print("DEBUG PPS: Incoming piece point positions: \(connections.map { $0.piecePoint.position })")
         
-        // Recalculate local positions from the piece geometry
-        let vertices = TangramGeometry.vertices(for: type)
-        let edges = TangramGeometry.edges(for: type)
-        
+        // Recalculate local positions from the piece geometry using centralized system
         var localPiecePositions: [CGPoint] = []
         for conn in connections {
-            let localPos: CGPoint
-            switch conn.piecePoint.type {
-            case .vertex(let index):
-                // Use scaled vertex position
-                localPos = CGPoint(x: vertices[index].x * TangramConstants.visualScale,
-                                 y: vertices[index].y * TangramConstants.visualScale)
-            case .edge(let index):
-                // Calculate edge midpoint and scale
-                let edge = edges[index]
-                let start = vertices[edge.startVertex]
-                let end = vertices[edge.endVertex]
-                let midpoint = CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
-                localPos = CGPoint(x: midpoint.x * TangramConstants.visualScale,
-                                 y: midpoint.y * TangramConstants.visualScale)
-            }
+            let localPos = TangramCoordinateSystem.getLocalConnectionPoint(
+                for: type,
+                connectionType: conn.piecePoint.type
+            )
             localPiecePositions.append(localPos)
             print("DEBUG PPS: Calculated local position for \(conn.piecePoint.type): \(localPos)")
         }
         
-        // Start with base rotation
-        var transform = CGAffineTransform.identity.rotated(by: rotation)
-        
-        // Calculate alignment based on connection points
-        if connections.count == 1 {
-            // Single point connection
-            let canvasPos = connections[0].canvasPoint.position
-            let localPiecePos = localPiecePositions[0]
-            
-            print("DEBUG PPS: Single point connection - canvas: \(canvasPos), local: \(localPiecePos)")
-            
-            // Apply rotation to local position
-            let rotatedPiecePos = localPiecePos.applying(transform)
-            print("DEBUG PPS: Rotated piece position: \(rotatedPiecePos)")
-            
-            // Calculate translation to align points
-            let dx = canvasPos.x - rotatedPiecePos.x
-            let dy = canvasPos.y - rotatedPiecePos.y
-            print("DEBUG PPS: Translation needed: dx=\(dx), dy=\(dy)")
-            
-            // CRITICAL: Set translation directly in world space, don't use translatedBy
-            transform.tx = dx  
-            transform.ty = dy
-            print("DEBUG PPS: Final transform: \(transform)")
-            
-        } else if connections.count >= 2 {
-            // Multi-point connection - prioritize vertex-to-vertex connections for alignment
-            // A vertex-to-vertex connection is more precise than edge-to-edge
-            
-            // Create array with indices to maintain correspondence with localPiecePositions
-            let indexedConnections = connections.enumerated().map { (index: $0, connection: $1) }
-            
-            // Sort to prioritize vertex-to-vertex connections
-            let sortedIndexedConnections = indexedConnections.sorted { (a, b) in
-                // Check if each connection is vertex-to-vertex
-                let aIsVertexToVertex = switch (a.connection.canvasPoint.type, a.connection.piecePoint.type) {
-                case (.vertex, .vertex): true
-                default: false
-                }
-                
-                let bIsVertexToVertex = switch (b.connection.canvasPoint.type, b.connection.piecePoint.type) {
-                case (.vertex, .vertex): true
-                default: false
-                }
-                
-                // Vertex-to-vertex connections come first
-                if aIsVertexToVertex && !bIsVertexToVertex {
-                    return true
-                } else if !aIsVertexToVertex && bIsVertexToVertex {
-                    return false
-                } else {
-                    // Keep original order for same types
-                    return a.index < b.index
-                }
-            }
-            
-            // Extract sorted connections and their corresponding local positions
-            let sortedConnections = sortedIndexedConnections.map { $0.connection }
-            let sortedLocalPositions = sortedIndexedConnections.map { localPiecePositions[$0.index] }
-            
-            // Use only the first point for placement (like the old implementation)
-            // This ensures at least one connection is perfect
-            let canvasPos = sortedConnections[0].canvasPoint.position
-            let localPiecePos = sortedLocalPositions[0]
-            
-            // Log which connection type we're using for primary alignment
-            let primaryConnectionType = switch (sortedConnections[0].canvasPoint.type, sortedConnections[0].piecePoint.type) {
-            case (.vertex, .vertex): "vertex-to-vertex"
-            case (.edge, .edge): "edge-to-edge"
-            case (.vertex, .edge): "vertex-to-edge"
-            case (.edge, .vertex): "edge-to-vertex"
-            }
-            
-            print("DEBUG PPS: Multi-point connection - using \(primaryConnectionType) for alignment")
-            print("DEBUG PPS: Canvas position: \(canvasPos)")
-            print("DEBUG PPS: Local piece position: \(localPiecePos)")
-            
-            // Apply rotation
-            transform = CGAffineTransform.identity.rotated(by: rotation)
-            let rotatedPiecePos = localPiecePos.applying(transform)
-            
-            print("DEBUG PPS: Rotated piece position: \(rotatedPiecePos)")
-            
-            // Calculate translation to align the first point perfectly
-            let dx = canvasPos.x - rotatedPiecePos.x
-            let dy = canvasPos.y - rotatedPiecePos.y
-            
-            print("DEBUG PPS: Translation needed: dx=\(dx), dy=\(dy)")
-            
-            // Set translation directly in world space
-            transform.tx = dx
-            transform.ty = dy
-            
-            // Log how well other points align
-            for i in 1..<min(sortedConnections.count, sortedLocalPositions.count) {
-                let otherCanvasPos = sortedConnections[i].canvasPoint.position
-                let otherLocalPos = sortedLocalPositions[i]
-                let rotatedOtherPos = otherLocalPos.applying(transform)
-                let error = CGPoint(x: otherCanvasPos.x - rotatedOtherPos.x, 
-                                   y: otherCanvasPos.y - rotatedOtherPos.y)
-                print("DEBUG PPS: Point \(i) alignment - canvas=\(otherCanvasPos), piece=\(rotatedOtherPos), error=\(error)")
-            }
-            
-            print("DEBUG PPS: Final transform: \(transform)")
+        // Use centralized coordinate system for alignment
+        let connectionPairs = connections.enumerated().map { index, conn in
+            (canvas: conn.canvasPoint, piece: conn.piecePoint)
         }
         
-        // Check for NaN or infinite values in the final transform
-        if !transform.a.isFinite || !transform.b.isFinite || !transform.c.isFinite || 
-           !transform.d.isFinite || !transform.tx.isFinite || !transform.ty.isFinite {
-            print("DEBUG PPS: ERROR - Transform contains non-finite values: \(transform)")
+        // Calculate transform using new multi-point alignment with auto-rotation for edges
+        guard let transform = TangramCoordinateSystem.calculateAlignmentTransform(
+            pieceType: type,
+            baseRotation: rotation,
+            connections: connectionPairs,
+            existingPieces: existingPieces
+        ) else {
+            print("DEBUG PPS: Failed to calculate alignment transform")
+            return nil
+        }
+        
+        print("DEBUG PPS: Successfully calculated transform for \(connections.count) connection(s)")
+        print("DEBUG PPS: Final transform: \(transform)")
+        
+        // Log connection satisfaction for debugging
+        if connections.count >= 2 {
+            // Verify that all connection points are satisfied
+            for (index, conn) in connections.enumerated() {
+                let localPos = localPiecePositions[index]
+                let transformedPos = localPos.applying(transform)
+                let canvasPos = conn.canvasPoint.position
+                let error = sqrt(pow(canvasPos.x - transformedPos.x, 2) + pow(canvasPos.y - transformedPos.y, 2))
+                
+                let connectionType = switch (conn.canvasPoint.type, conn.piecePoint.type) {
+                case (.vertex, .vertex): "vertex-to-vertex"
+                case (.edge, .edge): "edge-to-edge"
+                case (.vertex, .edge): "vertex-to-edge"
+                case (.edge, .vertex): "edge-to-vertex"
+                }
+                
+                print("DEBUG PPS: Connection \(index) (\(connectionType)) - error: \(error)")
+            }
+        }
+        
+        // Check for valid transform using centralized system
+        if !TangramCoordinateSystem.isValidTransform(transform) {
+            print("DEBUG PPS: ERROR - Transform is invalid: \(transform)")
             return nil
         }
         
@@ -227,6 +128,16 @@ class PiecePlacementService {
         enum PointType: Equatable, Hashable {
             case vertex(index: Int)
             case edge(index: Int)
+            
+            var isVertex: Bool {
+                if case .vertex = self { return true }
+                return false
+            }
+            
+            var isEdge: Bool {
+                if case .edge = self { return true }
+                return false
+            }
         }
         let type: PointType
         let position: CGPoint
@@ -243,41 +154,8 @@ class PiecePlacementService {
     }
     
     func getConnectionPoints(for piece: TangramPiece, scale: CGFloat = 1) -> [ConnectionPoint] {
-        var points: [ConnectionPoint] = []
-        let vertices = TangramGeometry.vertices(for: piece.type)
-        
-        // Scale vertices by visualScale BEFORE applying transform (matching ConnectionService pattern)
-        let scaledVertices = vertices.map { 
-            CGPoint(x: $0.x * TangramConstants.visualScale, 
-                    y: $0.y * TangramConstants.visualScale) 
-        }
-        let transformedVertices = geometryService.transformVertices(scaledVertices, with: piece.transform)
-        
-        // Add vertex points (no additional scaling needed - already in screen coordinates)
-        for (index, vertex) in transformedVertices.enumerated() {
-            points.append(ConnectionPoint(
-                type: .vertex(index: index),
-                position: vertex,
-                pieceId: piece.id
-            ))
-        }
-        
-        // Add edge midpoints (no additional scaling needed)
-        for i in 0..<transformedVertices.count {
-            let start = transformedVertices[i]
-            let end = transformedVertices[(i + 1) % transformedVertices.count]
-            let midpoint = CGPoint(
-                x: (start.x + end.x) / 2,
-                y: (start.y + end.y) / 2
-            )
-            points.append(ConnectionPoint(
-                type: .edge(index: i),
-                position: midpoint,
-                pieceId: piece.id
-            ))
-        }
-        
-        return points
+        // Use centralized coordinate system for connection points
+        return TangramCoordinateSystem.getConnectionPoints(for: piece)
     }
     
     // MARK: - Transform Calculations

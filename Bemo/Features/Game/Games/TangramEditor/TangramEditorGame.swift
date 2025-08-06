@@ -20,6 +20,7 @@ class TangramEditorGame: Game {
     
     private var viewModel: TangramEditorViewModel?
     private weak var delegate: GameDelegate?
+    private var dependencyContainer: TangramEditorDependencyContainer?
     
     // State management
     private var cachedPuzzleData: Data?
@@ -51,6 +52,8 @@ class TangramEditorGame: Game {
         self.delegate = delegate
         
         // Create a wrapper view that handles MainActor initialization
+        // Note: Access control is handled by AppCoordinator - the editor won't be presented
+        // unless appropriate permissions are granted
         return AnyView(
             TangramEditorInitializerView(
                 onInitialize: { [weak self] in
@@ -65,7 +68,13 @@ class TangramEditorGame: Game {
     @MainActor
     private func initializeViewModel(delegate: GameDelegate) async {
         if viewModel == nil {
-            viewModel = TangramEditorViewModel(puzzle: nil)
+            // Create dependency container if not already created
+            if dependencyContainer == nil {
+                dependencyContainer = TangramEditorDependencyContainer()
+            }
+            
+            // Create view model with proper dependency injection
+            viewModel = dependencyContainer?.makeViewModel(puzzle: nil)
             viewModel?.delegate = delegate
             
             // Set up state change notification
@@ -150,66 +159,9 @@ private struct TangramEditorInitializerView: View {
     }
 }
 
-// MARK: - Parent Access Control
+// MARK: - Access Control Note
 
-extension TangramEditorGame {
-    
-    /// Check if the current user has permission to access the editor
-    var isAccessible: Bool {
-        // Check if no active child profile is selected (parent mode)
-        // In parent mode, activeProfile would be nil
-        // This follows the pattern where parents manage the app when no child is selected
-        
-        // Note: This logic assumes that:
-        // 1. When a child profile is active, we're in child mode
-        // 2. When no profile is active, we're in parent/admin mode
-        // 3. The tangram editor is a parent-only tool
-        
-        // Future enhancement: Add PIN or biometric authentication for additional security
-        return !hasActiveChildProfile()
-    }
-    
-    /// Check if there's an active child profile
-    private func hasActiveChildProfile() -> Bool {
-        // Check UserDefaults for active profile
-        // This matches the ProfileService implementation
-        let activeProfileKey = "com.bemo.activeProfile"
-        return UserDefaults.standard.data(forKey: activeProfileKey) != nil
-    }
-    
-    /// Message to show when access is denied
-    var accessDeniedMessage: String {
-        "The Tangram Editor is only available to parents and educators. Please switch to parent mode to access this feature."
-    }
-    
-    /// Check access and provide appropriate view
-    func makeAccessControlledView(delegate: GameDelegate) -> AnyView {
-        if isAccessible {
-            return makeGameView(delegate: delegate)
-        } else {
-            return AnyView(
-                VStack(spacing: 20) {
-                    Image(systemName: "lock.shield")
-                        .font(.system(size: 60))
-                        .foregroundColor(.secondary)
-                    
-                    Text("Parent Access Required")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    
-                    Text(accessDeniedMessage)
-                        .multilineTextAlignment(.center)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
-                    
-                    Button("Return to Games") {
-                        delegate.gameDidRequestQuit()
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(.systemBackground))
-            )
-        }
-    }
-}
+// Access control is handled by AppCoordinator.
+// The TangramEditor is a parent-only tool and the AppCoordinator
+// ensures it's only presented when appropriate permissions are granted.
+// No need for additional access checks within the game itself.
