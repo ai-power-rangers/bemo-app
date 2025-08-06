@@ -28,12 +28,34 @@ class AppConfiguration {
     }
     
     var postHogHost: String {
-        guard let host = Bundle.main.object(forInfoDictionaryKey: "PostHogHost") as? String,
-              !host.isEmpty else {
-            assertionFailure("PostHogHost not found in Info.plist")
-            return "https://us.i.posthog.com"
+        return "https://us.i.posthog.com"
+    }
+    
+    // MARK: - Supabase Configuration
+    
+    var supabaseURL: String {
+        guard let url = Bundle.main.object(forInfoDictionaryKey: "SupabaseURL") as? String,
+              !url.isEmpty,
+              url != "YOUR_SUPABASE_PROJECT_URL" else {
+            print("[AppConfiguration] SupabaseURL value from Info.plist: \(Bundle.main.object(forInfoDictionaryKey: "SupabaseURL") ?? "nil")")
+            assertionFailure("SupabaseURL not found or not configured in Info.plist")
+            return ""
         }
-        return host
+
+        // Add this line to remove the escape characters
+        let cleanedURL = url.replacingOccurrences(of: "\\", with: "")
+
+        print("[AppConfiguration] SupabaseURL loaded: \(cleanedURL)")
+        return cleanedURL // Return the cleaned URL
+    }    
+    var supabaseAnonKey: String {
+        guard let key = Bundle.main.object(forInfoDictionaryKey: "SupabaseAnonKey") as? String,
+              !key.isEmpty,
+              key != "YOUR_SUPABASE_ANON_KEY" else {
+            assertionFailure("SupabaseAnonKey not found or not configured in Info.plist")
+            return ""
+        }
+        return key
     }
     
     // MARK: - Debug Helpers

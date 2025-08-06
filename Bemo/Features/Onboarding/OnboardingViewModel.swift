@@ -38,6 +38,27 @@ class OnboardingViewModel {
         if authenticationService.isAuthenticated, let user = authenticationService.currentUser {
             onAuthenticationComplete(user)
         }
+        
+        // Monitor authentication changes
+        Task { @MainActor in
+            withObservationTracking {
+                _ = authenticationService.isAuthenticated
+            } onChange: {
+                Task { @MainActor in
+                    self.checkAuthenticationStatus()
+                    self.setupAuthenticationObserver() // Re-register for future changes
+                }
+            }
+        }
+    }
+    
+    private func checkAuthenticationStatus() {
+        if authenticationService.isAuthenticated,
+           let user = authenticationService.currentUser {
+            isLoading = false
+            authenticationError = authenticationService.authenticationError
+            onAuthenticationComplete(user)
+        }
     }
     
     func configureAppleSignInRequest(_ request: ASAuthorizationAppleIDRequest) {
@@ -82,28 +103,9 @@ class OnboardingViewModel {
     }
     
     private func handleAppleIDCredential(_ credential: ASAuthorizationAppleIDCredential) {
-        let userIdentifier = credential.user
-        let email = credential.email
-        let fullName = credential.fullName
-        
-        // Create authenticated user
-        let accessToken = "mock_access_token_\(userIdentifier)"
-        let user = AuthenticatedUser(
-            id: userIdentifier,
-            appleUserIdentifier: userIdentifier,
-            email: email,
-            fullName: fullName,
-            accessToken: accessToken
-        )
-        
-        // Simulate the authentication service logic directly
-        authenticationService.handleSuccessfulAuthentication(user: user)
-        
-        // Check if authentication was successful
-        if authenticationService.isAuthenticated {
-            onAuthenticationComplete(user)
-        }
-        
+        // This should not be called anymore - the AuthenticationService
+        // handles the credential directly via its delegate methods
+        print("Warning: OnboardingViewModel.handleAppleIDCredential should not be called")
         isLoading = false
     }
     

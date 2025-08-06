@@ -20,6 +20,9 @@ class ProfileService {
     private let activeProfileKey = "com.bemo.activeProfile"
     private let childProfilesKey = "com.bemo.childProfiles"
     
+    // Optional Supabase integration - will be injected after initialization
+    private weak var supabaseService: SupabaseService?
+    
     // Returns active profile or nil if no profiles exist
     var currentProfile: UserProfile? {
         return activeProfile
@@ -37,6 +40,39 @@ class ProfileService {
         // Set first profile as active if no active profile but profiles exist
         if activeProfile == nil && !childProfiles.isEmpty {
             setActiveProfile(childProfiles.first!)
+        }
+    }
+    
+    // MARK: - Supabase Integration
+    
+    func setSupabaseService(_ supabaseService: SupabaseService) {
+        self.supabaseService = supabaseService
+    }
+    
+    func syncWithSupabase() {
+        guard let supabaseService = supabaseService else {
+            print("Supabase service not available - skipping profile sync")
+            return
+        }
+        
+        // Background sync from Supabase to local storage
+        Task {
+            do {
+                let remoteProfiles = try await supabaseService.fetchChildProfiles()
+                await MainActor.run {
+                    // Merge remote profiles with local profiles, keeping local as source of truth
+                    // This preserves existing functionality while adding backend sync
+                    for remoteProfile in remoteProfiles {
+                        if !childProfiles.contains(where: { $0.id == remoteProfile.id }) {
+                            childProfiles.append(remoteProfile)
+                        }
+                    }
+                    saveChildProfiles()
+                    print("Profile sync from Supabase completed")
+                }
+            } catch {
+                print("Profile sync from Supabase failed (non-critical): \(error)")
+            }
         }
     }
     
@@ -61,6 +97,9 @@ class ProfileService {
         childProfiles.append(profile)
         saveChildProfiles()
         print("Child profile added: \(profile.name)")
+        
+        // Sync to Supabase if available (non-blocking)
+        syncProfileToSupabase(profile)
     }
     
     func deleteChildProfile(_ profileId: String) {
@@ -77,6 +116,9 @@ class ProfileService {
         }
         
         print("Child profile deleted: \(profileId)")
+        
+        // Sync deletion to Supabase if available (non-blocking)
+        syncProfileDeletionToSupabase(profileId)
     }
     
     func updateChildProfile(_ profile: UserProfile) {
@@ -89,6 +131,9 @@ class ProfileService {
                 activeProfile = profile
                 saveActiveProfile()
             }
+            
+            // Sync to Supabase if available (non-blocking)
+            syncProfileToSupabase(profile)
         }
     }
     
@@ -97,8 +142,41 @@ class ProfileService {
     func updateXP(_ xp: Int, for profileId: String) {
         guard activeProfile?.id == profileId else { return }
         
+        let oldXP = activeProfile?.totalXP ?? 0
         activeProfile?.totalXP = xp
         saveActiveProfile()
+        
+        // Update in childProfiles array as well
+        if let index = childProfiles.firstIndex(where: { $0.id == profileId }) {
+            childProfiles[index].totalXP = xp
+            saveChildProfiles()
+            
+            // Sync to Supabase if available (non-blocking)
+            syncProfileToSupabase(childProfiles[index])
+            
+            // Track XP change as a learning event
+            if xp > oldXP {
+                trackXPGainEvent(profileId: profileId, xpGained: xp - oldXP)
+            }
+        }
+    }
+    
+    private func trackXPGainEvent(profileId: String, xpGained: Int) {
+        guard let supabaseService = supabaseService else { return }
+        
+        Task {
+            do {
+                try await supabaseService.trackLearningEvent(
+                    childProfileId: profileId,
+                    eventType: "xp_gained",
+                    gameId: "system",
+                    xpAwarded: xpGained,
+                    eventData: ["source": "manual_update"]
+                )
+            } catch {
+                print("Failed to track XP gain event (non-critical): \(error)")
+            }
+        }
     }
     
     
@@ -167,6 +245,44 @@ class ProfileService {
             totalXP: 0,
             preferences: UserPreferences()
         )
+    }
+    
+    // MARK: - Private Supabase Sync Methods
+    
+    private func syncProfileToSupabase(_ profile: UserProfile) {
+        guard let supabaseService = supabaseService else {
+            print("Supabase service not available - skipping profile sync")
+            return
+        }
+        
+        // Background sync - don't block existing functionality
+        Task {
+            do {
+                try await supabaseService.syncChildProfile(profile)
+                print("Profile synced to Supabase: \(profile.name)")
+            } catch {
+                print("Profile sync to Supabase failed (non-critical): \(error)")
+                // Don't affect main profile functionality
+            }
+        }
+    }
+    
+    private func syncProfileDeletionToSupabase(_ profileId: String) {
+        guard let supabaseService = supabaseService else {
+            print("Supabase service not available - skipping profile deletion sync")
+            return
+        }
+        
+        // Background sync - don't block existing functionality  
+        Task {
+            do {
+                try await supabaseService.deleteChildProfile(profileId)
+                print("Profile deletion synced to Supabase: \(profileId)")
+            } catch {
+                print("Profile deletion sync to Supabase failed (non-critical): \(error)")
+                // Don't affect main profile functionality
+            }
+        }
     }
 }
 

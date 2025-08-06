@@ -17,6 +17,7 @@ class DependencyContainer {
     let cvService: CVService
     let profileService: ProfileService
     let analyticsService: AnalyticsService
+    let supabaseService: SupabaseService
     
     init() {
         self.authenticationService = AuthenticationService()
@@ -24,6 +25,7 @@ class DependencyContainer {
         self.profileService = ProfileService()
         self.cvService = CVService()
         self.analyticsService = AnalyticsService()
+        self.supabaseService = SupabaseService(authService: authenticationService)
         
         // Initialize services that need setup
         setupServices()
@@ -33,6 +35,13 @@ class DependencyContainer {
         // Perform any necessary service initialization
         cvService.initialize()
         
-        // when needed in the future
+        // Setup Supabase integration with existing services
+        authenticationService.setSupabaseService(supabaseService)
+        profileService.setSupabaseService(supabaseService)
+        
+        // Trigger initial profile sync from Supabase if user is already authenticated
+        if authenticationService.isAuthenticated {
+            profileService.syncWithSupabase()
+        }
     }
 }
