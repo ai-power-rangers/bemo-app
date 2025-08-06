@@ -14,6 +14,7 @@ import SwiftUI
 struct GameLobbyView: View {
     @State var viewModel: GameLobbyViewModel
     @State private var showingSideMenu = false
+    @State private var showingFontTest = false // Temporary for font testing
     
     var body: some View {
         ZStack {
@@ -29,19 +30,30 @@ struct GameLobbyView: View {
                     }
                 )
                 
-                // Welcome Message
-                VStack(alignment: .leading, spacing: BemoTheme.Spacing.xsmall) {
-                    Text("Hello,")
-                        .font(BemoTheme.font(for: .heading2))
-                        .foregroundColor(BemoTheme.Colors.primary)
+                // Welcome Message & Font Test Button
+                HStack {
+                    VStack(alignment: .leading, spacing: BemoTheme.Spacing.xsmall) {
+                        Text("Hello,")
+                            .font(BemoTheme.font(for: .heading2))
+                            .foregroundColor(BemoTheme.Colors.primary)
+                        
+                        Text("\(viewModel.displayProfile?.name ?? "Friend")!")
+                            .font(BemoTheme.font(for: .heading2))
+                            .foregroundColor(BemoTheme.Colors.primary)
+                        
+                        Text("Nice to see you again!")
+                            .font(BemoTheme.font(for: .body))
+                            .foregroundColor(BemoTheme.Colors.gray2)
+                    }
                     
-                    Text("\(viewModel.displayProfile?.name ?? "Friend")!")
-                        .font(BemoTheme.font(for: .heading2))
-                        .foregroundColor(BemoTheme.Colors.primary)
+                    Spacer()
                     
-                    Text("Nice to see you again!")
-                        .font(BemoTheme.font(for: .body))
-                        .foregroundColor(BemoTheme.Colors.gray2)
+                    // Temporary Font Test Button
+                    Button("🔤") {
+                        showingFontTest = true
+                    }
+                    .font(.title2)
+                    .padding(.trailing)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, BemoTheme.Spacing.xlarge)
@@ -102,6 +114,9 @@ struct GameLobbyView: View {
                     viewModel.hideProfileSelectionModal()
                 }
             )
+        }
+        .sheet(isPresented: $showingFontTest) {
+            FontTestView()
         }
         .alert("Authentication Required", isPresented: $viewModel.showAuthenticationError) {
             Button("OK") {}

@@ -10,6 +10,7 @@
 // USAGE: Import and use BemoTheme.Colors.primary, BemoTheme.font(for: .heading1), etc.
 
 import SwiftUI
+import UIKit
 
 /// Centralized access to the Bemo app's design system for colors, fonts, and styling
 enum BemoTheme {
@@ -73,10 +74,35 @@ enum BemoTheme {
     }
     
     static func font(for style: FontStyle) -> Font {
-        // Check if custom SINK font is available
-        // For now, using system font with appropriate weights
-        // TODO: Replace with .custom("SINK", size: style.size) when font file is added
-        return .system(size: style.size, weight: style.weight, design: .rounded)
+        let fontName = sinkFontName(for: style)
+        
+        // Try to use custom SINK font, fall back to system font if not available
+        if UIFont(name: fontName, size: style.size) != nil {
+            return .custom(fontName, size: style.size)
+        } else {
+            // Fallback to system font with appropriate weight
+            return .system(size: style.size, weight: style.weight, design: .rounded)
+        }
+    }
+    
+    /// Returns the appropriate font name based on the style
+    private static func sinkFontName(for style: FontStyle) -> String {
+        switch style {
+        case .heading1, .heading2, .heading3:
+            // Use Sink for headings
+            return "Sink"
+        case .body, .caption:
+            // Use Roxstar for body text and captions
+            return "Roxstar"
+        }
+    }
+    
+    /// Debug function to list all available fonts (useful for development)
+    static func listAvailableFonts() {
+        for family in UIFont.familyNames.sorted() {
+            let names = UIFont.fontNames(forFamilyName: family)
+            print("Family: \(family) Font names: \(names)")
+        }
     }
     
     // MARK: - Spacing & Layout
