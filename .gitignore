@@ -23,4 +23,5 @@ Bemo/Config/Release.xcconfig
 
 *.xcodeproj/project.pbxproj
 
-#sds
+# .doc
+.doc/
