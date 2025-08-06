@@ -12,18 +12,24 @@
 import Foundation
 
 class DependencyContainer {
+    let errorTrackingService: ErrorTrackingService
     let authenticationService: AuthenticationService
     let apiService: APIService
     let cvService: CVService
     let profileService: ProfileService
     let analyticsService: AnalyticsService
+    let supabaseService: SupabaseService
     
     init() {
+        // Initialize error tracking first so it's available for other services
+        self.errorTrackingService = ErrorTrackingService()
+        
         self.authenticationService = AuthenticationService()
         self.apiService = APIService(authenticationService: authenticationService)
         self.profileService = ProfileService()
         self.cvService = CVService()
         self.analyticsService = AnalyticsService()
+        self.supabaseService = SupabaseService(authService: authenticationService, errorTracking: errorTrackingService)
         
         // Initialize services that need setup
         setupServices()
@@ -33,6 +39,17 @@ class DependencyContainer {
         // Perform any necessary service initialization
         cvService.initialize()
         
-        // when needed in the future
+        // Setup Supabase integration with existing services
+        authenticationService.setSupabaseService(supabaseService)
+        profileService.setSupabaseService(supabaseService)
+        
+        // Setup error tracking integration
+        authenticationService.setErrorTrackingService(errorTrackingService)
+        profileService.setErrorTrackingService(errorTrackingService)
+        
+        // Trigger initial profile sync from Supabase if user is already authenticated
+        if authenticationService.isAuthenticated {
+            profileService.syncWithSupabase()
+        }
     }
 }
