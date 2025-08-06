@@ -17,6 +17,7 @@ class AnalyticsService {
     // Session tracking
     private var gameSessionStartTime: Date?
     private var currentGameId: String?
+    private var isConfigured = false
     
     init() {
         setupPostHog()
@@ -24,8 +25,17 @@ class AnalyticsService {
     
     private func setupPostHog() {
         let configuration = AppConfiguration.shared
+        let apiKey = configuration.postHogAPIKey
+        
+        // Skip PostHog setup if API key is not configured
+        guard !apiKey.isEmpty else {
+            print("⚠️ PostHog API key not configured - analytics disabled")
+            isConfigured = false
+            return
+        }
+        
         var config = PostHogConfig(
-            apiKey: configuration.postHogAPIKey,
+            apiKey: apiKey,
             host: configuration.postHogHost
         )
         
@@ -37,16 +47,22 @@ class AnalyticsService {
         config.flushAt = 10  // Batch events for efficiency
 
         PostHogSDK.shared.setup(config)
+        isConfigured = true
     }
     
     
     func clearUser() {
+        guard isConfigured else { return }
         PostHogSDK.shared.reset()
     }
     
     // MARK: - Game Events
     
     func trackGameSelected(gameId: String, gameTitle: String, userId: String) {
+        guard isConfigured else { 
+            print("📊 Analytics (disabled): Game selected - \(gameTitle)")
+            return 
+        }
         PostHogSDK.shared.capture(
             "game_selected",
             properties: [
@@ -64,6 +80,10 @@ class AnalyticsService {
         gameSessionStartTime = Date()
         currentGameId = gameId
         
+        guard isConfigured else { 
+            print("📊 Analytics (disabled): Game session started - \(gameTitle)")
+            return 
+        }
         PostHogSDK.shared.capture(
             "game_session_started",
             properties: [
@@ -84,6 +104,12 @@ class AnalyticsService {
         
         let sessionDuration = Date().timeIntervalSince(startTime)
         
+        guard isConfigured else { 
+            print("📊 Analytics (disabled): Game session ended - Duration: \(String(format: "%.1f", sessionDuration / 60)) minutes")
+            gameSessionStartTime = nil
+            currentGameId = nil
+            return 
+        }
         PostHogSDK.shared.capture(
             "game_session_ended",
             properties: [

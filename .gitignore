@@ -13,5 +13,12 @@ Package.resolved
 # Pods
 Pods/
 
-# Configuration files with API keys
+# Configuration files with secrets
+# NOTE: You may want to gitignore these in production to avoid exposing API keys
+# For now, we're including them but make sure to update with real keys before deploying
+Bemo/Config/Debug.xcconfig
+Bemo/Config/Release.xcconfig
+
+Bemo.xcodeproj/project.pbxproj
+
 Config/

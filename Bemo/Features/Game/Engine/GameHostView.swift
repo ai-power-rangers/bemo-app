@@ -15,30 +15,41 @@ struct GameHostView: View {
     @State var viewModel: GameHostViewModel
     
     var body: some View {
+        let config = viewModel.game.gameUIConfig
+        
         ZStack {
-            // Game content
-            viewModel.gameView
-                .ignoresSafeArea()
+            // Game content with conditional safe area handling
+            Group {
+                if config.respectsSafeAreas {
+                    viewModel.gameView
+                } else {
+                    viewModel.gameView
+                        .ignoresSafeArea()
+                }
+            }
             
             // Overlay UI elements
             VStack {
+                // Top bar (quit button and progress)
                 HStack {
-                    // Back button
-                    Button(action: {
-                        viewModel.handleQuitRequest()
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.largeTitle)
-                            .foregroundColor(.white)
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
+                    // Quit button (if enabled)
+                    if config.showQuitButton {
+                        Button(action: {
+                            viewModel.handleQuitRequest()
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.largeTitle)
+                                .foregroundColor(.white)
+                                .background(Color.black.opacity(0.5))
+                                .clipShape(Circle())
+                        }
+                        .padding()
                     }
-                    .padding()
                     
                     Spacer()
                     
-                    // Progress indicator
-                    if viewModel.showProgress {
+                    // Progress indicator (if enabled and showing)
+                    if config.showProgressBar && viewModel.showProgress {
                         ProgressView(value: viewModel.progress)
                             .progressViewStyle(LinearProgressViewStyle())
                             .frame(width: 200)
@@ -46,23 +57,35 @@ struct GameHostView: View {
                     }
                 }
                 
+                // Custom top bar if provided
+                if let customTopBar = config.customTopBar {
+                    customTopBar
+                }
+                
                 Spacer()
                 
+                // Custom bottom bar if provided
+                if let customBottomBar = config.customBottomBar {
+                    customBottomBar
+                }
+                
                 // Bottom controls
-                HStack {
-                    // Hint button
-                    Button(action: {
-                        viewModel.requestHint()
-                    }) {
-                        Label("Hint", systemImage: "lightbulb.fill")
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
+                if config.showHintButton {
+                    HStack {
+                        // Hint button
+                        Button(action: {
+                            viewModel.requestHint()
+                        }) {
+                            Label("Hint", systemImage: "lightbulb.fill")
+                                .padding()
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                        }
+                        .padding()
+                        
+                        Spacer()
                     }
-                    .padding()
-                    
-                    Spacer()
                 }
             }
         }

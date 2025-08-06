@@ -17,6 +17,9 @@ class TangramEditorGame: Game {
     let recommendedAge = 18...99 // Parent-only tool
     let thumbnailImageName = "tangram_editor_thumb"
     
+    // Use editor configuration (respects safe areas, no hints/progress)
+    let gameUIConfig = GameUIConfig.editorConfig
+    
     private var viewModel: TangramEditorViewModel?
     private weak var delegate: GameDelegate?
     

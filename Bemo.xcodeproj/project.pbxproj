@@ -16,6 +16,16 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXContainerItemProxy section */
+		BD643C682E42EB6D005BC720 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 91D79E992E41895600EDD4EF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 91D79EA02E41895600EDD4EF;
+			remoteInfo = Bemo;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		91D79EA12E41895600EDD4EF /* Bemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Bemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BD0449822E4275C2003B72D1 /* BemoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BemoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -208,7 +218,7 @@
 		BD0449872E4275C2003B72D1 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 91D79EA02E41895600EDD4EF /* Bemo */;
-			targetProxy = BD0449862E4275C2003B72D1 /* PBXContainerItemProxy */;
+			targetProxy = BD643C682E42EB6D005BC720 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
