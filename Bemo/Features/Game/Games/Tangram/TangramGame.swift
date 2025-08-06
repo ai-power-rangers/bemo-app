@@ -33,36 +33,76 @@ class TangramGame: Game {
         )
     }
     
+    // MARK: - Services
+    
+    private var viewModel: TangramGameViewModel?
+    private let supabaseService: SupabaseService?
+    
+    // MARK: - Initialization
+    
+    init(supabaseService: SupabaseService? = nil) {
+        self.supabaseService = supabaseService
+    }
+    
     // MARK: - Game Protocol Methods
     
     func makeGameView(delegate: GameDelegate) -> AnyView {
-        // For now, return a placeholder view until we build the full game view
-        AnyView(
-            TangramGameView(
-                viewModel: TangramGameViewModel(delegate: delegate)
-            )
+        let vm = TangramGameViewModel(delegate: delegate, supabaseService: supabaseService)
+        self.viewModel = vm
+        return AnyView(
+            TangramGameView(viewModel: vm)
         )
     }
     
     func processRecognizedPieces(_ pieces: [RecognizedPiece]) -> PlayerActionOutcome {
-        // Phase 2: Will implement CV processing here
-        // For now, return no action
+        // Convert CV pieces directly to PlacedPieces (no color mapping needed)
+        let placedPieces = pieces.map { PlacedPiece(from: $0) }
+        
+        // Pass to view model for processing
+        viewModel?.processCVInput(placedPieces)
+        
+        // Determine outcome based on piece state
+        if placedPieces.isEmpty {
+            return .noAction
+        }
+        
+        // Only validate pieces that are placed and stationary
+        let stationaryPieces = placedPieces.filter { $0.isPlacedLongEnough() }
+        
+        // Check if any pieces are correctly placed
+        let correctPieces = stationaryPieces.filter { $0.validationState == .correct }
+        if !correctPieces.isEmpty {
+            return .correctPlacement(points: correctPieces.count * 10)
+        }
+        
+        // Check if pieces are being moved
+        let movingPieces = placedPieces.filter { $0.isMoving }
+        if !movingPieces.isEmpty {
+            return .stateUpdated // User is actively working
+        }
+        
+        // Check if pieces are placed but incorrect
+        let incorrectPieces = stationaryPieces.filter { $0.validationState == .incorrect }
+        if !incorrectPieces.isEmpty {
+            return .incorrectPlacement
+        }
+        
         return .noAction
     }
     
     func reset() {
-        // Reset game state to beginning
-        // Will be implemented when we have game state management
+        viewModel?.resetGame()
     }
     
     func saveState() -> Data? {
         // Save current game state for persistence
-        // Will be implemented with game state model
-        return nil
+        guard let gameState = viewModel?.gameState else { return nil }
+        return try? JSONEncoder().encode(gameState)
     }
     
     func loadState(from data: Data) {
         // Restore game state from saved data
-        // Will be implemented with game state model
+        guard let gameState = try? JSONDecoder().decode(PuzzleGameState.self, from: data) else { return }
+        viewModel?.restoreGameState(gameState)
     }
 }

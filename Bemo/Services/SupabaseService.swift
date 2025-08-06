@@ -679,6 +679,201 @@ struct LearningStats {
     let favoriteGame: String?
 }
 
+// MARK: - Tangram Puzzle Storage
+
+extension SupabaseService {
+    
+    /// Fetch all official tangram puzzles from Supabase
+    func fetchOfficialTangramPuzzles() async throws -> [TangramPuzzleDTO] {
+        guard isConnected else {
+            throw SupabaseError.notAuthenticated
+        }
+        
+        do {
+            let response = try await client
+                .from("tangram_puzzles")
+                .select()
+                .eq("is_official", value: true)
+                .not("published_at", operator: .is, value: "null")
+                .order("category", ascending: true)
+                .order("order_index", ascending: true)
+                .order("difficulty", ascending: true)
+                .execute()
+            
+            let puzzles = try JSONDecoder().decode([TangramPuzzleDTO].self, from: response.data)
+            print("Supabase: Fetched \(puzzles.count) official tangram puzzles")
+            return puzzles
+            
+        } catch {
+            print("Supabase: Failed to fetch tangram puzzles - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "fetchOfficialTangramPuzzles"
+            ))
+            throw error
+        }
+    }
+    
+    /// Save a tangram puzzle to Supabase (developer use only)
+    func saveTangramPuzzle(_ puzzle: TangramPuzzleDTO) async throws {
+        guard isConnected else {
+            throw SupabaseError.notAuthenticated
+        }
+        
+        do {
+            // Upsert puzzle (insert or update based on puzzle_id)
+            try await client
+                .from("tangram_puzzles")
+                .upsert(puzzle)
+                .execute()
+            
+            print("Supabase: Saved tangram puzzle - \(puzzle.puzzle_id)")
+            
+        } catch {
+            print("Supabase: Failed to save tangram puzzle - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "saveTangramPuzzle",
+                metadata: ["puzzle_id": puzzle.puzzle_id]
+            ))
+            throw error
+        }
+    }
+    
+    /// Upload thumbnail for a tangram puzzle
+    func uploadTangramThumbnail(puzzleId: String, thumbnailData: Data) async throws -> String {
+        guard isConnected else {
+            throw SupabaseError.notAuthenticated
+        }
+        
+        do {
+            let path = "\(puzzleId).png"
+            
+            // Upload to storage bucket (updated API)
+            _ = try await client.storage
+                .from("tangram-thumbnails")
+                .upload(
+                    path,
+                    data: thumbnailData,
+                    options: FileOptions(
+                        cacheControl: "3600",
+                        contentType: "image/png",
+                        upsert: true
+                    )
+                )
+            
+            // Get public URL
+            let publicURL = try client.storage
+                .from("tangram-thumbnails")
+                .getPublicURL(path: path)
+            
+            print("Supabase: Uploaded thumbnail for puzzle \(puzzleId)")
+            return publicURL.absoluteString
+            
+        } catch {
+            print("Supabase: Failed to upload thumbnail - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "uploadTangramThumbnail",
+                metadata: ["puzzle_id": puzzleId]
+            ))
+            throw error
+        }
+    }
+    
+    /// Download thumbnail for a tangram puzzle
+    func downloadTangramThumbnail(puzzleId: String) async throws -> Data {
+        do {
+            let path = "\(puzzleId).png"
+            let data = try await client.storage
+                .from("tangram-thumbnails")
+                .download(path: path)
+            
+            return data
+            
+        } catch {
+            print("Supabase: Failed to download thumbnail - \(error)")
+            // Don't track as error - thumbnails might not exist for all puzzles
+            throw error
+        }
+    }
+    
+    /// Get tangram puzzles by category
+    func fetchTangramPuzzlesByCategory(_ category: String) async throws -> [TangramPuzzleDTO] {
+        guard isConnected else {
+            throw SupabaseError.notAuthenticated
+        }
+        
+        do {
+            let response = try await client
+                .from("tangram_puzzles")
+                .select()
+                .eq("is_official", value: true)
+                .eq("category", value: category)
+                .not("published_at", operator: .is, value: "null")
+                .order("order_index", ascending: true)
+                .order("difficulty", ascending: true)
+                .execute()
+            
+            return try JSONDecoder().decode([TangramPuzzleDTO].self, from: response.data)
+            
+        } catch {
+            print("Supabase: Failed to fetch puzzles for category \(category) - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "fetchTangramPuzzlesByCategory",
+                metadata: ["category": category]
+            ))
+            throw error
+        }
+    }
+}
+
+// MARK: - Tangram Puzzle DTO
+
+struct TangramPuzzleDTO: Codable {
+    let id: UUID?
+    let puzzle_id: String
+    let name: String
+    let category: String
+    let difficulty: Int
+    let puzzle_data: Data  // Entire TangramPuzzle stored as JSONB
+    let solution_checksum: String?
+    let is_official: Bool
+    let tags: [String]?
+    let order_index: Int?
+    let thumbnail_path: String?
+    let published_at: String?
+    let metadata: Data?  // JSONB stored as Data
+    
+    // Convert to TangramPuzzle model
+    func toTangramPuzzle() throws -> TangramPuzzle {
+        // Decode the entire puzzle from the puzzle_data JSONB column
+        let puzzle = try JSONDecoder().decode(TangramPuzzle.self, from: puzzle_data)
+        return puzzle
+    }
+    
+    // Create DTO from TangramPuzzle
+    init(from puzzle: TangramPuzzle) throws {
+        self.id = nil  // Let database generate
+        self.puzzle_id = puzzle.id
+        self.name = puzzle.name
+        self.category = puzzle.category.rawValue
+        self.difficulty = puzzle.difficulty.rawValue
+        
+        // Encode the entire puzzle as JSONB
+        self.puzzle_data = try JSONEncoder().encode(puzzle)
+        
+        self.solution_checksum = puzzle.solutionChecksum
+        self.is_official = true  // All saved puzzles are official
+        self.tags = puzzle.tags
+        self.order_index = 0  // Default order
+        self.thumbnail_path = nil  // Set after upload
+        self.published_at = ISO8601DateFormatter().string(from: Date())  // Publish immediately
+        self.metadata = try JSONEncoder().encode([:] as [String: String])
+    }
+}
+
 // MARK: - Error Types
 
 enum SupabaseError: Error, LocalizedError {

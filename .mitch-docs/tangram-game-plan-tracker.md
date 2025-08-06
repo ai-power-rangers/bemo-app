@@ -7,7 +7,7 @@
 - ❌ Blocked
 
 ## Overall Progress
-**Current Phase:** Phase 1 Complete, Ready for Phase 2
+**Current Phase:** Phase 2 In Progress (Tasks 2.1 & 2.2 Complete)
 **Start Date:** 2025-08-06
 **Last Update:** 2025-08-06
 **Target Completion:** ~2025-08-23
@@ -61,33 +61,50 @@
 
 ## Phase 2: CV Integration & Piece Tracking (3-4 days)
 
-### Task 2.1: Implement CV Processing ⬜
-**Files to Create:**
-- `/Bemo/Features/Game/Games/TangramPuzzle/Models/PlacedPiece.swift`
+### Task 2.1: Implement CV Processing ✅
+**Files Created:**
+- `/Bemo/Features/Game/Games/Tangram/Models/PlacedPiece.swift` ✅
+- `/Bemo/Features/Game/Games/Tangram/Services/PieceColorMappingService.swift` ✅
 
-**Files to Modify:**
-- `TangramPuzzleGame.swift` (add processRecognizedPieces)
+**Files Modified:**
+- `TangramGame.swift` (added processRecognizedPieces, CV integration) ✅
+- `TangramGameViewModel.swift` (added CV processing, placed pieces tracking) ✅
+- `PuzzleGameState.swift` (updated to use new PlacedPiece model) ✅
 
-### Task 2.2: Build Anchor Management System ⬜
-**Files to Create:**
-- `/Bemo/Features/Game/Games/TangramPuzzle/Services/AnchorManagementService.swift`
+### Task 2.2: Build Anchor Management System ✅
+**Implementation:**
+- Anchor management integrated directly into `TangramGameViewModel` ✅
+- Dynamic anchor selection based on piece area and centrality ✅
+- Relative position calculations implemented in `PlacedPiece` ✅
 
-### Task 2.3: Create CV Mock System ⬜
-**Files to Create:**
-- `/Bemo/Features/Game/Games/TangramPuzzle/Views/CVMockControlView.swift`
+### Task 2.3: Create CV Mock System ✅
+**Files Created:**
+- `/Bemo/Features/Game/Games/Tangram/Views/CVMockControlView.swift` ✅
+
+### Task 2.3b: Refactor CV Data Model ✅
+**Major Refactoring Completed:**
+- Updated `RecognizedPiece` to use pieceTypeId instead of colors/shapes ✅
+- Added velocity, isMoving, frameNumber for 30fps tracking ✅
+- Updated `PlacedPiece` to track movement and placement duration ✅
+- Removed `PieceColorMappingService` (no longer needed) ✅
+- Updated `CVMockControlView` to generate realistic CV data ✅
 
 ### Task 2.4: Visualize Piece Tracking ⬜
 **Files to Modify:**
-- `PuzzleCanvasView.swift` (add overlay rendering)
-- `TangramPuzzleViewModel.swift` (add tracking state)
+- `PuzzleCanvasView.swift` (add overlay rendering for placed pieces)
+- `TangramGameView.swift` (integrate CV mock controls)
 
 **Testable Outcomes:**
-- [ ] CV mock menu appears
-- [ ] Can simulate piece placement
-- [ ] Pieces appear when recognized
-- [ ] First piece becomes anchor
-- [ ] Anchor switches on removal
-- [ ] Relative positions update
+- [x] CV processing pipeline complete
+- [x] Direct piece ID mapping (no color mapping needed)
+- [x] Anchor selection logic working
+- [x] Relative position tracking
+- [x] Movement/velocity tracking implemented
+- [x] CV mock controls created
+- [ ] CV mock menu integrated in game view
+- [ ] Pieces appear when recognized on canvas
+- [ ] Visual feedback for anchor piece
+- [ ] Movement state visualization
 
 ---
 
@@ -191,6 +208,42 @@
 
 ---
 
+## CRITICAL ARCHITECTURE UNDERSTANDING
+
+### The Full Game Flow
+1. **AppCoordinator** manages app state and navigation
+2. **GameLobbyViewModel** creates game instances with SupabaseService injection
+3. **Game selected** → AppCoordinator navigates to `.game(selectedGame)`
+4. **GameHostView** created with GameHostViewModel
+5. **GameHostViewModel**:
+   - Receives the Game instance
+   - Implements GameDelegate for callbacks
+   - Subscribes to CVService for piece recognition
+   - Forwards CV pieces to game via `processRecognizedPieces()`
+   - Manages session tracking with SupabaseService
+
+### Existing Puzzle Infrastructure
+- **SupabaseService** has `TangramPuzzleDTO` for cloud storage
+- **PuzzlePersistenceService** handles local caching and Supabase sync
+- Puzzles are fetched from Supabase and cached locally
+- The TangramEditor saves puzzles to Supabase for official distribution
+
+### THE CRITICAL MISTAKE: Inappropriate Coupling
+**What I Did Wrong:**
+- Directly imported TangramEditor models (TangramPiece with CGAffineTransform)
+- Used editor's internal structures instead of game-specific models
+- Created unnecessary dependencies on editor implementation
+
+**Why This Is Wrong:**
+- TangramEditor = Developer tool for creating puzzles
+- TangramGame = Player game for solving puzzles
+- They have DIFFERENT concerns and should NOT share implementation
+
+**The Fix:**
+- TangramGame should have its own simplified models
+- Only use puzzle DATA from persistence/Supabase
+- No dependency on editor's internal types (CGAffineTransform, ConnectionData)
+
 ## Important Lessons Learned
 
 ### CRITICAL: Always Read the Actual Code First
@@ -200,6 +253,11 @@ Before making ANY changes:
 3. **Check method visibility** - Private vs public methods in services
 4. **Check return types** - Data vs UIImage, etc.
 5. **Check property existence** - Don't assume properties exist (like isValid)
+
+### Architecture Principles Violated
+1. **Separation of Concerns** - Editor and Game mixed together
+2. **Single Responsibility** - Models trying to serve two masters
+3. **Dependency Inversion** - Game depending on editor internals
 
 ### @Observable Limitations
 - Cannot use computed properties that reference other instance properties
@@ -212,7 +270,74 @@ Before making ANY changes:
 
 ---
 
+## Refactoring Progress (COMPLETED)
+
+### ✅ Step 1: Create Game-Specific Models
+**Created:**
+- `GamePuzzleData` - Simplified puzzle model with just target positions
+- `GamePuzzleData.TargetPiece` - Target position/rotation for validation
+- `GameProgress` - Progress tracking without editor dependencies
+
+### ✅ Step 2: Fix PuzzleGameState
+**Fixed:**
+- Removed duplicate PlacedPiece definition (using CV-focused one)
+- Fixed optional binding error (placedPieces is not optional)
+- Updated to use GamePuzzleData instead of TangramPuzzle
+
+### ✅ Step 3: Update TangramGameViewModel
+**Updated:**
+- Changed selectedPuzzle to GamePuzzleData
+- Fixed restoreGameState to not use optional binding
+- Convert TangramPuzzle to GamePuzzleData on selection
+
+### ✅ Step 4: Create New Canvas View
+**Created:**
+- `GamePuzzleCanvasView` - Simplified canvas without editor dependencies
+- `SimplePieceShape` - Basic shape rendering without TangramGeometry
+- Removed old PuzzleCanvasView that depended on editor types
+
+### ✅ Step 5: Simplify Data Flow
+```
+Supabase (TangramPuzzleDTO) 
+    ↓
+PuzzlePersistenceService (caching/sync)
+    ↓
+PuzzleLibraryService (for game)
+    ↓
+TangramGame (gameplay only)
+```
+
+The game should ONLY care about:
+- Target piece positions for validation
+- CV input processing
+- Progress tracking
+- Completion detection
+
+NOT editor concerns like:
+- CGAffineTransform manipulation
+- Connection editing
+- Piece locking/unlocking
+
+---
+
 ## Daily Updates
+
+### Day 2 - Architecture Refactor
+- **Major Refactoring Completed:**
+  - ✅ Decoupled TangramGame from TangramEditor
+  - ✅ Created GamePuzzleData - game-specific puzzle model
+  - ✅ Fixed PuzzleGameState to use simplified models
+  - ✅ Created GamePuzzleCanvasView without editor dependencies
+  - ✅ Removed CGAffineTransform and ConnectionData dependencies
+  - ✅ Fixed optional binding error in restoreGameState
+- **Architecture Improvements:**
+  - Game now uses simplified models focused on CV validation
+  - No longer depends on editor implementation details
+  - Proper separation of concerns between editor and game
+- **What's Working Now:**
+  - Clean architecture with game-specific models
+  - CV processing pipeline with proper data types
+  - Canvas rendering without editor dependencies
 
 ### Day 1 - 2025-08-06
 - **Tasks completed:**
@@ -221,9 +346,29 @@ Before making ANY changes:
   - ✅ Game launches from lobby
   - ✅ Puzzle selection works
   - ✅ Puzzles display as silhouettes
+  - ✅ Phase 2 Task 2.1: CV Processing implementation
+    - Created PlacedPiece model for tracking CV pieces
+    - Built PieceColorMappingService for color-to-piece mapping
+    - Integrated CV processing in TangramGame
+    - Updated ViewModel to handle placed pieces
+  - ✅ Phase 2 Task 2.2: Anchor Management System
+    - Implemented dynamic anchor selection
+    - Added relative position calculations
+    - Anchor switching on piece removal
+  - ✅ Phase 2 Task 2.3: CV Mock System
+    - Created CVMockControlView with piece simulation
+    - Added controls for placing, rotating, removing pieces
+  - ✅ Phase 2 Task 2.3b: CV Data Model Refactoring
+    - Updated RecognizedPiece to use direct piece IDs
+    - Added velocity and movement tracking (30fps ready)
+    - Removed color mapping service (not needed)
+    - Updated PlacedPiece with movement state tracking
 - **Blockers encountered and resolved:**
   - Build errors from not reading actual type definitions
   - @Observable macro issues with computed properties
   - Name conflicts with existing views
-- **Tomorrow's plan:**
-  - Begin Phase 2: CV Integration & Piece Tracking
+  - Conflicting PlacedPiece definitions (resolved by updating PuzzleGameState)
+  - Incorrect CV data assumptions (refactored to match actual CV output)
+- **Next steps:**
+  - Task 2.4: Visualize piece tracking on canvas
+  - Begin Phase 3: Validation system

@@ -37,8 +37,8 @@ class PuzzleLibraryService {
     
     // MARK: - Initialization
     
-    init() {
-        self.persistenceService = PuzzlePersistenceService()
+    init(supabaseService: SupabaseService? = nil) {
+        self.persistenceService = PuzzlePersistenceService(supabaseService: supabaseService)
         loadPuzzles()
     }
     

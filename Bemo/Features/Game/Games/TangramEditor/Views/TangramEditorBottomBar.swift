@@ -20,35 +20,51 @@ struct TangramEditorBottomBar: View {
     }
     
     private var bottomBarContent: some View {
-        HStack(spacing: 8) {
-            Spacer()
-            
-            // Piece buttons
-            ForEach(PieceType.allCases, id: \.self) { pieceType in
-                let isPlaced = viewModel.puzzle.pieces.contains { $0.type == pieceType }
-                Button(action: {
-                    if !isPlaced {
-                        viewModel.startAddingPiece(type: pieceType)
-                    }
-                }) {
-                    Text(shortName(for: pieceType))
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .frame(width: 44, height: 44)
-                        .background(isPlaced ? Color.gray.opacity(0.1) : pieceType.color.opacity(0.2))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(isPlaced ? Color.gray : pieceType.color, lineWidth: 2)
-                        )
-                        .cornerRadius(8)
-                }
-                .disabled(isPlaced || isPendingPiece)
-                .opacity(isPlaced ? 0.5 : 1.0)
+        VStack(spacing: 8) {
+            // State indicator
+            if shouldShowStateIndicator {
+                Text(viewModel.currentStateDescription)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color.blue.opacity(0.1)))
+                    .padding(.top, 8)
             }
             
-            Spacer()
+            // Piece selection (only in appropriate states)
+            if shouldShowPieceSelection {
+                HStack(spacing: 8) {
+                    Spacer()
+                    
+                    // Piece buttons
+                    ForEach(availablePieceTypes, id: \.self) { pieceType in
+                        let isPlaced = viewModel.puzzle.pieces.contains { $0.type == pieceType }
+                        Button(action: {
+                            if !isPlaced {
+                                viewModel.startAddingPiece(type: pieceType)
+                            }
+                        }) {
+                            Text(shortName(for: pieceType))
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .frame(width: 44, height: 44)
+                                .background(isPlaced ? Color.gray.opacity(0.1) : pieceType.color.opacity(0.2))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(isPlaced ? Color.gray : pieceType.color, lineWidth: 2)
+                                )
+                                .cornerRadius(8)
+                        }
+                        .disabled(isPlaced || !canSelectPiece)
+                        .opacity(isPlaced ? 0.3 : 1.0)
+                    }
+                    
+                    Spacer()
+                }
+                .padding(.horizontal)
+            }
         }
-        .padding(.horizontal)
         .padding(.vertical, 12)
         .background(
             Color(.systemBackground).opacity(0.95)
@@ -56,9 +72,49 @@ struct TangramEditorBottomBar: View {
         )
     }
     
+    private var shouldShowPieceSelection: Bool {
+        switch viewModel.editorState {
+        case .idle, .selectingFirstPiece, .selectingNextPiece:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    private var shouldShowStateIndicator: Bool {
+        switch viewModel.editorState {
+        case .idle:
+            return false
+        default:
+            return true
+        }
+    }
+    
+    private var canSelectPiece: Bool {
+        switch viewModel.editorState {
+        case .idle, .selectingFirstPiece, .selectingNextPiece:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    private var availablePieceTypes: [PieceType] {
+        switch viewModel.editorState {
+        case .selectingFirstPiece:
+            return PieceType.allCases
+        case .selectingNextPiece, .idle:
+            return PieceType.allCases.filter { type in
+                !viewModel.puzzle.pieces.contains { $0.type == type }
+            }
+        default:
+            return []
+        }
+    }
+    
     private var isPendingPiece: Bool {
         switch viewModel.editorState {
-        case .pendingFirstPiece, .pendingSubsequentPiece:
+        case .manipulatingFirstPiece, .manipulatingPendingPiece, .previewingPlacement:
             return true
         default:
             return false

@@ -15,10 +15,11 @@ struct PieceView: View {
     let showConnectionPoints: Bool
     let availableConnectionPoints: [TangramEditorViewModel.ConnectionPoint]
     let selectedConnectionPoints: [TangramEditorViewModel.ConnectionPoint]
-    let manipulationMode: TangramEditorViewModel.ManipulationMode?
+    let manipulationMode: ManipulationMode?
     let onRotation: ((Double) -> Void)?
     let onSlide: ((Double) -> Void)?
     let onManipulationEnd: (() -> Void)?
+    let onLockToggle: (() -> Void)?
     
     @State private var currentRotation: Double = 0
     @State private var currentSlideDistance: Double = 0
@@ -65,12 +66,37 @@ struct PieceView: View {
             if let mode = manipulationMode, !isGhost {
                 manipulationIndicatorOverlay(for: mode)
             }
+            
+            // Lock indicator overlay (always visible when locked)
+            if piece.isLocked && !isGhost {
+                lockIndicatorOverlay()
+            }
         }
+    }
+    
+    @ViewBuilder
+    private func lockIndicatorOverlay() -> some View {
+        VStack {
+            HStack {
+                Spacer()
+                Image(systemName: "lock.fill")
+                    .foregroundColor(.white)
+                    .font(.caption)
+                    .padding(4)
+                    .background(Circle().fill(Color.red.opacity(0.8)))
+                    .onTapGesture {
+                        onLockToggle?()
+                    }
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .allowsHitTesting(piece.isLocked)
     }
     
     
     @ViewBuilder
-    private func manipulationIndicatorOverlay(for mode: TangramEditorViewModel.ManipulationMode) -> some View {
+    private func manipulationIndicatorOverlay(for mode: ManipulationMode) -> some View {
         switch mode {
         case .locked:
             // Lock icon at piece center
@@ -152,7 +178,7 @@ struct PieceView: View {
         return abs(normalizedCurrent - position) < 0.1
     }
     
-    private func snapPointPosition(position: Double, edge: TangramEditorViewModel.ManipulationMode.Edge, range: ClosedRange<Double>) -> CGPoint {
+    private func snapPointPosition(position: Double, edge: ManipulationMode.Edge, range: ClosedRange<Double>) -> CGPoint {
         let distance = range.lowerBound + position * (range.upperBound - range.lowerBound)
         return CGPoint(
             x: edge.start.x + edge.vector.dx * CGFloat(distance),
@@ -163,6 +189,8 @@ struct PieceView: View {
     private var fillColor: Color {
         if isGhost {
             return piece.type.color.opacity(0.3)
+        } else if piece.isLocked {
+            return piece.type.color.opacity(0.5)  // Dimmer when locked
         } else {
             return piece.type.color.opacity(0.7)
         }
@@ -171,6 +199,8 @@ struct PieceView: View {
     private var borderColor: Color {
         if isGhost {
             return Color.gray
+        } else if piece.isLocked {
+            return Color.red.opacity(0.6)  // Red border when locked
         } else if isSelected {
             return Color.blue
         } else {
@@ -179,7 +209,13 @@ struct PieceView: View {
     }
     
     private var borderWidth: Double {
-        isSelected ? 3 : 1
+        if piece.isLocked {
+            return 2
+        } else if isSelected {
+            return 3
+        } else {
+            return 1
+        }
     }
 }
 
@@ -241,7 +277,7 @@ struct ConnectionPointView: View {
 // MARK: - Gesture Modifier
 
 struct ManipulationGestureModifier: ViewModifier {
-    let manipulationMode: TangramEditorViewModel.ManipulationMode?
+    let manipulationMode: ManipulationMode?
     @Binding var currentRotation: Double
     @Binding var currentSlideDistance: Double
     @Binding var isManipulating: Bool

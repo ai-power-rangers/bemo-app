@@ -16,8 +16,8 @@ struct PuzzleGameState: Codable {
     
     // MARK: - Properties
     
-    /// The puzzle being solved
-    let targetPuzzle: TangramPuzzle
+    /// The puzzle being solved (simplified for gameplay)
+    let targetPuzzle: GamePuzzleData
     
     /// Pieces currently placed by the player (from CV)
     var placedPieces: [PlacedPiece] = []
@@ -30,13 +30,13 @@ struct PuzzleGameState: Codable {
     
     /// Progress percentage (0.0 to 1.0)
     var progress: Double {
-        guard !targetPuzzle.pieces.isEmpty else { return 0.0 }
-        return Double(correctPieceIds.count) / Double(targetPuzzle.pieces.count)
+        guard !targetPuzzle.targetPieces.isEmpty else { return 0.0 }
+        return Double(correctPieceIds.count) / Double(targetPuzzle.targetPieces.count)
     }
     
     /// Whether the puzzle is complete
     var isComplete: Bool {
-        correctPieceIds.count == targetPuzzle.pieces.count && !targetPuzzle.pieces.isEmpty
+        correctPieceIds.count == targetPuzzle.targetPieces.count && !targetPuzzle.targetPieces.isEmpty
     }
     
     /// Time spent on current puzzle
@@ -53,7 +53,7 @@ struct PuzzleGameState: Codable {
     
     // MARK: - Initialization
     
-    init(targetPuzzle: TangramPuzzle) {
+    init(targetPuzzle: GamePuzzleData) {
         self.targetPuzzle = targetPuzzle
     }
     
@@ -71,13 +71,27 @@ struct PuzzleGameState: Codable {
     
     mutating func addPlacedPiece(_ piece: PlacedPiece) {
         // Remove existing piece of same type if present
-        placedPieces.removeAll { $0.type == piece.type }
+        let pieceType = piece.pieceType
+        placedPieces.removeAll { $0.pieceType == pieceType }
         placedPieces.append(piece)
         placementAttempts += 1
         
         // Set as anchor if first piece
         if anchorPieceId == nil {
             anchorPieceId = piece.id
+        }
+    }
+    
+    mutating func updatePlacedPieces(_ pieces: [PlacedPiece]) {
+        placedPieces = pieces
+        placementAttempts += 1
+        
+        // Update anchor if needed
+        if let currentAnchor = anchorPieceId,
+           !pieces.contains(where: { $0.id == currentAnchor }) {
+            selectNewAnchor()
+        } else if anchorPieceId == nil && !pieces.isEmpty {
+            selectNewAnchor()
         }
     }
     
@@ -112,14 +126,14 @@ struct PuzzleGameState: Codable {
         // Try to select from correct pieces first
         if let newAnchor = placedPieces
             .filter({ correctPieceIds.contains($0.id) })
-            .max(by: { $0.type.area < $1.type.area }) {
+            .max(by: { $0.area < $1.area }) {
             anchorPieceId = newAnchor.id
             return
         }
         
         // Otherwise select largest piece
         if let newAnchor = placedPieces
-            .max(by: { $0.type.area < $1.type.area }) {
+            .max(by: { $0.area < $1.area }) {
             anchorPieceId = newAnchor.id
             return
         }
@@ -130,14 +144,14 @@ struct PuzzleGameState: Codable {
     
     // MARK: - Helpers
     
-    func pieceInTargetPuzzle(type: PieceType) -> TangramPiece? {
-        targetPuzzle.pieces.first { $0.type == type }
+    func targetForPieceType(_ type: PieceType) -> GamePuzzleData.TargetPiece? {
+        targetPuzzle.targetPieces.first { $0.pieceType == type.rawValue }
     }
     
-    func remainingPieceTypes() -> [PieceType] {
-        let placedTypes = Set(placedPieces.map { $0.type })
-        return targetPuzzle.pieces
-            .map { $0.type }
+    func remainingPieceTypes() -> [String] {
+        let placedTypes = Set(placedPieces.compactMap { $0.pieceType.rawValue })
+        return targetPuzzle.targetPieces
+            .map { $0.pieceType }
             .filter { !placedTypes.contains($0) }
     }
     
@@ -146,88 +160,3 @@ struct PuzzleGameState: Codable {
     }
 }
 
-// MARK: - PlacedPiece Model (moved here from separate file for Phase 2)
-
-struct PlacedPiece: Identifiable, Codable {
-    let id: String
-    let type: PieceType
-    var position: CGPoint
-    var rotation: Double
-    let timestamp: Date
-    var confidence: Double
-    
-    init(
-        id: String = UUID().uuidString,
-        type: PieceType,
-        position: CGPoint,
-        rotation: Double,
-        confidence: Double = 1.0
-    ) {
-        self.id = id
-        self.type = type
-        self.position = position
-        self.rotation = rotation
-        self.timestamp = Date()
-        self.confidence = confidence
-    }
-    
-    // Convert from RecognizedPiece (for Phase 2)
-    init(from recognized: RecognizedPiece) {
-        self.id = recognized.id
-        self.type = PieceType.from(recognized.color) ?? .largeTriangle1
-        self.position = recognized.position
-        self.rotation = recognized.rotation
-        self.timestamp = recognized.timestamp
-        self.confidence = recognized.confidence
-    }
-    
-    // Create transform for rendering
-    var transform: CGAffineTransform {
-        CGAffineTransform.identity
-            .translatedBy(x: position.x, y: position.y)
-            .rotated(by: rotation)
-    }
-}
-
-// MARK: - PieceType Extension for CV Mapping
-
-extension PieceType {
-    static func from(_ color: RecognizedPiece.Color) -> PieceType? {
-        // Map CV colors to piece types
-        // This will be refined based on actual CV color detection
-        switch color {
-        case .red:
-            return .largeTriangle1
-        case .blue:
-            return .largeTriangle2
-        case .yellow:
-            return .mediumTriangle
-        case .green:
-            return .smallTriangle1
-        case .orange:
-            return .smallTriangle2
-        case .purple:
-            return .square
-        case .pink:
-            return .parallelogram
-        default:
-            return nil
-        }
-    }
-    
-    var area: Double {
-        // Relative area for anchor selection priority
-        switch self {
-        case .largeTriangle1, .largeTriangle2:
-            return 2.0
-        case .mediumTriangle:
-            return 1.0
-        case .smallTriangle1, .smallTriangle2:
-            return 0.5
-        case .square:
-            return 1.0
-        case .parallelogram:
-            return 1.0
-        }
-    }
-}

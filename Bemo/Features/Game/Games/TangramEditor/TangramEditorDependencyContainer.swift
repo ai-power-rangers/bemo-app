@@ -14,6 +14,10 @@ import Foundation
 @MainActor
 class TangramEditorDependencyContainer {
     
+    // MARK: - External Dependencies
+    
+    private let supabaseService: SupabaseService?
+    
     // MARK: - Services (Lazy for efficiency)
     
     lazy var coordinator: TangramEditorCoordinator = {
@@ -25,7 +29,7 @@ class TangramEditorDependencyContainer {
     }()
     
     lazy var persistenceService: PuzzlePersistenceService = {
-        return PuzzlePersistenceService()
+        return PuzzlePersistenceService(supabaseService: supabaseService)
     }()
     
     lazy var undoManager: UndoRedoManager = {
@@ -36,10 +40,23 @@ class TangramEditorDependencyContainer {
         return ValidationService()
     }()
     
+    lazy var lockingService: PieceLockingService = {
+        return PieceLockingService()
+    }()
+    
+    lazy var manipulationService: PieceManipulationService = {
+        return PieceManipulationService()
+    }()
+    
+    lazy var toastService: ToastService = {
+        return ToastService()
+    }()
+    
     // MARK: - Initialization
     
-    init() {
-        // Services are lazy-loaded, so nothing to initialize here
+    init(supabaseService: SupabaseService? = nil) {
+        self.supabaseService = supabaseService
+        // Services are lazy-loaded, so nothing else to initialize here
         // This ensures services are only created when actually needed
     }
     
@@ -53,7 +70,10 @@ class TangramEditorDependencyContainer {
             placementService: placementService,
             persistenceService: persistenceService,
             undoManager: undoManager,
-            validationService: validationService
+            validationService: validationService,
+            lockingService: lockingService,
+            manipulationService: manipulationService,
+            toastService: toastService
         )
     }
 }

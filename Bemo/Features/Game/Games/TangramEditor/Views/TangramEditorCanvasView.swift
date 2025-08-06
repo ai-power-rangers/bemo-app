@@ -83,7 +83,7 @@ struct TangramEditorCanvasView: View {
             }
             
             // Canvas point selection UI
-            if viewModel.editorState == .selectingCanvasPoints && !viewModel.selectedCanvasPoints.isEmpty {
+            if case .selectingCanvasConnections = viewModel.editorState, !viewModel.selectedCanvasPoints.isEmpty {
                 VStack {
                     HStack {
                         Text("\(viewModel.selectedCanvasPoints.count) point(s) selected")
@@ -112,7 +112,7 @@ struct TangramEditorCanvasView: View {
             }
             
             // Pending piece overlay - positioned at top
-            if case .pendingSubsequentPiece(let type, let rotation) = viewModel.editorState {
+            if case .manipulatingPendingPiece(let type, _, let rotation) = viewModel.editorState {
                 VStack {
                     PendingPieceOverlay(
                         viewModel: viewModel,
@@ -125,7 +125,7 @@ struct TangramEditorCanvasView: View {
                     
                     Spacer()
                 }
-            } else if case .pendingFirstPiece(let type, let rotation) = viewModel.editorState {
+            } else if case .manipulatingFirstPiece(let type, let rotation, _) = viewModel.editorState {
                 PendingPieceOverlay(
                     viewModel: viewModel,
                     pieceType: type,
@@ -212,6 +212,9 @@ struct TangramEditorCanvasView: View {
                             }
                         }
                     }
+                },
+                onLockToggle: {
+                    viewModel.togglePieceLock(id: piece.id)
                 }
             )
             .onTapGesture(count: 2) {
@@ -226,8 +229,12 @@ struct TangramEditorCanvasView: View {
             }
             
             // Show selected connection points (visible during both selection and pending states)
-            let showSelectedPoints = viewModel.editorState == .selectingCanvasPoints || 
-                                    { if case .pendingSubsequentPiece = viewModel.editorState { return true } else { return false } }()
+            let showSelectedPoints = { () -> Bool in
+                if case .selectingCanvasConnections = viewModel.editorState { return true }
+                if case .selectingPendingConnections = viewModel.editorState { return true }
+                if case .manipulatingPendingPiece = viewModel.editorState { return true }
+                return false
+            }()
             
             if showSelectedPoints {
                 ForEach(viewModel.selectedCanvasPoints.filter { $0.pieceId == piece.id }, id: \.id) { point in
@@ -238,7 +245,7 @@ struct TangramEditorCanvasView: View {
             }
             
             // Connection point tap overlays
-            if viewModel.editorState == .selectingCanvasPoints {
+            if case .selectingCanvasConnections = viewModel.editorState {
                 ForEach(viewModel.getConnectionPoints(for: piece.id), id: \.id) { point in
                     let isSelected = viewModel.selectedCanvasPoints.contains { $0.id == point.id }
                     connectionPointView(point, isSelected: isSelected)
@@ -336,7 +343,7 @@ struct TangramEditorCanvasView: View {
         switch viewModel.editorState {
         case .idle, .error:
             return true
-        case .pendingFirstPiece, .pendingSubsequentPiece, .selectingCanvasPoints:
+        case .manipulatingFirstPiece, .manipulatingPendingPiece, .selectingCanvasConnections:
             return false
         default:
             return false

@@ -59,13 +59,13 @@ struct TangramEditorTopBar: View {
                     }
                     
                     // Flip (for parallelogram)
-                    if case .pendingFirstPiece(let type, _) = viewModel.editorState, type == .parallelogram {
+                    if case .manipulatingFirstPiece(let type, _, _) = viewModel.editorState, type == .parallelogram {
                         Button(action: { viewModel.flipPendingPiece() }) {
                             Image(systemName: "arrow.left.and.right")
                                 .font(.title2)
                                 .foregroundColor(.primary)
                         }
-                    } else if case .pendingSubsequentPiece(let type, _) = viewModel.editorState, type == .parallelogram {
+                    } else if case .manipulatingPendingPiece(let type, _, _) = viewModel.editorState, type == .parallelogram {
                         Button(action: { viewModel.flipPendingPiece() }) {
                             Image(systemName: "arrow.left.and.right")
                                 .font(.title2)
@@ -144,7 +144,7 @@ struct TangramEditorTopBar: View {
     
     private var isPendingPiece: Bool {
         switch viewModel.editorState {
-        case .pendingFirstPiece, .pendingSubsequentPiece:
+        case .manipulatingFirstPiece, .manipulatingPendingPiece:
             return true
         default:
             return false
@@ -153,9 +153,9 @@ struct TangramEditorTopBar: View {
     
     private func canPlacePiece() -> Bool {
         switch viewModel.editorState {
-        case .pendingFirstPiece:
+        case .manipulatingFirstPiece:
             return true
-        case .pendingSubsequentPiece:
+        case .manipulatingPendingPiece:
             return !viewModel.selectedCanvasPoints.isEmpty &&
                    viewModel.selectedPendingPoints.count == viewModel.selectedCanvasPoints.count
         default:

@@ -40,6 +40,7 @@ class GameLobbyViewModel {
     }
     
     private let profileService: ProfileService
+    private let supabaseService: SupabaseService?
     private let onGameSelected: (Game) -> Void
     private let onParentDashboardRequested: () -> Void
     private let onProfileSetupRequested: () -> Void
@@ -63,11 +64,13 @@ class GameLobbyViewModel {
     
     init(
         profileService: ProfileService,
+        supabaseService: SupabaseService? = nil,
         onGameSelected: @escaping (Game) -> Void,
         onParentDashboardRequested: @escaping () -> Void,
         onProfileSetupRequested: @escaping () -> Void
     ) {
         self.profileService = profileService
+        self.supabaseService = supabaseService
         self.onGameSelected = onGameSelected
         self.onParentDashboardRequested = onParentDashboardRequested
         self.onProfileSetupRequested = onProfileSetupRequested
@@ -97,8 +100,8 @@ class GameLobbyViewModel {
     private func loadGames() {
         // Load available games
         // In a real app, this would come from a configuration or backend
-        let tangramGame = TangramGame()
-        let tangramEditorGame = TangramEditorGame()
+        let tangramGame = TangramGame(supabaseService: supabaseService)
+        let tangramEditorGame = TangramEditorGame(supabaseService: supabaseService)
         
         availableGames = [
             GameItem(

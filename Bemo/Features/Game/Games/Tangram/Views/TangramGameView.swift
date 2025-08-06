@@ -43,11 +43,11 @@ struct TangramGameView: View {
             gameHeader
             
             // Main puzzle canvas
-            if let puzzle = viewModel.selectedPuzzle,
-               let gameState = viewModel.gameState {
-                PuzzleCanvasView(
+            if let puzzle = viewModel.selectedPuzzle {
+                GamePuzzleCanvasView(
                     puzzle: puzzle,
-                    gameState: gameState,
+                    placedPieces: viewModel.placedPieces,
+                    anchorPieceId: viewModel.anchorPiece?.id,
                     showHints: viewModel.showHints,
                     canvasSize: viewModel.canvasSize
                 )
@@ -69,14 +69,14 @@ struct TangramGameView: View {
                 
                 HStack(spacing: 12) {
                     Label(
-                        viewModel.selectedPuzzle?.difficulty.displayName ?? "",
+                        difficultyName,
                         systemImage: "star.fill"
                     )
                     .font(.caption)
                     .foregroundColor(difficultyColor)
                     
                     Label(
-                        viewModel.selectedPuzzle?.category.rawValue ?? "",
+                        viewModel.selectedPuzzle?.category ?? "",
                         systemImage: categoryIcon
                     )
                     .font(.caption)
@@ -127,42 +127,50 @@ struct TangramGameView: View {
     
     // MARK: - Helper Properties
     
+    private var difficultyName: String {
+        guard let difficulty = viewModel.selectedPuzzle?.difficulty else { return "" }
+        switch difficulty {
+        case 0: return "Beginner"
+        case 1: return "Easy"
+        case 2: return "Medium"
+        case 3: return "Hard"
+        case 4: return "Expert"
+        default: return "Unknown"
+        }
+    }
+    
     private var difficultyColor: Color {
-        switch viewModel.selectedPuzzle?.difficulty {
-        case .beginner:
-            return .teal
-        case .easy:
-            return .green
-        case .medium:
-            return .orange
-        case .hard:
-            return .red
-        case .expert:
-            return .purple
-        case .none:
-            return .gray
+        guard let difficulty = viewModel.selectedPuzzle?.difficulty else { return .gray }
+        switch difficulty {
+        case 0: return .teal      // Beginner
+        case 1: return .green     // Easy
+        case 2: return .orange    // Medium
+        case 3: return .red       // Hard
+        case 4: return .purple    // Expert
+        default: return .gray
         }
     }
     
     private var categoryIcon: String {
-        switch viewModel.selectedPuzzle?.category {
-        case .animals:
+        guard let category = viewModel.selectedPuzzle?.category else { return "questionmark" }
+        switch category.lowercased() {
+        case "animals":
             return "pawprint.fill"
-        case .geometric:
+        case "geometric":
             return "square.on.square"
-        case .objects:
+        case "objects":
             return "cube.fill"
-        case .people:
+        case "people":
             return "person.fill"
-        case .letters:
+        case "letters":
             return "textformat"
-        case .numbers:
+        case "numbers":
             return "number"
-        case .abstract:
+        case "abstract":
             return "sparkles"
-        case .custom:
+        case "custom":
             return "star.fill"
-        case .none:
+        default:
             return "questionmark"
         }
     }

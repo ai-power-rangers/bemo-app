@@ -7,10 +7,10 @@
 
 import Foundation
 
-enum ConnectionType: Codable {
-    case vertexToVertex(pieceA: String, vertexA: Int, pieceB: String, vertexB: Int)
-    case edgeToEdge(pieceA: String, edgeA: Int, pieceB: String, edgeB: Int)
-    case vertexToEdge(pieceA: String, vertex: Int, pieceB: String, edge: Int)
+enum ConnectionType: Codable, Equatable {
+    case vertexToVertex(pieceAId: String, vertexA: Int, pieceBId: String, vertexB: Int)
+    case edgeToEdge(pieceAId: String, edgeA: Int, pieceBId: String, edgeB: Int)
+    case vertexToEdge(pieceAId: String, vertex: Int, pieceBId: String, edge: Int)
     
     var pieceAId: String {
         switch self {

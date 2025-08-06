@@ -2,7 +2,7 @@
 //  TangramEditorGame.swift
 //  Bemo
 //
-//  Game integration for the Tangram Editor - parent-only puzzle creation tool
+//  Game integration for the Tangram Editor - puzzle creation tool
 //
 
 import SwiftUI
@@ -14,13 +14,14 @@ class TangramEditorGame: Game {
     
     let id = "tangram-editor"
     let title = "Tangram Editor"
-    let description = "Create custom tangram puzzles for children to solve"
-    let recommendedAge = 18...99 // Parent-only tool
+    let description = "Create tangram puzzles"
+    let recommendedAge = 18...99 // Developer tool
     let thumbnailImageName = "tangram_editor_thumb"
     
     private var viewModel: TangramEditorViewModel?
     private weak var delegate: GameDelegate?
     private var dependencyContainer: TangramEditorDependencyContainer?
+    private let supabaseService: SupabaseService?
     
     // State management
     private var cachedPuzzleData: Data?
@@ -44,7 +45,9 @@ class TangramEditorGame: Game {
     
     // MARK: - Initialization
     
-    init() {}
+    init(supabaseService: SupabaseService? = nil) {
+        self.supabaseService = supabaseService
+    }
     
     // MARK: - Game Protocol
     
@@ -70,7 +73,7 @@ class TangramEditorGame: Game {
         if viewModel == nil {
             // Create dependency container if not already created
             if dependencyContainer == nil {
-                dependencyContainer = TangramEditorDependencyContainer()
+                dependencyContainer = TangramEditorDependencyContainer(supabaseService: supabaseService)
             }
             
             // Create view model with proper dependency injection
@@ -162,6 +165,5 @@ private struct TangramEditorInitializerView: View {
 // MARK: - Access Control Note
 
 // Access control is handled by AppCoordinator.
-// The TangramEditor is a parent-only tool and the AppCoordinator
-// ensures it's only presented when appropriate permissions are granted.
-// No need for additional access checks within the game itself.
+// The TangramEditor is a developer tool for creating official puzzles.
+// It will be hidden from production users.

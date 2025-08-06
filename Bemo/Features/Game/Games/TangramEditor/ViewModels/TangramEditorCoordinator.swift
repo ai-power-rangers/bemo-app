@@ -214,33 +214,33 @@ class TangramEditorCoordinator {
         switch (canvasPoint.type, piecePoint.type) {
         case let (.vertex(indexA), .vertex(indexB)):
             return .vertexToVertex(
-                pieceA: existingPiece.id,
+                pieceAId: existingPiece.id,
                 vertexA: indexA,
-                pieceB: newPiece.id,
+                pieceBId: newPiece.id,
                 vertexB: indexB
             )
             
         case let (.edge(indexA), .edge(indexB)):
             return .edgeToEdge(
-                pieceA: existingPiece.id,
+                pieceAId: existingPiece.id,
                 edgeA: indexA,
-                pieceB: newPiece.id,
+                pieceBId: newPiece.id,
                 edgeB: indexB
             )
             
         case let (.vertex(vertexIndex), .edge(edgeIndex)):
             return .vertexToEdge(
-                pieceA: existingPiece.id,
+                pieceAId: existingPiece.id,
                 vertex: vertexIndex,
-                pieceB: newPiece.id,
+                pieceBId: newPiece.id,
                 edge: edgeIndex
             )
             
         case let (.edge(edgeIndex), .vertex(vertexIndex)):
             return .vertexToEdge(
-                pieceA: newPiece.id,
+                pieceAId: newPiece.id,
                 vertex: vertexIndex,
-                pieceB: existingPiece.id,
+                pieceBId: existingPiece.id,
                 edge: edgeIndex
             )
         }

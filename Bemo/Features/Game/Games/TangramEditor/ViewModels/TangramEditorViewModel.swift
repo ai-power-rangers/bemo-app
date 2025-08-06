@@ -16,19 +16,6 @@ class TangramEditorViewModel {
     // MARK: - Type Aliases
     typealias ConnectionPoint = PiecePlacementService.ConnectionPoint
     
-    // MARK: - Manipulation Mode
-    enum ManipulationMode: Equatable {
-        case locked                                             // 2+ connections - no movement allowed
-        case rotatable(pivot: CGPoint, snapAngles: [Double])   // 1 vertex connection - can rotate
-        case slidable(edge: Edge, range: ClosedRange<Double>, snapPositions: [Double])  // 1 edge connection - can slide
-        
-        struct Edge: Equatable {
-            let start: CGPoint
-            let end: CGPoint
-            let vector: CGVector  // Normalized direction vector
-        }
-    }
-    
     // MARK: - Business State (Observable)
     
     var puzzle: TangramPuzzle
@@ -126,6 +113,9 @@ class TangramEditorViewModel {
     private let persistenceService: PuzzlePersistenceService
     private let undoManager: UndoRedoManager
     private let validationService: ValidationService
+    private let lockingService: PieceLockingService
+    private let manipulationService: PieceManipulationService
+    let toastService: ToastService  // Public for view access
     
     // MARK: - Initialization
     
@@ -134,7 +124,10 @@ class TangramEditorViewModel {
          placementService: PiecePlacementService,
          persistenceService: PuzzlePersistenceService,
          undoManager: UndoRedoManager,
-         validationService: ValidationService) {
+         validationService: ValidationService,
+         lockingService: PieceLockingService,
+         manipulationService: PieceManipulationService,
+         toastService: ToastService) {
         
         // Initialize services (now required, no defaults)
         self.coordinator = coordinator
@@ -142,9 +135,21 @@ class TangramEditorViewModel {
         self.persistenceService = persistenceService
         self.undoManager = undoManager
         self.validationService = validationService
+        self.lockingService = lockingService
+        self.manipulationService = manipulationService
+        self.toastService = toastService
         
         // Initialize puzzle
         self.puzzle = puzzle ?? TangramPuzzle(name: "New Puzzle")
+        
+        // Set initial state based on puzzle content
+        if self.puzzle.pieces.isEmpty {
+            // Start in selecting first piece state for empty puzzles
+            self.editorState = .selectingFirstPiece
+        } else {
+            // Start in idle state for existing puzzles
+            self.editorState = .idle
+        }
         
         // Load saved puzzles on init
         Task { [weak self] in
@@ -156,33 +161,189 @@ class TangramEditorViewModel {
     
     private func handleError(_ error: TangramEditorError) {
         currentError = error
-        uiState.showError(error.userMessage)
+        toastService.show(error: error)
         
         // Log error for debugging (in production this could go to error tracking)
         print("[TangramEditor] Error: \(error.errorDescription ?? "Unknown error")")
     }
     
     func dismissError() {
-        uiState.dismissError()
+        toastService.dismiss()
         currentError = nil
+    }
+    
+    // MARK: - State Management
+    
+    /// Validates and performs state transitions
+    func transitionToState(_ newState: EditorState) -> Bool {
+        // Validate transition is allowed
+        guard isValidTransition(from: editorState, to: newState) else {
+            print("[TangramEditor] Invalid state transition: \(editorState) -> \(newState)")
+            return false
+        }
+        
+        // Perform any cleanup for current state before transitioning
+        cleanupCurrentState()
+        
+        // Update state
+        editorState = newState
+        
+        // Perform any setup for new state
+        setupNewState()
+        
+        return true
+    }
+    
+    /// Check if a state transition is valid
+    private func isValidTransition(from currentState: EditorState, to newState: EditorState) -> Bool {
+        switch (currentState, newState) {
+        // From idle
+        case (.idle, .selectingFirstPiece) where puzzle.pieces.isEmpty:
+            return true
+        case (.idle, .selectingNextPiece) where !puzzle.pieces.isEmpty:
+            return true
+        case (.idle, .pieceSelected):
+            return true
+            
+        // First piece flow
+        case (.selectingFirstPiece, .manipulatingFirstPiece):
+            return true
+        case (.manipulatingFirstPiece, .idle):
+            return true
+        case (.manipulatingFirstPiece, .selectingFirstPiece):
+            return true
+            
+        // Subsequent pieces flow
+        case (.selectingNextPiece, .selectingCanvasConnections):
+            return true
+        case (.selectingCanvasConnections, .selectingPendingConnections):
+            return true
+        case (.selectingPendingConnections, .manipulatingPendingPiece):
+            return true
+        case (.selectingPendingConnections, .previewingPlacement):
+            return true
+        case (.manipulatingPendingPiece, .previewingPlacement):
+            return true
+        case (.previewingPlacement, .idle):
+            return true
+            
+        // Editing flow
+        case (.pieceSelected, .unlockingPiece):
+            return true
+        case (.pieceSelected, .idle):
+            return true
+        case (.unlockingPiece, .manipulatingExistingPiece):
+            return true
+        case (.manipulatingExistingPiece, .idle):
+            return true
+            
+        // Error recovery
+        case (_, .error):
+            return true
+        case (.error, _):
+            return true
+            
+        // Cancel operations
+        case (_, .idle):
+            return true
+            
+        default:
+            return false
+        }
+    }
+    
+    /// Cleanup when leaving current state
+    private func cleanupCurrentState() {
+        switch editorState {
+        case .selectingCanvasConnections, .selectingPendingConnections:
+            selectedCanvasPoints.removeAll()
+            selectedPendingPoints.removeAll()
+        case .manipulatingPendingPiece, .manipulatingExistingPiece:
+            ghostTransform = nil
+            manipulatingPieceId = nil
+            showSnapIndicator = false
+        default:
+            break
+        }
+    }
+    
+    /// Setup when entering new state
+    private func setupNewState() {
+        switch editorState {
+        case .selectingFirstPiece:
+            clearSelectionState()
+        case .selectingNextPiece:
+            clearSelectionState()
+            pendingPieceType = nil
+        case .selectingCanvasConnections:
+            updateAvailableConnectionPoints()
+        default:
+            break
+        }
+    }
+    
+    /// Human-readable description of current state
+    var currentStateDescription: String {
+        switch editorState {
+        case .idle:
+            return puzzle.pieces.isEmpty ? "Start by selecting a shape" : "Select a shape to add or tap a piece to edit"
+        case .selectingFirstPiece:
+            return "Select your first shape"
+        case .manipulatingFirstPiece:
+            return "Rotate or flip to position the piece"
+        case .selectingNextPiece:
+            return "Select the next shape to add"
+        case .selectingCanvasConnections(let maxPoints):
+            return "Select up to \(maxPoints) connection point(s) on existing pieces"
+        case .selectingPendingConnections(_, let maxPoints):
+            return "Select up to \(maxPoints) matching connection point(s) on the new piece"
+        case .manipulatingPendingPiece(_, let mode, _):
+            switch mode {
+            case .rotatable:
+                return "Rotate the piece around the connection point"
+            case .slidable:
+                return "Slide the piece along the edge"
+            case .locked:
+                return "Piece position is locked by connections"
+            }
+        case .previewingPlacement:
+            return "Confirm or cancel piece placement"
+        case .pieceSelected(_, let isLocked):
+            return isLocked ? "Piece is locked. Unlock to edit" : "Piece selected for editing"
+        case .unlockingPiece:
+            return "Unlocking piece for manipulation"
+        case .manipulatingExistingPiece(_, let mode):
+            switch mode {
+            case .rotatable:
+                return "Rotate the piece around the connection point"
+            case .slidable:
+                return "Slide the piece along the edge"
+            case .locked:
+                return "Piece cannot be manipulated"
+            }
+        case .error(let message):
+            return message
+        }
     }
     
     // MARK: - UI Actions
     
     func startAddingPiece(type: PieceType) {
-        guard !isPieceTypeAlreadyPlaced(type) else { return }
+        guard !isPieceTypeAlreadyPlaced(type) else { 
+            handleError(.pieceAlreadyPlaced(type.rawValue))
+            return 
+        }
         
         pendingPieceType = type
         pendingPieceRotation = 0
-        selectedCanvasPoints.removeAll()
-        selectedPendingPoints.removeAll()
         
         if puzzle.pieces.isEmpty {
-            editorState = .pendingFirstPiece(type: type, rotation: 0)
+            // First piece flow - we should already be in selectingFirstPiece state
+            // Transition to manipulating the first piece
+            _ = transitionToState(.manipulatingFirstPiece(type: type, rotation: 0, isFlipped: false))
         } else {
-            // For subsequent pieces, show connection points on existing pieces
-            updateAvailableConnectionPoints()
-            editorState = .selectingCanvasPoints
+            // Subsequent pieces flow - need to select connections first
+            _ = transitionToState(.selectingCanvasConnections(maxPoints: 2))
         }
     }
     
@@ -192,21 +353,35 @@ class TangramEditorViewModel {
         let size = canvasSize ?? currentCanvasSize
         
         switch editorState {
-        case .pendingFirstPiece(let type, let rotation):
+        case .manipulatingFirstPiece(let type, let rotation, _):
             // Place first piece at center (convert degrees to radians)
-            let piece = placementService.placeFirstPiece(
+            var piece = placementService.placeFirstPiece(
                 type: type,
                 rotation: rotation * .pi / 180,
                 canvasSize: size
             )
+            piece.isLocked = true  // First piece is always locked
             puzzle.pieces.append(piece)
-            editorState = .idle
-            clearSelectionState()
-            updateManipulationModes()  // Update manipulation modes after adding piece
+            // After placing first piece, transition to selecting next piece
+            _ = transitionToState(.selectingNextPiece)
+            autoLockPieces()  // Auto-lock based on connections
+            updateManipulationModes()
             validate()
             notifyPuzzleChanged()
+            toastService.showSuccess("First piece placed")
             
-        case .pendingSubsequentPiece(let type, let rotation):
+        case .previewingPlacement(let piece):
+            // Add the previewed piece to the puzzle
+            puzzle.pieces.append(piece)
+            // After placing any piece, go to selecting next piece
+            _ = transitionToState(.selectingNextPiece)
+            autoLockPieces()  // Auto-lock based on connections
+            updateManipulationModes()
+            validate()
+            notifyPuzzleChanged()
+            toastService.showSuccess("Piece placed successfully")
+            
+        case .manipulatingPendingPiece(let type, _, let rotation):
             // Place connected piece (convert degrees to radians)
             let result = coordinator.placeConnectedPiece(
                 type: type,
@@ -218,13 +393,13 @@ class TangramEditorViewModel {
             )
             
             switch result {
-            case .success(let newPiece):
-                editorState = .idle
-                clearSelectionState()
-                updateManipulationModes()  // Update manipulation modes after adding piece
-                
-                // TODO: Fix recentering - pieces going off screen
-                // recenterPuzzle()  // Temporarily disabled
+            case .success(_):
+                // After successfully placing a connected piece, go to selecting next piece
+                _ = transitionToState(.selectingNextPiece)
+                updateManipulationModes()
+                validate()
+                notifyPuzzleChanged()
+                toastService.showSuccess("Piece connected successfully")
                 
             case .failure(let coordinatorError):
                 // Convert coordinator error to TangramEditorError
@@ -242,19 +417,15 @@ class TangramEditorViewModel {
                     editorError = .invalidPlacement("Unknown placement error")
                 }
                 handleError(editorError)
-                // Don't change editor state to error - keep current state
             }
             
         default:
             break
         }
-        
-        validate()
-        notifyPuzzleChanged()
     }
     
     func cancelPendingPiece() {
-        editorState = .idle
+        _ = transitionToState(.idle)
         clearSelectionState()
     }
     
@@ -263,10 +434,10 @@ class TangramEditorViewModel {
         
         // Update the rotation in the current state
         switch editorState {
-        case .pendingFirstPiece(let type, _):
-            editorState = .pendingFirstPiece(type: type, rotation: pendingPieceRotation)
-        case .pendingSubsequentPiece(let type, _):
-            editorState = .pendingSubsequentPiece(type: type, rotation: pendingPieceRotation)
+        case .manipulatingFirstPiece(let type, _, let isFlipped):
+            _ = transitionToState(.manipulatingFirstPiece(type: type, rotation: pendingPieceRotation, isFlipped: isFlipped))
+        case .manipulatingPendingPiece(let type, let mode, _):
+            _ = transitionToState(.manipulatingPendingPiece(type: type, mode: mode, rotation: pendingPieceRotation))
         default:
             break
         }
@@ -276,7 +447,15 @@ class TangramEditorViewModel {
     
     func flipPendingPiece() {
         // Only parallelogram can flip
-        pendingPieceRotation = -pendingPieceRotation
+        guard let pieceType = pendingPieceType, pieceType == .parallelogram else { return }
+        
+        switch editorState {
+        case .manipulatingFirstPiece(let type, let rotation, let isFlipped):
+            _ = transitionToState(.manipulatingFirstPiece(type: type, rotation: rotation, isFlipped: !isFlipped))
+        default:
+            break
+        }
+        
         updatePreviewIfNeeded()
     }
     
@@ -332,15 +511,11 @@ class TangramEditorViewModel {
         
         // Check if we have enough points to proceed
         if selectedCanvasPoints.count == selectedPendingPoints.count && !selectedCanvasPoints.isEmpty {
-            // Get the pending piece type from the current state
-            switch editorState {
-            case .selectingCanvasPoints:
-                // We don't have the type here, need to track it separately
-                break
-            case .pendingFirstPiece(let type, let rotation):
-                editorState = .pendingSubsequentPiece(type: type, rotation: rotation)
-            default:
-                break
+            // Calculate manipulation mode and transition to manipulating state
+            if let type = pendingPieceType {
+                // TODO: Calculate actual manipulation mode based on connections
+                let mode = ManipulationMode.locked // Placeholder
+                _ = transitionToState(.manipulatingPendingPiece(type: type, mode: mode, rotation: pendingPieceRotation))
             }
         }
     }
@@ -352,22 +527,33 @@ class TangramEditorViewModel {
             selectedCanvasPoints.append(point)
         }
         
-        // Don't immediately show pending piece - wait for user to explicitly proceed
-        // This allows selecting multiple canvas points first
+        // Check if we have the maximum number of points
+        if selectedCanvasPoints.count >= 2 {
+            proceedToPendingPiece()
+        }
     }
     
     func proceedToPendingPiece() {
-        // Transition to pending piece state after canvas points are selected
+        // Transition to selecting pending piece connections
         if !selectedCanvasPoints.isEmpty, let type = pendingPieceType {
-            editorState = .pendingSubsequentPiece(type: type, rotation: pendingPieceRotation)
+            _ = transitionToState(.selectingPendingConnections(pieceType: type, maxPoints: selectedCanvasPoints.count))
         }
     }
     
     // MARK: - Selection Management
     
     func selectPiece(id: String) {
-        if uiState.editMode == .select {
-            selectedPieceIds.insert(id)
+        // Check if piece is locked before allowing selection
+        guard let piece = puzzle.pieces.first(where: { $0.id == id }) else { return }
+        
+        if piece.isLocked {
+            // Transition to locked piece state
+            _ = transitionToState(.pieceSelected(id: id, isLocked: true))
+        } else {
+            if uiState.editMode == .select {
+                selectedPieceIds.insert(id)
+                _ = transitionToState(.pieceSelected(id: id, isLocked: false))
+            }
         }
     }
     
@@ -387,17 +573,78 @@ class TangramEditorViewModel {
         selectedPieceIds = Set(puzzle.pieces.map { $0.id })
     }
     
+    // MARK: - Piece Locking
+    
+    func togglePieceLock(id: String) {
+        undoManager.saveState(puzzle: puzzle)
+        
+        let result = lockingService.toggleLock(id: id, in: &puzzle)
+        switch result {
+        case .success(let isNowLocked):
+            if isNowLocked {
+                _ = transitionToState(.pieceSelected(id: id, isLocked: true))
+                toastService.showInfo("Piece locked")
+            } else {
+                _ = transitionToState(.pieceSelected(id: id, isLocked: false))
+                toastService.showSuccess("Piece unlocked")
+            }
+            updateManipulationModes()
+            notifyPuzzleChanged()
+            
+        case .failure(let error):
+            handleError(error)
+        }
+    }
+    
+    func unlockPiece(id: String) {
+        undoManager.saveState(puzzle: puzzle)
+        
+        let result = lockingService.unlockPiece(id: id, in: &puzzle)
+        switch result {
+        case .success:
+            _ = transitionToState(.manipulatingExistingPiece(id: id, mode: determineManipulationMode(for: id)))
+            updateManipulationModes()
+            notifyPuzzleChanged()
+            
+        case .failure(let error):
+            handleError(error)
+        }
+    }
+    
+    func autoLockPieces() {
+        lockingService.autoLockPieces(in: &puzzle)
+        updateManipulationModes()
+    }
+    
     // MARK: - Piece Operations
     
     func removePiece(id: String) {
+        // Check if piece is locked
+        guard let piece = puzzle.pieces.first(where: { $0.id == id }) else { return }
+        
+        if piece.isLocked {
+            handleError(.operationNotAllowed("Piece must be unlocked before deletion"))
+            return
+        }
+        
         undoManager.saveState(puzzle: puzzle)
         puzzle.pieces.removeAll { $0.id == id }
         puzzle.connections.removeAll { $0.involvesPiece(id) }
         validate()
         notifyPuzzleChanged()
+        _ = transitionToState(.idle)
     }
     
     func removeSelectedPieces() {
+        // Check if any selected pieces are locked
+        let selectedPieces = puzzle.pieces.filter { selectedPieceIds.contains($0.id) }
+        let lockedPieces = selectedPieces.filter { $0.isLocked }
+        
+        if !lockedPieces.isEmpty {
+            handleError(.operationNotAllowed("\(lockedPieces.count) piece(s) must be unlocked before deletion"))
+            return
+        }
+        
         undoManager.saveState(puzzle: puzzle)
         let idsToRemove = selectedPieceIds
         puzzle.pieces.removeAll { idsToRemove.contains($0.id) }
@@ -407,6 +654,7 @@ class TangramEditorViewModel {
         selectedPieceIds.removeAll()
         validate()
         notifyPuzzleChanged()
+        _ = transitionToState(.idle)
     }
     
     func updatePieceTransform(id: String, transform: CGAffineTransform) {
@@ -467,8 +715,7 @@ class TangramEditorViewModel {
     
     func loadPuzzle(from loadedPuzzle: TangramPuzzle) {
         puzzle = loadedPuzzle
-        editorState = .idle
-        selectedPieceIds.removeAll()
+        _ = transitionToState(.idle)
         validate()
         notifyPuzzleChanged()
         uiState.navigationState = .editor
@@ -477,7 +724,7 @@ class TangramEditorViewModel {
     func createNewPuzzle() {
         reset()
         puzzle = TangramPuzzle(name: "New Puzzle", category: .custom, difficulty: .medium)
-        editorState = .idle
+        _ = transitionToState(.idle)
         uiState.navigationState = .editor
     }
     
@@ -532,8 +779,7 @@ class TangramEditorViewModel {
         selectedPieceIds.removeAll()
         validationState = .unknown
         uiState.editMode = .select
-        editorState = .idle
-        clearSelectionState()
+        _ = transitionToState(.idle)
         undoManager.clearHistory()
     }
     
@@ -543,8 +789,7 @@ class TangramEditorViewModel {
         puzzle.connections.removeAll()
         selectedPieceIds.removeAll()
         validationState = .unknown
-        editorState = .idle
-        clearSelectionState()
+        _ = transitionToState(.idle)
         notifyPuzzleChanged()
     }
     
@@ -608,100 +853,7 @@ class TangramEditorViewModel {
             return .locked
         }
         
-        // Find connections involving this piece
-        let pieceConnections = puzzle.connections.filter { connection in
-            connection.pieceAId == pieceId || connection.pieceBId == pieceId
-        }
-        
-        // Multiple connections = locked
-        if pieceConnections.count >= 2 {
-            return .locked
-        }
-        
-        // Single connection - determine type
-        if let connection = pieceConnections.first {
-            switch connection.type {
-            case .vertexToVertex(let pieceAId, let vertexA, let pieceBId, let vertexB):
-                // Get the pivot point (vertex in world space)
-                let isPieceA = pieceId == pieceAId
-                let vertexIndex = isPieceA ? vertexA : vertexB
-                let worldVertices = TangramCoordinateSystem.getWorldVertices(for: piece)
-                
-                guard vertexIndex < worldVertices.count else {
-                    return .locked
-                }
-                
-                let pivot = worldVertices[vertexIndex]
-                // Snap at 45° intervals
-                let snapAngles = [0, 45, 90, 135, 180, 225, 270, 315].map { Double($0) }
-                
-                return .rotatable(pivot: pivot, snapAngles: snapAngles)
-                
-            case .edgeToEdge(let pieceAId, let edgeA, let pieceBId, let edgeB):
-                // Determine which piece is sliding and which is stationary
-                let isPieceA = pieceId == pieceAId
-                
-                // Get the stationary piece (the one we're sliding along)
-                guard let stationaryPiece = puzzle.pieces.first(where: { 
-                    $0.id == (isPieceA ? pieceBId : pieceAId) 
-                }) else {
-                    return .locked
-                }
-                
-                // Get edge info for the STATIONARY piece (the track we slide along)
-                let stationaryWorldVertices = TangramCoordinateSystem.getWorldVertices(for: stationaryPiece)
-                let stationaryEdges = TangramGeometry.edges(for: stationaryPiece.type)
-                let stationaryEdgeIndex = isPieceA ? edgeB : edgeA
-                
-                guard stationaryEdgeIndex < stationaryEdges.count else {
-                    return .locked
-                }
-                
-                let stationaryEdgeDef = stationaryEdges[stationaryEdgeIndex]
-                let stationaryEdgeStart = stationaryWorldVertices[stationaryEdgeDef.startVertex]
-                let stationaryEdgeEnd = stationaryWorldVertices[stationaryEdgeDef.endVertex]
-                
-                // Calculate the stationary edge vector (this is our sliding track)
-                let dx = stationaryEdgeEnd.x - stationaryEdgeStart.x
-                let dy = stationaryEdgeEnd.y - stationaryEdgeStart.y
-                let stationaryEdgeLength = sqrt(dx * dx + dy * dy)
-                let normalizedVector = CGVector(dx: dx / stationaryEdgeLength, dy: dy / stationaryEdgeLength)
-                
-                // Get the sliding piece's edge length
-                let slidingEdges = TangramGeometry.edges(for: piece.type)
-                let slidingEdgeIndex = isPieceA ? edgeA : edgeB
-                guard slidingEdgeIndex < slidingEdges.count else {
-                    return .locked
-                }
-                
-                let slidingEdgeLength = slidingEdges[slidingEdgeIndex].length * TangramConstants.visualScale
-                
-                // The sliding range is the stationary edge length minus the sliding edge length
-                // This allows the sliding piece to move from one end to the other
-                let slideRange = max(0, stationaryEdgeLength - slidingEdgeLength)
-                
-                // Snap at 0%, 50%, 100% of the range
-                let snapPositions = [0.0, 0.5, 1.0]
-                
-                return .slidable(
-                    edge: ManipulationMode.Edge(
-                        start: stationaryEdgeStart,
-                        end: stationaryEdgeEnd,
-                        vector: normalizedVector
-                    ),
-                    range: 0...slideRange,
-                    snapPositions: snapPositions
-                )
-                
-            case .vertexToEdge:
-                // Vertex on edge - for now, lock it
-                // Could potentially allow sliding along the edge
-                return .locked
-            }
-        }
-        
-        // No connections - shouldn't happen for placed pieces
-        return .locked
+        return manipulationService.calculateManipulationMode(piece: piece, connections: puzzle.connections)
     }
     
     /// Update manipulation modes for all pieces
@@ -917,32 +1069,52 @@ class TangramEditorViewModel {
     
     enum EditorState: Equatable {
         case idle
-        case pendingFirstPiece(type: PieceType, rotation: Double)
-        case selectingCanvasPoints
-        case pendingSubsequentPiece(type: PieceType, rotation: Double)
-        case previewingPlacement(piece: TangramPiece, connections: [(ConnectionPoint, ConnectionPoint)])
+        
+        // First piece workflow
+        case selectingFirstPiece
+        case manipulatingFirstPiece(type: PieceType, rotation: Double, isFlipped: Bool)
+        
+        // Subsequent pieces workflow
+        case selectingNextPiece
+        case selectingCanvasConnections(maxPoints: Int)
+        case selectingPendingConnections(pieceType: PieceType, maxPoints: Int)
+        case manipulatingPendingPiece(type: PieceType, mode: ManipulationMode, rotation: Double)
+        case previewingPlacement(piece: TangramPiece)
+        
+        // Editing existing pieces
+        case pieceSelected(id: String, isLocked: Bool)
+        case unlockingPiece(id: String)
+        case manipulatingExistingPiece(id: String, mode: ManipulationMode)
+        
+        // Error recovery
         case error(String)
         
         static func == (lhs: EditorState, rhs: EditorState) -> Bool {
             switch (lhs, rhs) {
-            case (.idle, .idle):
+            case (.idle, .idle), 
+                 (.selectingFirstPiece, .selectingFirstPiece),
+                 (.selectingNextPiece, .selectingNextPiece):
                 return true
-            case (.pendingFirstPiece(let lType, let lRot), .pendingFirstPiece(let rType, let rRot)):
-                return lType == rType && lRot == rRot
-            case (.selectingCanvasPoints, .selectingCanvasPoints):
-                return true
-            case (.pendingSubsequentPiece(let lType, let lRot), .pendingSubsequentPiece(let rType, let rRot)):
-                return lType == rType && lRot == rRot
-            case (.previewingPlacement(let lPiece, let lConn), .previewingPlacement(let rPiece, let rConn)):
-                // Compare arrays of tuples element by element
-                guard lPiece == rPiece && lConn.count == rConn.count else { return false }
-                for (index, lConnection) in lConn.enumerated() {
-                    let rConnection = rConn[index]
-                    if lConnection.0 != rConnection.0 || lConnection.1 != rConnection.1 {
-                        return false
-                    }
-                }
-                return true
+            case (.manipulatingFirstPiece(let lType, let lRot, let lFlip), 
+                  .manipulatingFirstPiece(let rType, let rRot, let rFlip)):
+                return lType == rType && lRot == rRot && lFlip == rFlip
+            case (.selectingCanvasConnections(let lMax), .selectingCanvasConnections(let rMax)):
+                return lMax == rMax
+            case (.selectingPendingConnections(let lType, let lMax), 
+                  .selectingPendingConnections(let rType, let rMax)):
+                return lType == rType && lMax == rMax
+            case (.manipulatingPendingPiece(let lType, let lMode, let lRot), 
+                  .manipulatingPendingPiece(let rType, let rMode, let rRot)):
+                return lType == rType && lMode == rMode && lRot == rRot
+            case (.previewingPlacement(let lPiece), .previewingPlacement(let rPiece)):
+                return lPiece == rPiece
+            case (.pieceSelected(let lId, let lLocked), .pieceSelected(let rId, let rLocked)):
+                return lId == rId && lLocked == rLocked
+            case (.unlockingPiece(let lId), .unlockingPiece(let rId)):
+                return lId == rId
+            case (.manipulatingExistingPiece(let lId, let lMode), 
+                  .manipulatingExistingPiece(let rId, let rMode)):
+                return lId == rId && lMode == rMode
             case (.error(let lMsg), .error(let rMsg)):
                 return lMsg == rMsg
             default:

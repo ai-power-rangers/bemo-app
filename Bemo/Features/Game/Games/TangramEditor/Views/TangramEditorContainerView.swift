@@ -61,6 +61,7 @@ struct TangramEditorContainerView: View {
         )) {
             SavePuzzleDialog(viewModel: viewModel)
         }
+        .toastOverlay(toastService: viewModel.toastService)
     }
 }
 

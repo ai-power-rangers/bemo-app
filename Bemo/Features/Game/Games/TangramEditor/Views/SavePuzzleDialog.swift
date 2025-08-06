@@ -18,7 +18,7 @@ struct SavePuzzleDialog: View {
     @State private var isSaving = false
     @State private var showError = false
     @State private var errorMessage = ""
-    @State private var isDeveloperMode = false  // Toggle for developer mode
+    // All puzzles are now official - no toggle needed
     
     var body: some View {
         NavigationView {
@@ -76,18 +76,6 @@ struct SavePuzzleDialog: View {
                         .foregroundColor(.secondary)
                 }
                 
-                // Developer Mode Section (for creating bundled puzzles)
-                #if DEBUG
-                Section(header: Text("Developer Options")) {
-                    Toggle("Save as Official Puzzle", isOn: $isDeveloperMode)
-                    
-                    if isDeveloperMode {
-                        Text("This puzzle will be marked as an official puzzle and won't be editable by parents")
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                    }
-                }
-                #endif
                 
                 // Puzzle Info
                 Section(header: Text("Puzzle Information")) {
@@ -119,14 +107,12 @@ struct SavePuzzleDialog: View {
                         }
                     }
                     
-                    if isDeveloperMode {
-                        HStack {
-                            Text("Source")
-                            Spacer()
-                            Label("Official", systemImage: "checkmark.seal.fill")
-                                .font(.caption)
-                                .foregroundColor(.blue)
-                        }
+                    HStack {
+                        Text("Source")
+                        Spacer()
+                        Label("Official", systemImage: "checkmark.seal.fill")
+                            .font(.caption)
+                            .foregroundColor(.blue)
                     }
                 }
             }
@@ -185,8 +171,8 @@ struct SavePuzzleDialog: View {
         viewModel.puzzle.category = selectedCategory
         viewModel.puzzle.difficulty = selectedDifficulty
         
-        // Set source based on developer mode toggle
-        viewModel.puzzle.source = isDeveloperMode ? .bundled : .user
+        // All puzzles created in editor are official
+        viewModel.puzzle.source = .bundled
         
         // Parse and set tags
         if !tags.isEmpty {

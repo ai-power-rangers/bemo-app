@@ -14,6 +14,7 @@ import Foundation
 enum TangramEditorError: LocalizedError {
     
     // MARK: - Placement Errors
+    case pieceAlreadyPlaced(String)
     case invalidConnectionPoints(String)
     case placementCalculationFailed(String)
     case overlappingPieces(String)
@@ -50,6 +51,8 @@ enum TangramEditorError: LocalizedError {
     
     var errorDescription: String? {
         switch self {
+        case .pieceAlreadyPlaced(let type):
+            return "Piece already placed: \(type)"
         case .invalidConnectionPoints(let detail):
             return "Invalid connection points: \(detail)"
         case .placementCalculationFailed(let detail):
@@ -111,6 +114,8 @@ enum TangramEditorError: LocalizedError {
     
     var userMessage: String {
         switch self {
+        case .pieceAlreadyPlaced:
+            return "This piece is already placed in the puzzle."
         case .invalidConnectionPoints:
             return "Please select matching connection types (vertex-to-vertex or edge-to-edge)."
         case .placementCalculationFailed:
