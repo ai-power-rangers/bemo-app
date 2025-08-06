@@ -11,6 +11,15 @@ struct TangramEditorBottomBar: View {
     @Bindable var viewModel: TangramEditorViewModel
     
     var body: some View {
+        // Only show when in editor mode
+        if viewModel.navigationState != .editor {
+            return AnyView(EmptyView())
+        }
+        
+        return AnyView(bottomBarContent)
+    }
+    
+    private var bottomBarContent: some View {
         HStack(spacing: 8) {
             // Piece buttons
             ForEach(PieceType.allCases, id: \.self) { pieceType in

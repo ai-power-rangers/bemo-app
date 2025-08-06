@@ -10,6 +10,8 @@ import CoreGraphics
 
 class ValidationService {
     
+    private let geometryService = GeometryService()
+    
     // MARK: - Geometric Relationships
     
     enum GeometricRelationship {
@@ -26,7 +28,7 @@ class ValidationService {
         let verticesA = getTransformedVertices(for: pieceA)
         let verticesB = getTransformedVertices(for: pieceB)
         
-        return GeometryEngine.polygonsOverlap(verticesA, verticesB)
+        return geometryService.polygonsOverlap(verticesA, verticesB)
     }
     
     /// Check if two pieces share an edge or part of an edge
@@ -34,7 +36,7 @@ class ValidationService {
         let verticesA = getTransformedVertices(for: pieceA)
         let verticesB = getTransformedVertices(for: pieceB)
         
-        return !GeometryEngine.sharedEdges(verticesA, verticesB).isEmpty
+        return !geometryService.sharedEdges(verticesA, verticesB).isEmpty
     }
     
     /// Check if two pieces touch at exactly one vertex
@@ -42,7 +44,7 @@ class ValidationService {
         let verticesA = getTransformedVertices(for: pieceA)
         let verticesB = getTransformedVertices(for: pieceB)
         
-        return !GeometryEngine.sharedVertices(verticesA, verticesB).isEmpty
+        return !geometryService.sharedVertices(verticesA, verticesB).isEmpty
     }
     
     /// Get the geometric relationship between two pieces
@@ -162,6 +164,6 @@ class ValidationService {
         let baseVertices = TangramGeometry.vertices(for: piece.type)
         // Apply the visual scale factor
         let scaledVertices = baseVertices.map { CGPoint(x: $0.x * TangramConstants.visualScale, y: $0.y * TangramConstants.visualScale) }
-        return GeometryEngine.transformVertices(scaledVertices, with: piece.transform)
+        return geometryService.transformVertices(scaledVertices, with: piece.transform)
     }
 }

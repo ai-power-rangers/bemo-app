@@ -90,16 +90,8 @@ struct TangramEditorCanvasView: View {
             controlPanel
                 .presentationDetents([.medium])
         }
-        .alert("Save Puzzle", isPresented: $viewModel.showSaveDialog) {
-            TextField("Puzzle Name", text: .constant(viewModel.puzzle.name))
-            Button("Save") {
-                Task {
-                    try? await viewModel.save()
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Enter a name for your puzzle")
+        .sheet(isPresented: $viewModel.showSaveDialog) {
+            SavePuzzleDialog(viewModel: viewModel)
         }
     }
     

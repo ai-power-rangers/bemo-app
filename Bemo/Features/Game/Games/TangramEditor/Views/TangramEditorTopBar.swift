@@ -13,25 +13,40 @@ struct TangramEditorTopBar: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Left side: Quit and Settings (fixed width)
+            // Left side: Back/Quit and Settings (fixed width)
             HStack(spacing: 8) {
-                Button(action: {
-                    delegate?.gameDidRequestQuit()
-                }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
-                        .foregroundColor(.primary)
+                // Show back button when in editor, quit button when in library
+                if viewModel.navigationState == .editor {
+                    Button(action: {
+                        viewModel.navigationState = .library
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                            Text("Library")
+                        }
+                        .font(.caption)
+                    }
+                } else {
+                    Button(action: {
+                        delegate?.gameDidRequestQuit()
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundColor(.primary)
+                    }
                 }
                 
-                Button(action: {
-                    viewModel.toggleSettings()
-                }) {
-                    Image(systemName: "gearshape.fill")
-                        .font(.title3)
-                        .foregroundColor(.primary)
+                if viewModel.navigationState == .editor {
+                    Button(action: {
+                        viewModel.toggleSettings()
+                    }) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.title3)
+                            .foregroundColor(.primary)
+                    }
                 }
             }
-            .frame(width: 80, alignment: .leading)
+            .frame(width: viewModel.navigationState == .editor ? 120 : 80, alignment: .leading)
             
             Spacer(minLength: 0)
             

@@ -1,30 +1,33 @@
 //
-//  GeometryEngine.swift
+//  GeometryService.swift
 //  Bemo
 //
-//  Precise geometric calculations and transformations for tangram pieces
+//  Service for precise geometric calculations and transformations for tangram pieces
 //
 
 import Foundation
 import CoreGraphics
 
-struct GeometryEngine {
+class GeometryService {
     
-    private static let tolerance: Double = TangramConstants.fineTolerance
+    // Static constants for default parameters
+    static let defaultTolerance: Double = TangramConstants.fineTolerance
     
-    static func transformVertices(_ vertices: [CGPoint], with transform: CGAffineTransform) -> [CGPoint] {
+    private let tolerance: Double = GeometryService.defaultTolerance
+    
+    func transformVertices(_ vertices: [CGPoint], with transform: CGAffineTransform) -> [CGPoint] {
         return vertices.map { vertex in
             vertex.applying(transform)
         }
     }
     
-    static func distance(from p1: CGPoint, to p2: CGPoint) -> Double {
+    func distance(from p1: CGPoint, to p2: CGPoint) -> Double {
         let dx = Double(p2.x - p1.x)
         let dy = Double(p2.y - p1.y)
         return sqrt(dx * dx + dy * dy)
     }
     
-    static func angle(from p1: CGPoint, vertex: CGPoint, to p2: CGPoint) -> Double {
+    func angle(from p1: CGPoint, vertex: CGPoint, to p2: CGPoint) -> Double {
         let v1 = CGVector(dx: p1.x - vertex.x, dy: p1.y - vertex.y)
         let v2 = CGVector(dx: p2.x - vertex.x, dy: p2.y - vertex.y)
         
@@ -35,7 +38,7 @@ struct GeometryEngine {
         return angle * 180.0 / .pi
     }
     
-    static func normalizeAngle(_ angle: Double) -> Double {
+    func normalizeAngle(_ angle: Double) -> Double {
         var normalized = angle.truncatingRemainder(dividingBy: 360.0)
         if normalized < 0 {
             normalized += 360.0
@@ -43,16 +46,17 @@ struct GeometryEngine {
         return normalized
     }
     
-    static func anglesEqual(_ angle1: Double, _ angle2: Double, tolerance: Double = 1.0) -> Bool {
+    func anglesEqual(_ angle1: Double, _ angle2: Double, tolerance: Double = 1.0) -> Bool {
         let diff = abs(normalizeAngle(angle1) - normalizeAngle(angle2))
         return diff <= tolerance || diff >= (360.0 - tolerance)
     }
     
-    static func pointsEqual(_ p1: CGPoint, _ p2: CGPoint, tolerance: Double = tolerance) -> Bool {
-        return distance(from: p1, to: p2) < tolerance
+    func pointsEqual(_ p1: CGPoint, _ p2: CGPoint, tolerance: Double? = nil) -> Bool {
+        let tol = tolerance ?? self.tolerance
+        return distance(from: p1, to: p2) < tol
     }
     
-    static func pointOnLineSegment(_ point: CGPoint, _ start: CGPoint, _ end: CGPoint) -> Bool {
+    func pointOnLineSegment(_ point: CGPoint, _ start: CGPoint, _ end: CGPoint) -> Bool {
         let epsilon = TangramConstants.ultraFineTolerance
         
         // Check if point is collinear with the line segment
@@ -72,11 +76,12 @@ struct GeometryEngine {
         return true
     }
     
-    static func edgesEqual(_ edge1Length: Double, _ edge2Length: Double, tolerance: Double = tolerance) -> Bool {
-        return abs(edge1Length - edge2Length) < tolerance
+    func edgesEqual(_ edge1Length: Double, _ edge2Length: Double, tolerance: Double? = nil) -> Bool {
+        let tol = tolerance ?? self.tolerance
+        return abs(edge1Length - edge2Length) < tol
     }
     
-    static func lineSegmentIntersection(
+    func lineSegmentIntersection(
         _ p1: CGPoint, _ p2: CGPoint,
         _ p3: CGPoint, _ p4: CGPoint
     ) -> CGPoint? {
@@ -103,7 +108,7 @@ struct GeometryEngine {
         return nil
     }
     
-    static func polygonContainsPoint(_ point: CGPoint, vertices: [CGPoint]) -> Bool {
+    func polygonContainsPoint(_ point: CGPoint, vertices: [CGPoint]) -> Bool {
         guard vertices.count >= 3 else { return false }
         
         // First check if the point is exactly on a vertex (boundary point)
@@ -145,7 +150,7 @@ struct GeometryEngine {
         return inside
     }
     
-    static func polygonArea(_ vertices: [CGPoint]) -> Double {
+    func polygonArea(_ vertices: [CGPoint]) -> Double {
         guard vertices.count >= 3 else { return 0 }
         
         var area: Double = 0
@@ -158,7 +163,7 @@ struct GeometryEngine {
         return abs(area) / 2.0
     }
     
-    static func polygonsOverlap(_ vertices1: [CGPoint], _ vertices2: [CGPoint]) -> Bool {
+    func polygonsOverlap(_ vertices1: [CGPoint], _ vertices2: [CGPoint]) -> Bool {
         // For convex polygons (all tangram pieces), we can use a simpler approach:
         // 1. Check if any vertex of polygon1 is inside polygon2
         // 2. Check if any vertex of polygon2 is inside polygon1
@@ -210,7 +215,7 @@ struct GeometryEngine {
         return false
     }
     
-    private static func calculateIntersectionArea(_ subject: [CGPoint], _ clip: [CGPoint]) -> Double {
+    private func calculateIntersectionArea(_ subject: [CGPoint], _ clip: [CGPoint]) -> Double {
         // Sutherland-Hodgman polygon clipping algorithm
         var outputList = subject
         
@@ -251,12 +256,12 @@ struct GeometryEngine {
         return abs(polygonArea(outputList))
     }
     
-    private static func isInside(_ point: CGPoint, clipVertex1: CGPoint, clipVertex2: CGPoint) -> Bool {
+    private func isInside(_ point: CGPoint, clipVertex1: CGPoint, clipVertex2: CGPoint) -> Bool {
         // Check if point is on the inside (left) side of the directed line from clipVertex1 to clipVertex2
         return (clipVertex2.x - clipVertex1.x) * (point.y - clipVertex1.y) - (clipVertex2.y - clipVertex1.y) * (point.x - clipVertex1.x) >= 0
     }
     
-    static func boundingBox(for vertices: [CGPoint]) -> CGRect {
+    func boundingBox(for vertices: [CGPoint]) -> CGRect {
         guard !vertices.isEmpty else { return .zero }
         
         var minX = vertices[0].x
@@ -274,14 +279,14 @@ struct GeometryEngine {
         return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
     
-    static func boundingBoxesOverlap(_ box1: CGRect, _ box2: CGRect) -> Bool {
+    func boundingBoxesOverlap(_ box1: CGRect, _ box2: CGRect) -> Bool {
         return box1.intersects(box2)
     }
     
     // MARK: - Geometric Analysis Helpers for Semantic Validation
     
     /// Find vertices that are shared between two polygons (within tolerance)
-    static func sharedVertices(_ vertices1: [CGPoint], _ vertices2: [CGPoint]) -> Set<CGPoint> {
+    func sharedVertices(_ vertices1: [CGPoint], _ vertices2: [CGPoint]) -> Set<CGPoint> {
         var shared = Set<CGPoint>()
         // Use a more generous tolerance for vertex matching to handle floating point precision
         let tolerance = TangramConstants.geometricTolerance  // Consistent tolerance
@@ -299,7 +304,7 @@ struct GeometryEngine {
     }
     
     /// Find edges that are shared between two polygons
-    static func sharedEdges(_ vertices1: [CGPoint], _ vertices2: [CGPoint]) -> Set<String> {
+    func sharedEdges(_ vertices1: [CGPoint], _ vertices2: [CGPoint]) -> Set<String> {
         var shared = Set<String>()
         // Use consistent tolerance with vertex matching
         let tolerance = TangramConstants.geometricTolerance  // Consistent tolerance
@@ -323,7 +328,7 @@ struct GeometryEngine {
     }
     
     /// Check if two edges coincide (within tolerance)
-    static func edgesCoincide(_ edgeA: (CGPoint, CGPoint), _ edgeB: (CGPoint, CGPoint), tolerance: CGFloat = 1e-6) -> Bool {
+    func edgesCoincide(_ edgeA: (CGPoint, CGPoint), _ edgeB: (CGPoint, CGPoint), tolerance: CGFloat = 1e-6) -> Bool {
         // Check if edges are the same (forward or backward)
         let sameDirection = pointsEqual(edgeA.0, edgeB.0, tolerance: tolerance) && 
                            pointsEqual(edgeA.1, edgeB.1, tolerance: tolerance)
@@ -334,7 +339,7 @@ struct GeometryEngine {
     }
     
     /// Check if a shorter edge lies along a longer edge (partial coincidence)
-    static func edgePartiallyCoincides(shorterEdge: (CGPoint, CGPoint), longerEdge: (CGPoint, CGPoint), tolerance: CGFloat = 1e-6) -> Bool {
+    func edgePartiallyCoincides(shorterEdge: (CGPoint, CGPoint), longerEdge: (CGPoint, CGPoint), tolerance: CGFloat = 1e-6) -> Bool {
         // Check if both endpoints of the shorter edge lie on the line defined by the longer edge
         let distStart = distanceFromPointToLine(shorterEdge.0, lineStart: longerEdge.0, lineEnd: longerEdge.1)
         let distEnd = distanceFromPointToLine(shorterEdge.1, lineStart: longerEdge.0, lineEnd: longerEdge.1)
@@ -367,7 +372,7 @@ struct GeometryEngine {
     }
     
     /// Get all edges from a polygon
-    private static func getEdges(from vertices: [CGPoint]) -> [(CGPoint, CGPoint)] {
+    private func getEdges(from vertices: [CGPoint]) -> [(CGPoint, CGPoint)] {
         var edges: [(CGPoint, CGPoint)] = []
         
         for i in 0..<vertices.count {
@@ -379,35 +384,35 @@ struct GeometryEngine {
         return edges
     }
     
-    static func rotationMatrix(angle: Double) -> CGAffineTransform {
+    func rotationMatrix(angle: Double) -> CGAffineTransform {
         let radians = angle * .pi / 180.0
         return CGAffineTransform(rotationAngle: CGFloat(radians))
     }
     
-    static func translationMatrix(dx: Double, dy: Double) -> CGAffineTransform {
+    func translationMatrix(dx: Double, dy: Double) -> CGAffineTransform {
         return CGAffineTransform(translationX: CGFloat(dx), y: CGFloat(dy))
     }
     
-    static func scaleMatrix(sx: Double, sy: Double) -> CGAffineTransform {
+    func scaleMatrix(sx: Double, sy: Double) -> CGAffineTransform {
         return CGAffineTransform(scaleX: CGFloat(sx), y: CGFloat(sy))
     }
     
-    static func combineTransforms(_ transforms: [CGAffineTransform]) -> CGAffineTransform {
+    func combineTransforms(_ transforms: [CGAffineTransform]) -> CGAffineTransform {
         return transforms.reduce(CGAffineTransform.identity) { result, transform in
             result.concatenating(transform)
         }
     }
     
-    static func extractRotation(from transform: CGAffineTransform) -> Double {
+    func extractRotation(from transform: CGAffineTransform) -> Double {
         let angle = atan2(Double(transform.b), Double(transform.a))
         return angle * 180.0 / .pi
     }
     
-    static func extractTranslation(from transform: CGAffineTransform) -> CGPoint {
+    func extractTranslation(from transform: CGAffineTransform) -> CGPoint {
         return CGPoint(x: transform.tx, y: transform.ty)
     }
     
-    static func projectPointOntoLine(_ point: CGPoint, lineStart: CGPoint, lineEnd: CGPoint) -> CGPoint {
+    func projectPointOntoLine(_ point: CGPoint, lineStart: CGPoint, lineEnd: CGPoint) -> CGPoint {
         let lineVec = CGVector(dx: lineEnd.x - lineStart.x, dy: lineEnd.y - lineStart.y)
         let pointVec = CGVector(dx: point.x - lineStart.x, dy: point.y - lineStart.y)
         
@@ -426,16 +431,16 @@ struct GeometryEngine {
         )
     }
     
-    static func distanceFromPointToLine(_ point: CGPoint, lineStart: CGPoint, lineEnd: CGPoint) -> Double {
+    func distanceFromPointToLine(_ point: CGPoint, lineStart: CGPoint, lineEnd: CGPoint) -> Double {
         let projection = projectPointOntoLine(point, lineStart: lineStart, lineEnd: lineEnd)
         return distance(from: point, to: projection)
     }
     
-    static func edgeVector(from start: CGPoint, to end: CGPoint) -> CGVector {
+    func edgeVector(from start: CGPoint, to end: CGPoint) -> CGVector {
         return CGVector(dx: end.x - start.x, dy: end.y - start.y)
     }
     
-    static func normalizeVector(_ vector: CGVector) -> CGVector {
+    func normalizeVector(_ vector: CGVector) -> CGVector {
         let length = sqrt(Double(vector.dx * vector.dx + vector.dy * vector.dy))
         
         if length < tolerance {
@@ -445,17 +450,17 @@ struct GeometryEngine {
         return CGVector(dx: vector.dx / CGFloat(length), dy: vector.dy / CGFloat(length))
     }
     
-    static func dotProduct(_ v1: CGVector, _ v2: CGVector) -> Double {
+    func dotProduct(_ v1: CGVector, _ v2: CGVector) -> Double {
         return Double(v1.dx * v2.dx + v1.dy * v2.dy)
     }
     
-    static func crossProduct2D(_ v1: CGVector, _ v2: CGVector) -> Double {
+    func crossProduct2D(_ v1: CGVector, _ v2: CGVector) -> Double {
         return Double(v1.dx * v2.dy - v1.dy * v2.dx)
     }
 }
 
-extension GeometryEngine {
-    static func alignTransform(
+extension GeometryService {
+    func alignTransform(
         from sourcePoint: CGPoint,
         sourceAngle: Double,
         to targetPoint: CGPoint,
@@ -473,7 +478,7 @@ extension GeometryEngine {
         return combineTransforms([rotation, translation])
     }
     
-    static func vertexMatchTransform(
+    func vertexMatchTransform(
         pieceVertices: [CGPoint],
         vertexIndex: Int,
         targetPoint: CGPoint
@@ -487,7 +492,7 @@ extension GeometryEngine {
         return translationMatrix(dx: dx, dy: dy)
     }
     
-    static func edgeAlignTransform(
+    func edgeAlignTransform(
         pieceVertices: [CGPoint],
         edgeStartIndex: Int,
         targetEdgeStart: CGPoint,
@@ -520,7 +525,7 @@ extension GeometryEngine {
     // MARK: - Edge Coincidence Methods
     
     /// Check if two edges coincide (same line segment)
-    static func edgesCoincide(_ edge1: (CGPoint, CGPoint), _ edge2: (CGPoint, CGPoint), tolerance: Double = 1e-6) -> Bool {
+    func edgesCoincide(_ edge1: (CGPoint, CGPoint), _ edge2: (CGPoint, CGPoint), tolerance: Double = 1e-6) -> Bool {
         // Check if both endpoints match (in either order)
         let forwardMatch = pointsEqual(edge1.0, edge2.0, tolerance: tolerance) && 
                           pointsEqual(edge1.1, edge2.1, tolerance: tolerance)
@@ -530,7 +535,7 @@ extension GeometryEngine {
     }
     
     /// Check if a shorter edge lies along a longer edge
-    static func edgePartiallyCoincides(shorterEdge: (CGPoint, CGPoint), longerEdge: (CGPoint, CGPoint), tolerance: Double = 1e-6) -> Bool {
+    func edgePartiallyCoincides(shorterEdge: (CGPoint, CGPoint), longerEdge: (CGPoint, CGPoint), tolerance: Double = 1e-6) -> Bool {
         // Check if both points of the shorter edge lie on the longer edge line segment
         let onLine1 = pointOnLineSegment(shorterEdge.0, lineStart: longerEdge.0, lineEnd: longerEdge.1, tolerance: tolerance)
         let onLine2 = pointOnLineSegment(shorterEdge.1, lineStart: longerEdge.0, lineEnd: longerEdge.1, tolerance: tolerance)
@@ -538,7 +543,7 @@ extension GeometryEngine {
     }
     
     /// Check if a point lies on a line segment
-    static func pointOnLineSegment(_ point: CGPoint, lineStart: CGPoint, lineEnd: CGPoint, tolerance: Double = 1e-6) -> Bool {
+    func pointOnLineSegment(_ point: CGPoint, lineStart: CGPoint, lineEnd: CGPoint, tolerance: Double = 1e-6) -> Bool {
         // Check if point is collinear with the line segment
         let crossProduct = (point.y - lineStart.y) * (lineEnd.x - lineStart.x) - 
                           (point.x - lineStart.x) * (lineEnd.y - lineStart.y)

@@ -330,6 +330,21 @@ Despite the issues, some aspects are well-implemented:
    - No more returning nil
    - Proper state persistence
 
+### 📐 Approved Design Patterns
+
+1. **Undo/Redo - Snapshot Pattern**
+   ```swift
+   struct PuzzleSnapshot {
+       let pieces: [TangramPiece]
+       let connections: [Connection]
+       let timestamp: Date
+   }
+   ```
+   - Simple 50-line implementation
+   - Perfect for small state (7 pieces max)
+   - Avoids Command pattern complexity
+   - Memory efficient (~20KB total)
+
 ### 🔧 Remaining Priority 1: Critical (Must Fix Before PR)
 - [ ] Refactor GeometryEngine to Service (562 lines)
 - [ ] Fix remaining MainActor.assumeIsolated usage
@@ -348,31 +363,58 @@ Despite the issues, some aspects are well-implemented:
 - [ ] Implement functional constraint options
 
 ### 🆕 Missing Core Features (Priority 1 - CRITICAL)
-- [ ] **Puzzle Library View** - Show list of saved puzzles on entry
-- [ ] **Save Dialog** - Capture name, category, difficulty (1-5 stars)
-- [ ] **Edit Existing** - Load and modify saved puzzles
-- [ ] **Delete Puzzles** - Remove from library
-- [ ] **Puzzle Metadata Display** - Show info in library view
+
+#### Puzzle Library System
+- [ ] **Initial View** - Show library instead of blank canvas on entry
+  - Grid/List view of saved puzzles with thumbnails
+  - "Create New" button prominent
+  - Search/filter by category and difficulty
+  
+- [ ] **Save Dialog Enhancement**
+  - Current: Basic save with no metadata
+  - Required fields:
+    - Name (text input)
+    - Category (dropdown: Animals, People, Objects, etc.)
+    - Difficulty (1-5 star selector)
+  - Auto-generate thumbnail on save
+  
+- [ ] **Edit Flow**
+  - Tap puzzle in library → Load into editor
+  - Maintain puzzle ID for updates
+  - "Save" updates existing, "Save As" creates new
+  
+- [ ] **Library Management**
+  - Swipe to delete or edit button
+  - Confirmation dialog for deletion
+  - Show puzzle stats (created date, last modified)
 
 ---
 
 ## 🎯 Updated Recommendation
 
-**STATUS: AMBER - Significant Progress Made**
+**STATUS: RED - Missing Core Functionality**
 
-The implementation has been substantially improved:
-- ✅ Major architecture violations resolved
-- ✅ Technical debt significantly reduced  
-- ✅ Clean separation of concerns achieved in most areas
-- ✅ No more UIKit dependencies
-- ✅ State management properly implemented
+While architecture has been improved, **critical user features are missing**:
 
-**Remaining blockers before PR:**
+### ✅ Technical Improvements Made:
+- Major architecture violations resolved
+- Technical debt significantly reduced  
+- Clean separation of concerns achieved
+- No more UIKit dependencies
+- State management properly implemented
+
+### ❌ Critical Missing Features:
+1. **No Puzzle Library** - Users can't see/access saved puzzles
+2. **Incomplete Save Dialog** - Missing name, category, difficulty input
+3. **No Edit Flow** - Can't load existing puzzles to modify
+4. **No Library Management** - Can't delete puzzles
+
+### 🚨 Remaining Technical Blockers:
 1. GeometryEngine needs refactoring to Service layer
 2. ViewModel needs decomposition (950 lines)
 3. Parent access control not implemented
 
-With 1-2 more days of work, this will be ready for PR submission.
+**New Estimate:** 2-3 additional days (1 day for features, 1-2 for technical debt)
 
 ---
 
@@ -390,6 +432,11 @@ With 1-2 more days of work, this will be ready for PR submission.
 | Dead Code Methods | 6 | 6 | 0 |
 | UIKit Dependencies | Yes | No ✅ | No |
 | State Persistence | Broken | Fixed ✅ | Working |
+| **Core Features** | | | |
+| Puzzle Library | No | No ❌ | Yes |
+| Save Dialog | Basic | Basic ❌ | Full |
+| Edit Existing | No | No ❌ | Yes |
+| Undo/Redo | No | No ❌ | Yes |
 
 ### Progress Summary
 - **Fixed:** 6 major issues

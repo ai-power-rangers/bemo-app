@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoreGraphics
 
 struct TangramPuzzle: Codable, Identifiable {
     let id: String
@@ -79,4 +80,15 @@ struct SolvedTangramPuzzle: Codable {
 struct SolvedPiece: Codable {
     let pieceType: PieceType
     let transform: CGAffineTransform
+}
+
+// Metadata for listing puzzles without loading full data
+struct PuzzleMetadata: Codable, Identifiable {
+    let id: String
+    let name: String
+    let category: PuzzleCategory
+    let difficulty: PuzzleDifficulty
+    let createdDate: Date
+    let modifiedDate: Date
+    let pieceCount: Int
 }

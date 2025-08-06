@@ -21,6 +21,7 @@ class TangramEditorViewModel {
     var validationState: ValidationState = .unknown
     var editMode: EditMode = .select
     var editorState: EditorState = .idle
+    var navigationState: NavigationState = .library  // Start with library view
     
     // Piece placement properties
     var selectedCanvasPoints: [ConnectionPoint] = []  // Points selected on canvas pieces
@@ -45,8 +46,14 @@ class TangramEditorViewModel {
     private let validationService: ValidationService
     private let persistenceService: PuzzlePersistenceService
     private let constraintManager = ConstraintManager()
+    private let geometryService = GeometryService()
     
     // MARK: - Types
+    
+    enum NavigationState {
+        case library
+        case editor
+    }
     
     enum EditMode {
         case select
@@ -146,14 +153,6 @@ class TangramEditorViewModel {
         }
     }
     
-    private func loadSavedPuzzles() async {
-        do {
-            savedPuzzles = try await persistenceService.loadAllPuzzles()
-        } catch {
-            // Handle error silently for now
-            savedPuzzles = []
-        }
-    }
     
     // MARK: - Piece Management
     
@@ -503,12 +502,12 @@ class TangramEditorViewModel {
     func getTransformedVertices(for pieceId: String) -> [CGPoint]? {
         guard let piece = puzzle.pieces.first(where: { $0.id == pieceId }) else { return nil }
         let baseVertices = TangramGeometry.vertices(for: piece.type)
-        return GeometryEngine.transformVertices(baseVertices, with: piece.transform)
+        return geometryService.transformVertices(baseVertices, with: piece.transform)
     }
     
     func getPieceBounds(for pieceId: String) -> CGRect? {
         guard let vertices = getTransformedVertices(for: pieceId) else { return nil }
-        return GeometryEngine.boundingBox(for: vertices)
+        return geometryService.boundingBox(for: vertices)
     }
     
     func getPieceCentroid(for pieceId: String) -> CGPoint? {
@@ -534,12 +533,78 @@ class TangramEditorViewModel {
         validate()
     }
     
+    func loadPuzzle(from loadedPuzzle: TangramPuzzle) {
+        puzzle = loadedPuzzle
+        editorState = .idle
+        selectedPieceIds.removeAll()
+        validate()
+        notifyPuzzleChanged()
+        navigationState = .editor  // Switch to editor view
+    }
+    
     func deletePuzzle() async throws {
         try await persistenceService.deletePuzzle(id: puzzle.id)
         reset()
         
         // Reload saved puzzles list
         await loadSavedPuzzles()
+    }
+    
+    func deletePuzzle(_ puzzleToDelete: TangramPuzzle) async {
+        do {
+            try await persistenceService.deletePuzzle(id: puzzleToDelete.id)
+            await loadSavedPuzzles()
+        } catch {
+            print("Failed to delete puzzle: \(error)")
+        }
+    }
+    
+    func duplicatePuzzle(_ puzzleToDuplicate: TangramPuzzle) async {
+        // Create a new puzzle with duplicated content
+        var newPuzzle = TangramPuzzle(
+            name: "\(puzzleToDuplicate.name) Copy",
+            category: puzzleToDuplicate.category,
+            difficulty: puzzleToDuplicate.difficulty
+        )
+        
+        // Copy mutable properties
+        newPuzzle.pieces = puzzleToDuplicate.pieces
+        newPuzzle.connections = puzzleToDuplicate.connections
+        newPuzzle.solutionChecksum = puzzleToDuplicate.solutionChecksum
+        newPuzzle.createdBy = puzzleToDuplicate.createdBy
+        newPuzzle.tags = puzzleToDuplicate.tags
+        // Note: thumbnailData will be regenerated on save
+        
+        do {
+            _ = try await persistenceService.savePuzzle(newPuzzle)
+            await loadSavedPuzzles()
+        } catch {
+            print("Failed to duplicate puzzle: \(error)")
+        }
+    }
+    
+    func loadSavedPuzzles() async {
+        do {
+            let allPuzzles = try await persistenceService.listPuzzles()
+            // Load full puzzle data for each metadata
+            var loadedPuzzles: [TangramPuzzle] = []
+            for metadata in allPuzzles {
+                if let fullPuzzle = try? await persistenceService.loadPuzzle(id: metadata.id) {
+                    loadedPuzzles.append(fullPuzzle)
+                }
+            }
+            savedPuzzles = loadedPuzzles
+        } catch {
+            print("Failed to load puzzles: \(error)")
+            savedPuzzles = []
+        }
+    }
+    
+    func createNewPuzzle() {
+        reset()
+        puzzle = TangramPuzzle(name: "New Puzzle", category: .custom, difficulty: .medium)
+        editorState = .idle
+        navigationState = .editor  // Switch to editor view
     }
     
     func listSavedPuzzles() async throws -> [PuzzleMetadata] {
@@ -597,11 +662,6 @@ class TangramEditorViewModel {
         return puzzle
     }
     
-    func loadPuzzle(from data: TangramPuzzle) {
-        puzzle = data
-        validate()
-        notifyPuzzleChanged()
-    }
     
     
     func recenterPuzzle(canvasSize: CGSize? = nil) {
@@ -619,7 +679,7 @@ class TangramEditorViewModel {
             // Scale vertices to match visual representation
             let baseVertices = TangramGeometry.vertices(for: piece.type)
             let scaledVertices = baseVertices.map { CGPoint(x: $0.x * TangramConstants.visualScale, y: $0.y * TangramConstants.visualScale) }
-            let vertices = GeometryEngine.transformVertices(scaledVertices, with: piece.transform)
+            let vertices = geometryService.transformVertices(scaledVertices, with: piece.transform)
             
             for vertex in vertices {
                 minX = min(minX, vertex.x)
@@ -660,7 +720,7 @@ class TangramEditorViewModel {
         }
         
         // Now apply the piece's transform to the scaled vertices
-        let transformedVertices = GeometryEngine.transformVertices(scaledVertices, with: piece.transform)
+        let transformedVertices = geometryService.transformVertices(scaledVertices, with: piece.transform)
         
         let edges = TangramGeometry.edges(for: piece.type)
         
@@ -805,7 +865,7 @@ class TangramEditorViewModel {
         
         // Get the base vertices for both pieces
         let newPieceVertices = TangramGeometry.vertices(for: newPieceType)
-        let existingVertices = GeometryEngine.transformVertices(
+        let existingVertices = geometryService.transformVertices(
             TangramGeometry.vertices(for: existingPiece.type),
             with: existingPiece.transform
         )

@@ -11,6 +11,7 @@ import CoreGraphics
 class ConnectionService {
     
     private let constraintManager = ConstraintManager()
+    private let geometryService = GeometryService()
     
     // MARK: - Connection Creation
     
@@ -64,7 +65,7 @@ class ConnectionService {
             let worldVertexA = scaledVertexA.applying(pieceA.transform)
             let worldVertexB = scaledVertexB.applying(pieceB.transform)
             
-            if GeometryEngine.pointsEqual(worldVertexA, worldVertexB) {
+            if geometryService.pointsEqual(worldVertexA, worldVertexB) {
                 return Constraint(
                     type: .rotation(around: worldVertexA, range: 0...360),
                     affectedPieceId: pieceBId
@@ -98,8 +99,8 @@ class ConnectionService {
             let edgeStartA = scaledStartA.applying(pieceA.transform)
             let edgeEndA = scaledEndA.applying(pieceA.transform)
             
-            let edgeVector = GeometryEngine.edgeVector(from: edgeStartA, to: edgeEndA)
-            let normalizedVector = GeometryEngine.normalizeVector(edgeVector)
+            let edgeVector = geometryService.edgeVector(from: edgeStartA, to: edgeEndA)
+            let normalizedVector = geometryService.normalizeVector(edgeVector)
             
             // Calculate sliding range based on edge length difference
             let slidingRange: Double = max(0, edgeLengthA - edgeLengthB)
@@ -177,11 +178,11 @@ class ConnectionService {
         // Apply the visual scale factor
         let baseVerticesA = TangramGeometry.vertices(for: pieceA.type)
         let scaledVerticesA = baseVerticesA.map { CGPoint(x: $0.x * TangramConstants.visualScale, y: $0.y * TangramConstants.visualScale) }
-        let verticesA = GeometryEngine.transformVertices(scaledVerticesA, with: pieceA.transform)
+        let verticesA = geometryService.transformVertices(scaledVerticesA, with: pieceA.transform)
         
         let baseVerticesB = TangramGeometry.vertices(for: pieceB.type)
         let scaledVerticesB = baseVerticesB.map { CGPoint(x: $0.x * TangramConstants.visualScale, y: $0.y * TangramConstants.visualScale) }
-        let verticesB = GeometryEngine.transformVertices(scaledVerticesB, with: pieceB.transform)
+        let verticesB = geometryService.transformVertices(scaledVerticesB, with: pieceB.transform)
         
         let tolerance: CGFloat = 1e-5
         
@@ -193,7 +194,7 @@ class ConnectionService {
             
             let pointA = verticesA[vertexA]
             let pointB = verticesB[vertexB]
-            return GeometryEngine.pointsEqual(pointA, pointB, tolerance: tolerance)
+            return geometryService.pointsEqual(pointA, pointB, tolerance: tolerance)
             
         case .edgeToEdge(let pieceAId, let edgeA, _, let edgeB):
             guard let pieceAObj = pieces.first(where: { $0.id == pieceAId }) else {
@@ -219,22 +220,22 @@ class ConnectionService {
             let edgeB = (edgeStartB, edgeEndB)
             
             // Check if edges coincide or partially coincide
-            if GeometryEngine.edgesCoincide(edgeA, edgeB, tolerance: tolerance) {
+            if geometryService.edgesCoincide(edgeA, edgeB, tolerance: tolerance) {
                 return true
             }
             
             // Check if the shorter edge lies along the longer edge
-            let lengthA = GeometryEngine.distance(from: edgeStartA, to: edgeEndA)
-            let lengthB = GeometryEngine.distance(from: edgeStartB, to: edgeEndB)
+            let lengthA = geometryService.distance(from: edgeStartA, to: edgeEndA)
+            let lengthB = geometryService.distance(from: edgeStartB, to: edgeEndB)
             
             if lengthA > lengthB {
-                return GeometryEngine.edgePartiallyCoincides(
+                return geometryService.edgePartiallyCoincides(
                     shorterEdge: edgeB, 
                     longerEdge: edgeA, 
                     tolerance: tolerance
                 )
             } else {
-                return GeometryEngine.edgePartiallyCoincides(
+                return geometryService.edgePartiallyCoincides(
                     shorterEdge: edgeA, 
                     longerEdge: edgeB, 
                     tolerance: tolerance

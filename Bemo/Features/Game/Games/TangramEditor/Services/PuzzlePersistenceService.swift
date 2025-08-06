@@ -154,12 +154,4 @@ class PuzzlePersistenceService {
 
 // MARK: - Supporting Types
 
-struct PuzzleMetadata: Codable, Identifiable {
-    let id: String
-    let name: String
-    let category: PuzzleCategory
-    let difficulty: PuzzleDifficulty
-    let createdDate: Date
-    let modifiedDate: Date
-    let pieceCount: Int
-}
+// PuzzleMetadata moved to Models/TangramPuzzleData.swift
