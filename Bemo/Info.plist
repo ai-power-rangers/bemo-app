@@ -18,10 +18,5 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
-	<key>UIAppFonts</key>
-	<array>
-		<string>Sink.ttf</string>
-		<string>Roxstar.ttf</string>
-	</array>
 </dict>
 </plist>
