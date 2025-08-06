@@ -1,4 +1,0 @@
-module SentryInternal {
-umbrella header "/Users/mitchellwhite/Library/Developer/Xcode/DerivedData/Bemo-bqigzbmdmecuxdbsluuhiyatbewu/SourcePackages/checkouts/sentry-cocoa/Sources/SentrySwiftUI/SentryInternal/SentryInternal.h"
-export *
-}

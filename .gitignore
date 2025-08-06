@@ -5,6 +5,11 @@
 # Xcode User settings
 xcuserdata/
 
+# Build directories
+build/
+.build/
+DerivedData/
+
 # Swift Package Manager
 Packages/
 Package.resolved
