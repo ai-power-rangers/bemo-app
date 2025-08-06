@@ -21,4 +21,6 @@ Pods/
 Bemo/Config/Debug.xcconfig
 Bemo/Config/Release.xcconfig
 
+*.xcodeproj/project.pbxproj
+
 #sds
