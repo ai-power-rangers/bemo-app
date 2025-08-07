@@ -17,6 +17,7 @@ struct GamePuzzleCanvasView: View {
     let anchorPieceId: String?
     let showHints: Bool
     let canvasSize: CGSize
+    var onPieceTouch: ((String) -> Void)? = nil
     
     // Colors for rendering
     private let silhouetteColor = Color.black.opacity(0.3)
@@ -61,13 +62,15 @@ struct GamePuzzleCanvasView: View {
     private func targetSilhouetteLayer(size: CGSize) -> some View {
         ZStack {
             ForEach(puzzle.targetPieces, id: \.pieceType) { target in
+                let isPlaced = placedPieces.contains { $0.pieceType.rawValue == target.pieceType }
+                
                 SimplePieceShape(
                     pieceType: target.pieceType,
                     position: target.position,
                     rotation: target.rotation,
                     canvasSize: size
                 )
-                .fill(silhouetteColor)
+                .fill(isPlaced ? Color.clear : silhouetteColor)
                 .overlay(
                     SimplePieceShape(
                         pieceType: target.pieceType,
@@ -77,6 +80,9 @@ struct GamePuzzleCanvasView: View {
                     )
                     .stroke(Color.black.opacity(0.2), lineWidth: 1)
                 )
+                .onTapGesture {
+                    onPieceTouch?(target.pieceType)
+                }
             }
         }
     }
@@ -141,8 +147,24 @@ struct GamePuzzleCanvasView: View {
     // MARK: - Hint Overlay
     
     private func hintOverlay(size: CGSize) -> some View {
-        // Will implement in Phase 4
-        EmptyView()
+        ZStack {
+            ForEach(puzzle.targetPieces, id: \.pieceType) { target in
+                let isPlaced = placedPieces.contains { $0.pieceType.rawValue == target.pieceType }
+                
+                if !isPlaced {
+                    // Show colored outline for unplaced pieces
+                    SimplePieceShape(
+                        pieceType: target.pieceType,
+                        position: target.position,
+                        rotation: target.rotation,
+                        canvasSize: size
+                    )
+                    .stroke(PieceType(rawValue: target.pieceType)?.color ?? .gray, lineWidth: 3)
+                    .opacity(0.7)
+                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: showHints)
+                }
+            }
+        }
     }
     
     // MARK: - Debug Info

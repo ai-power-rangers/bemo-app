@@ -54,14 +54,22 @@ struct GamePuzzleData: Codable {
         self.difficulty = editorPuzzle.difficulty.rawValue
         
         // Extract target positions from editor pieces
-        // Note: We only need final positions, not transforms or connections
         self.targetPieces = editorPuzzle.pieces.map { piece in
-            // Extract position and rotation from the piece
-            // Since we can't use CGAffineTransform, we'll need a simpler representation
-            TargetPiece(
+            // Extract position and rotation from CGAffineTransform
+            let transform = piece.transform
+            
+            // Position is the translation components
+            let position = CGPoint(x: transform.tx, y: transform.ty)
+            
+            // Rotation in radians from the transform matrix
+            // atan2 gives us the angle from the rotation components
+            let rotationRadians = atan2(transform.b, transform.a)
+            let rotationDegrees = rotationRadians * 180.0 / .pi
+            
+            return TargetPiece(
                 pieceType: piece.type.rawValue,
-                position: CGPoint(x: 0, y: 0), // Will be populated from puzzle data
-                rotation: 0 // Will be populated from puzzle data
+                position: position,
+                rotation: rotationDegrees
             )
         }
     }

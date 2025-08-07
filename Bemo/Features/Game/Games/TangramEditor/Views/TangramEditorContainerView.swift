@@ -13,15 +13,25 @@ struct TangramEditorContainerView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Top bar
-            if viewModel.navigationState == .editor {
+            if viewModel.uiState.navigationState == .editor {
                 TangramEditorTopBar(viewModel: viewModel, delegate: viewModel.delegate)
                     .background(Color(.systemBackground))
                     .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 2)
+                
+                // State indicator - always visible under top bar
+                Text(viewModel.currentStateDescription)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.blue.opacity(0.1)))
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
             }
             
             // Main content
             ZStack {
-                switch viewModel.navigationState {
+                switch viewModel.uiState.navigationState {
                 case .library:
                     PuzzleLibraryView(viewModel: viewModel)
                         .transition(.asymmetric(
@@ -48,20 +58,31 @@ struct TangramEditorContainerView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             
             // Bottom bar
-            if viewModel.navigationState == .editor {
+            if viewModel.uiState.navigationState == .editor {
                 TangramEditorBottomBar(viewModel: viewModel)
                     .background(Color(.systemBackground))
                     .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: -2)
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: viewModel.navigationState)
+        .animation(.easeInOut(duration: 0.3), value: viewModel.uiState.navigationState)
         .sheet(isPresented: .init(
-            get: { viewModel.showSaveDialog },
-            set: { viewModel.showSaveDialog = $0 }
+            get: { viewModel.uiState.showSaveDialog },
+            set: { viewModel.uiState.showSaveDialog = $0 }
         )) {
             SavePuzzleDialog(viewModel: viewModel)
         }
         .toastOverlay(toastService: viewModel.toastService)
+        .alert("Unsaved Changes", isPresented: $viewModel.showLibraryNavigationAlert) {
+            Button("Save", role: .none) {
+                viewModel.navigateToLibrary(saveChanges: true)
+            }
+            Button("Discard", role: .destructive) {
+                viewModel.navigateToLibrary(saveChanges: false)
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("You have unsaved changes. What would you like to do?")
+        }
     }
 }
 

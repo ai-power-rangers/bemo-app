@@ -187,7 +187,7 @@ struct SavePuzzleDialog: View {
             dismiss()
             
             // After successful save, return to library
-            viewModel.navigationState = .library
+            viewModel.uiState.navigationState = .library
         } catch {
             errorMessage = "Failed to save puzzle: \(error.localizedDescription)"
             showError = true

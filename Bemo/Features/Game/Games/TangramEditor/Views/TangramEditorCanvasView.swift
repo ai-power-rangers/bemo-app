@@ -23,17 +23,17 @@ struct TangramEditorCanvasView: View {
                 .background(Color.white)
                 .onAppear {
                     canvasSize = geometry.size
-                    viewModel.currentCanvasSize = geometry.size
+                    viewModel.uiState.currentCanvasSize = geometry.size
                     initializeEditor()
                 }
                 .onChange(of: geometry.size) { oldSize, newSize in
                     canvasSize = newSize
-                    viewModel.currentCanvasSize = newSize
+                    viewModel.uiState.currentCanvasSize = newSize
                 }
             }
             
             // Selection controls floating near selected pieces
-            if !viewModel.selectedPieceIds.isEmpty, let firstSelectedId = viewModel.selectedPieceIds.first,
+            if !viewModel.uiState.selectedPieceIds.isEmpty, let firstSelectedId = viewModel.uiState.selectedPieceIds.first,
                let selectedPiece = viewModel.puzzle.pieces.first(where: { $0.id == firstSelectedId }) {
                 VStack(spacing: 8) {
                     HStack(spacing: 12) {
@@ -83,10 +83,10 @@ struct TangramEditorCanvasView: View {
             }
             
             // Canvas point selection UI
-            if case .selectingCanvasConnections = viewModel.editorState, !viewModel.selectedCanvasPoints.isEmpty {
+            if case .selectingCanvasConnections = viewModel.editorState, !viewModel.uiState.selectedCanvasPoints.isEmpty {
                 VStack {
                     HStack {
-                        Text("\(viewModel.selectedCanvasPoints.count) point(s) selected")
+                        Text("\(viewModel.uiState.selectedCanvasPoints.count) point(s) selected")
                             .font(.caption)
                             .foregroundColor(.white)
                             .padding(.horizontal, 12)
@@ -111,8 +111,24 @@ struct TangramEditorCanvasView: View {
                 }
             }
             
-            // Pending piece overlay - positioned at top
-            if case .manipulatingPendingPiece(let type, _, let rotation) = viewModel.editorState {
+            // Pending piece overlay - show in multiple states
+            let _ = print("[CANVAS VIEW] Current editorState: \(viewModel.editorState)")
+            if case .selectingPendingConnections(let type, _) = viewModel.editorState {
+                let _ = print("[CANVAS VIEW] Showing pending piece for selectingPendingConnections")
+                VStack {
+                    PendingPieceOverlay(
+                        viewModel: viewModel,
+                        pieceType: type,
+                        rotation: viewModel.uiState.pendingPieceRotation,
+                        isFirstPiece: false,
+                        canvasSize: canvasSize
+                    )
+                    .padding(.top, 50)
+                    
+                    Spacer()
+                }
+            } else if case .manipulatingPendingPiece(let type, _, let rotation) = viewModel.editorState {
+                let _ = print("[CANVAS VIEW] Showing pending piece for manipulatingPendingPiece")
                 VStack {
                     PendingPieceOverlay(
                         viewModel: viewModel,
@@ -126,6 +142,7 @@ struct TangramEditorCanvasView: View {
                     Spacer()
                 }
             } else if case .manipulatingFirstPiece(let type, let rotation, _) = viewModel.editorState {
+                let _ = print("[CANVAS VIEW] Showing pending piece for manipulatingFirstPiece")
                 PendingPieceOverlay(
                     viewModel: viewModel,
                     pieceType: type,
@@ -133,14 +150,16 @@ struct TangramEditorCanvasView: View {
                     isFirstPiece: true,
                     canvasSize: canvasSize
                 )
+            } else {
+                let _ = print("[CANVAS VIEW] NOT showing pending piece - state is: \(viewModel.editorState)")
             }
         }
-        .alert("Placement Error", isPresented: $viewModel.showErrorAlert) {
+        .alert("Placement Error", isPresented: $viewModel.uiState.showErrorAlert) {
             Button("OK") { 
                 viewModel.dismissError() 
             }
         } message: {
-            Text(viewModel.errorMessage)
+            Text(viewModel.uiState.errorMessage)
         }
     }
     
@@ -150,6 +169,7 @@ struct TangramEditorCanvasView: View {
         ZStack {
             gridBackground
             piecesLayer
+            previewLayer
         }
     }
     
@@ -181,13 +201,35 @@ struct TangramEditorCanvasView: View {
         }
     }
     
+    @ViewBuilder
+    private var previewLayer: some View {
+        // Show preview piece when selecting connections
+        if let previewPiece = viewModel.uiState.previewPiece {
+            PieceView(
+                piece: previewPiece,
+                isSelected: false,
+                isGhost: true,  // Show as ghost/transparent
+                showConnectionPoints: false,
+                availableConnectionPoints: [],
+                selectedConnectionPoints: [],
+                manipulationMode: nil,
+                onRotation: { _ in },
+                onSlide: { _ in },
+                onManipulationEnd: { },
+                onLockToggle: { }
+            )
+            .opacity(0.5)  // Make it semi-transparent
+            .allowsHitTesting(false)  // Don't interfere with interactions
+        }
+    }
+    
     private func pieceWithInteractions(_ piece: TangramPiece) -> some View {
         ZStack {
             PieceView(
-                piece: viewModel.manipulatingPieceId == piece.id && viewModel.ghostTransform != nil ? 
-                    TangramPiece(type: piece.type, transform: viewModel.ghostTransform!) : piece,
-                isSelected: viewModel.selectedPieceIds.contains(piece.id),
-                isGhost: viewModel.manipulatingPieceId == piece.id,
+                piece: viewModel.uiState.manipulatingPieceId == piece.id && viewModel.uiState.ghostTransform != nil ? 
+                    TangramPiece(type: piece.type, transform: viewModel.uiState.ghostTransform!) : piece,
+                isSelected: viewModel.uiState.selectedPieceIds.contains(piece.id),
+                isGhost: viewModel.uiState.manipulatingPieceId == piece.id,
                 showConnectionPoints: false,
                 availableConnectionPoints: [],
                 selectedConnectionPoints: [],
@@ -199,7 +241,7 @@ struct TangramEditorCanvasView: View {
                     viewModel.handleSlide(pieceId: piece.id, distance: distance)
                 },
                 onManipulationEnd: {
-                    if viewModel.manipulatingPieceId == piece.id {
+                    if viewModel.uiState.manipulatingPieceId == piece.id {
                         // Determine if it was rotation or slide based on mode
                         if let mode = viewModel.pieceManipulationModes[piece.id] {
                             switch mode {
@@ -237,7 +279,7 @@ struct TangramEditorCanvasView: View {
             }()
             
             if showSelectedPoints {
-                ForEach(viewModel.selectedCanvasPoints.filter { $0.pieceId == piece.id }, id: \.id) { point in
+                ForEach(viewModel.uiState.selectedCanvasPoints.filter { $0.pieceId == piece.id }, id: \.id) { point in
                     connectionPointView(point, isSelected: true)
                         .position(point.position)
                         .allowsHitTesting(false)  // Don't interfere with piece interaction
@@ -247,7 +289,7 @@ struct TangramEditorCanvasView: View {
             // Connection point tap overlays
             if case .selectingCanvasConnections = viewModel.editorState {
                 ForEach(viewModel.getConnectionPoints(for: piece.id), id: \.id) { point in
-                    let isSelected = viewModel.selectedCanvasPoints.contains { $0.id == point.id }
+                    let isSelected = viewModel.uiState.selectedCanvasPoints.contains { $0.id == point.id }
                     connectionPointView(point, isSelected: isSelected)
                         .position(point.position)
                         .onTapGesture {
@@ -330,7 +372,7 @@ struct TangramEditorCanvasView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
-                        viewModel.showSettings = false
+                        viewModel.uiState.showSettings = false
                     }
                 }
             }

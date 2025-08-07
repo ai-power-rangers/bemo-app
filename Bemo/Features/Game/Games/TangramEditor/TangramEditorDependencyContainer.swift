@@ -52,6 +52,10 @@ class TangramEditorDependencyContainer {
         return ToastService()
     }()
     
+    lazy var stateManager: TangramEditorStateMachine = {
+        return TangramEditorStateMachine()
+    }()
+    
     // MARK: - Initialization
     
     init(supabaseService: SupabaseService? = nil) {
@@ -73,6 +77,7 @@ class TangramEditorDependencyContainer {
             validationService: validationService,
             lockingService: lockingService,
             manipulationService: manipulationService,
+            stateManager: stateManager,
             toastService: toastService
         )
     }

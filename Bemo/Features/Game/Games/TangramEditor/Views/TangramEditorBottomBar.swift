@@ -12,7 +12,7 @@ struct TangramEditorBottomBar: View {
     
     var body: some View {
         // Only show when in editor mode
-        if viewModel.navigationState != .editor {
+        if viewModel.uiState.navigationState != .editor {
             return AnyView(EmptyView())
         }
         
@@ -21,17 +21,6 @@ struct TangramEditorBottomBar: View {
     
     private var bottomBarContent: some View {
         VStack(spacing: 8) {
-            // State indicator
-            if shouldShowStateIndicator {
-                Text(viewModel.currentStateDescription)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(Color.blue.opacity(0.1)))
-                    .padding(.top, 8)
-            }
-            
             // Piece selection (only in appropriate states)
             if shouldShowPieceSelection {
                 HStack(spacing: 8) {
@@ -78,15 +67,6 @@ struct TangramEditorBottomBar: View {
             return true
         default:
             return false
-        }
-    }
-    
-    private var shouldShowStateIndicator: Bool {
-        switch viewModel.editorState {
-        case .idle:
-            return false
-        default:
-            return true
         }
     }
     

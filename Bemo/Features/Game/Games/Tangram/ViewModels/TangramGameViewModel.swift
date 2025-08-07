@@ -30,6 +30,8 @@ class TangramGameViewModel {
     var progress: Double = 0.0
     var showHints: Bool = false
     var canvasSize: CGSize = CGSize(width: 600, height: 600)
+    var showPlacementCelebration: Bool = false
+    var useSpriteKit: Bool = true // Toggle for SpriteKit vs SwiftUI canvas
     
     // CV Tracking
     var placedPieces: [PlacedPiece] = []
@@ -92,7 +94,137 @@ class TangramGameViewModel {
         }
     }
     
+    func loadNextPuzzle() {
+        // Get next puzzle from library
+        let currentIndex = puzzleLibraryService.availablePuzzles.firstIndex { $0.id == selectedPuzzle?.id } ?? 0
+        let nextIndex = (currentIndex + 1) % puzzleLibraryService.availablePuzzles.count
+        
+        if nextIndex < puzzleLibraryService.availablePuzzles.count {
+            let nextPuzzle = puzzleLibraryService.availablePuzzles[nextIndex]
+            selectPuzzle(nextPuzzle)
+        } else {
+            // No more puzzles, go back to selection
+            exitToSelection()
+        }
+    }
+    
+    // MARK: - Touch-based Testing
+    
+    func handlePieceTouch(pieceType: String) {
+        guard let puzzle = selectedPuzzle else { return }
+        
+        // Find the target piece in the puzzle
+        guard let targetPiece = puzzle.targetPieces.first(where: { $0.pieceType == pieceType }) else {
+            return
+        }
+        
+        // Check if piece is already placed
+        let alreadyPlaced = placedPieces.contains { $0.pieceType.rawValue == pieceType }
+        
+        if alreadyPlaced {
+            // Remove the piece
+            placedPieces.removeAll { $0.pieceType.rawValue == pieceType }
+        } else {
+            // Create a perfectly placed piece
+            let mockPiece = RecognizedPiece(
+                id: "touch_\(pieceType)_\(UUID().uuidString.prefix(8))",
+                pieceTypeId: pieceType,
+                position: targetPiece.position,
+                rotation: targetPiece.rotation,
+                velocity: CGVector(dx: 0, dy: 0),
+                isMoving: false,
+                confidence: 1.0,
+                timestamp: Date(),
+                frameNumber: 0
+            )
+            
+            var placed = PlacedPiece(from: mockPiece)
+            placed.validationState = .correct
+            
+            // Add to placed pieces
+            placedPieces.append(placed)
+            
+            // Show brief celebration for correct placement
+            showPlacementFeedback()
+        }
+        
+        // Update progress
+        let correctCount = placedPieces.filter { $0.validationState == .correct }.count
+        let newProgress = Double(correctCount) / Double(puzzle.targetPieces.count)
+        updateProgress(newProgress)
+    }
+    
+    private func showPlacementFeedback() {
+        // Show visual feedback
+        showPlacementCelebration = true
+        
+        // Hide after a short delay
+        Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
+            await MainActor.run {
+                showPlacementCelebration = false
+            }
+        }
+    }
+    
+    // MARK: - SpriteKit Handlers
+    
+    func handlePieceCompletion(pieceType: String) {
+        // Create a correctly placed piece
+        let mockPiece = RecognizedPiece(
+            id: "sprite_\(pieceType)_\(UUID().uuidString.prefix(8))",
+            pieceTypeId: pieceType,
+            position: CGPoint(x: 0, y: 0), // Position managed by SpriteKit
+            rotation: 0,
+            velocity: CGVector(dx: 0, dy: 0),
+            isMoving: false,
+            confidence: 1.0,
+            timestamp: Date(),
+            frameNumber: 0
+        )
+        
+        var placed = PlacedPiece(from: mockPiece)
+        placed.validationState = .correct
+        
+        // Update placed pieces
+        placedPieces.removeAll { $0.pieceType.rawValue == pieceType }
+        placedPieces.append(placed)
+        
+        // Update progress
+        let correctCount = placedPieces.filter { $0.validationState == .correct }.count
+        let newProgress = Double(correctCount) / 7.0
+        updateProgress(newProgress)
+        
+        // Show feedback
+        showPlacementFeedback()
+    }
+    
+    func handlePuzzleCompletion() {
+        // Puzzle completed via SpriteKit
+        currentPhase = .puzzleComplete
+        let xpAwarded = calculateXP()
+        delegate?.gameDidCompleteLevel(xpAwarded: xpAwarded)
+    }
+    
     // MARK: - CV Processing
+    
+    func processMockCVInput(_ recognizedPieces: [RecognizedPiece]) -> PlayerActionOutcome {
+        // Convert to placed pieces and process
+        let placedPieces = recognizedPieces.map { PlacedPiece(from: $0) }
+        processCVInput(placedPieces)
+        
+        // Return appropriate outcome
+        if placedPieces.isEmpty {
+            return .noAction
+        }
+        
+        let correctCount = placedPieces.filter { $0.validationState == .correct }.count
+        if correctCount > 0 {
+            return .correctPlacement(points: correctCount * 10)
+        }
+        
+        return .stateUpdated
+    }
     
     func processCVInput(_ pieces: [PlacedPiece]) {
         guard currentPhase == .playingPuzzle else { return }
@@ -114,13 +246,15 @@ class TangramGameViewModel {
             }
         }
         
-        // Validate piece placements (will implement in Phase 3)
-        // For now, just update game state
+        // Validate piece placements
+        validatePieces()
+        
+        // Update game state
         gameState?.updatePlacedPieces(placedPieces)
         
-        // Calculate progress (will refine in Phase 3)
-        let piecesWithTypes = placedPieces.filter { $0.pieceType != nil }
-        let newProgress = Double(piecesWithTypes.count) / 7.0
+        // Calculate progress based on correct pieces
+        let correctCount = placedPieces.filter { $0.validationState == .correct }.count
+        let newProgress = Double(correctCount) / 7.0
         updateProgress(newProgress)
     }
     
@@ -143,6 +277,33 @@ class TangramGameViewModel {
                 return p1.distanceFromCenter < p2.distanceFromCenter
             }
             .first
+    }
+    
+    // MARK: - Validation
+    
+    private func validatePieces() {
+        guard let puzzle = selectedPuzzle else { return }
+        
+        // For each placed piece, check if it matches any target
+        for i in 0..<placedPieces.count {
+            var piece = placedPieces[i]
+            
+            // Only validate stationary pieces
+            guard piece.isPlacedLongEnough() else {
+                piece.validationState = .pending
+                placedPieces[i] = piece
+                continue
+            }
+            
+            // Check if this piece matches any target position
+            let isCorrect = puzzle.targetPieces.contains { target in
+                // For now, simple matching - will need proper position extraction
+                target.pieceType == piece.pieceType.rawValue
+            }
+            
+            piece.validationState = isCorrect ? .correct : .incorrect
+            placedPieces[i] = piece
+        }
     }
     
     // MARK: - Progress Management (Phase 3)

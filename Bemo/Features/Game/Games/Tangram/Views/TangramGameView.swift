@@ -10,9 +10,12 @@
 // USAGE: Created by TangramGame.makeGameView, displays appropriate phase UI
 
 import SwiftUI
+import SpriteKit
 
 struct TangramGameView: View {
     @State private var viewModel: TangramGameViewModel
+    @State private var mockPieces: [RecognizedPiece] = []
+    @State private var showCVMock = false
     
     init(viewModel: TangramGameViewModel) {
         self._viewModel = State(initialValue: viewModel)
@@ -42,22 +45,90 @@ struct TangramGameView: View {
             // Header with puzzle info
             gameHeader
             
-            // Main puzzle canvas
+            // Main puzzle canvas - Using SpriteKit
             if let puzzle = viewModel.selectedPuzzle {
-                GamePuzzleCanvasView(
-                    puzzle: puzzle,
-                    placedPieces: viewModel.placedPieces,
-                    anchorPieceId: viewModel.anchorPiece?.id,
-                    showHints: viewModel.showHints,
-                    canvasSize: viewModel.canvasSize
-                )
-                .padding()
+                VStack(spacing: 0) {
+                    // Toggle between SwiftUI and SpriteKit canvas
+                    if viewModel.useSpriteKit {
+                        TangramSpriteView(
+                            puzzle: puzzle,
+                            placedPieces: $viewModel.placedPieces,
+                            showHints: viewModel.showHints,
+                            onPieceCompleted: { pieceType in
+                                viewModel.handlePieceCompletion(pieceType: pieceType)
+                            },
+                            onPuzzleCompleted: {
+                                viewModel.handlePuzzleCompletion()
+                            }
+                        )
+                        .padding()
+                    } else {
+                        // Original SwiftUI canvas
+                        GamePuzzleCanvasView(
+                            puzzle: puzzle,
+                            placedPieces: viewModel.placedPieces,
+                            anchorPieceId: viewModel.anchorPiece?.id,
+                            showHints: viewModel.showHints,
+                            canvasSize: viewModel.canvasSize,
+                            onPieceTouch: { pieceType in
+                                viewModel.handlePieceTouch(pieceType: pieceType)
+                            }
+                        )
+                        .padding()
+                    }
+                }
+                .overlay(alignment: .top) {
+                    // Show placement feedback
+                    if viewModel.showPlacementCelebration {
+                        Text("✨ Perfect! ✨")
+                            .font(.title)
+                            .fontWeight(.bold)
+                            .foregroundColor(.green)
+                            .padding()
+                            .background(Color.white.opacity(0.9))
+                            .cornerRadius(10)
+                            .transition(.scale.combined(with: .opacity))
+                            .animation(.spring(), value: viewModel.showPlacementCelebration)
+                    }
+                }
             }
             
             // Control buttons
             gameControls
+            
+            // Commented out CV Mock Controls for simplified testing
+            /*
+            #if DEBUG
+            // CV Mock Controls Toggle
+            HStack {
+                Spacer()
+                Button(action: { showCVMock.toggle() }) {
+                    Image(systemName: showCVMock ? "hammer.fill" : "hammer")
+                        .foregroundColor(.orange)
+                }
+                .padding()
+            }
+            #endif
+            */
         }
         .padding()
+        /*
+        .overlay(alignment: .bottomTrailing) {
+            #if DEBUG
+            if showCVMock {
+                CVMockControlView(
+                    mockPieces: $mockPieces,
+                    onPiecesChanged: { pieces in
+                        // Process mock CV input through the game
+                        let outcome = viewModel.processMockCVInput(pieces)
+                        print("CV Mock outcome: \(outcome)")
+                    }
+                )
+                .padding()
+            }
+            #endif
+        }
+        */
     }
     
     private var gameHeader: some View {
@@ -107,6 +178,16 @@ struct TangramGameView: View {
             .buttonStyle(.bordered)
             
             Spacer()
+            
+            // Toggle between SwiftUI and SpriteKit
+            Button(action: { viewModel.useSpriteKit.toggle() }) {
+                Label(
+                    viewModel.useSpriteKit ? "SpriteKit" : "SwiftUI",
+                    systemImage: viewModel.useSpriteKit ? "sparkles" : "square.grid.2x2"
+                )
+            }
+            .buttonStyle(.bordered)
+            .tint(.purple)
             
             Button(action: viewModel.toggleHints) {
                 Label(
@@ -177,18 +258,63 @@ struct TangramGameView: View {
     
     private var completionView: some View {
         VStack(spacing: 30) {
-            Text("🎉 Puzzle Complete!")
+            // Celebration emoji and title
+            Text("🎉")
+                .font(.system(size: 80))
+                .rotationEffect(.degrees(-15))
+                .animation(.spring(response: 0.5, dampingFraction: 0.6).repeatCount(3, autoreverses: true), value: viewModel.currentPhase)
+            
+            Text("Puzzle Complete!")
                 .font(.largeTitle)
                 .fontWeight(.bold)
+                .foregroundColor(.green)
             
-            Text("Great job solving the puzzle!")
+            Text("Amazing work! You solved \"\(viewModel.selectedPuzzle?.name ?? "the puzzle")\"!")
                 .font(.title2)
                 .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
             
-            Button("Next Puzzle") {
-                viewModel.exitToSelection()
+            // Star rating display
+            HStack(spacing: 10) {
+                ForEach(0..<3) { index in
+                    Image(systemName: "star.fill")
+                        .font(.title)
+                        .foregroundColor(.yellow)
+                        .scaleEffect(1.2)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.6).delay(Double(index) * 0.1), value: viewModel.currentPhase)
+                }
             }
-            .buttonStyle(.borderedProminent)
+            .padding()
+            
+            // Navigation buttons
+            HStack(spacing: 20) {
+                Button(action: {
+                    viewModel.requestQuit()
+                }) {
+                    Label("Back to Lobby", systemImage: "house.fill")
+                        .frame(minWidth: 150)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                
+                Button(action: {
+                    viewModel.loadNextPuzzle()
+                }) {
+                    Label("Next Puzzle", systemImage: "arrow.right.circle.fill")
+                        .frame(minWidth: 150)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            }
+            .padding(.top)
         }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(UIColor.systemBackground))
+                .shadow(radius: 10)
+        )
+        .padding()
     }
 }

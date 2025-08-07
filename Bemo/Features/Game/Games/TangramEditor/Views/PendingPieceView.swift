@@ -20,7 +20,9 @@ struct PendingPieceView: View {
     private let pieceScale: CGFloat = 40  // Doubled from 20
     
     var body: some View {
-        VStack(spacing: 12) {
+        let _ = print("[PendingPieceView] Rendering - pieceType: \(pieceType), isFirstPiece: \(isFirstPiece), rotation: \(rotation)")
+        let _ = print("[PendingPieceView] selectedCanvasPoints: \(viewModel.uiState.selectedCanvasPoints.count)")
+        return VStack(spacing: 12) {
             // Piece preview at actual size (50 scale)
             ZStack {
                 // Draw the piece - more transparent for preview
@@ -32,13 +34,18 @@ struct PendingPieceView: View {
                     )
                     .rotationEffect(Angle(degrees: rotation))
                 
-                // Show connection points only after canvas points are selected
-                if !isFirstPiece && !viewModel.selectedCanvasPoints.isEmpty {
-                    ForEach(viewModel.getConnectionPointsForPendingPiece(type: pieceType, scale: 1), id: \.id) { (point: TangramEditorViewModel.ConnectionPoint) in
+                // Show connection points when we're selecting them (after canvas points are selected)
+                let shouldShowPoints = !isFirstPiece && !viewModel.uiState.selectedCanvasPoints.isEmpty
+                let connectionPoints = viewModel.getConnectionPointsForPendingPiece(type: pieceType, scale: 1)
+                let _ = print("[PendingPieceView] shouldShowPoints: \(shouldShowPoints), connectionPoints: \(connectionPoints.count), isFirstPiece: \(isFirstPiece), selectedCanvasPoints: \(viewModel.uiState.selectedCanvasPoints.count)")
+                
+                if shouldShowPoints {
+                    let _ = print("[PendingPieceView] Showing connection points for piece type: \(pieceType)")
+                    ForEach(connectionPoints, id: \.id) { (point: TangramEditorViewModel.ConnectionPoint) in
                         PendingConnectionPoint(
                             point: point,
                             rotation: rotation,
-                            isSelected: viewModel.selectedPendingPoints.contains { $0.id == point.id },
+                            isSelected: viewModel.uiState.selectedPendingPoints.contains { $0.id == point.id },
                             isCompatible: isPointCompatible(point),
                             scale: 1
                         )
@@ -78,21 +85,21 @@ struct PendingPieceView: View {
     
     private var connectionStatusText: some View {
         Group {
-            if viewModel.selectedCanvasPoints.isEmpty {
+            if viewModel.uiState.selectedCanvasPoints.isEmpty {
                 Text("Select connection points on canvas")
                     .foregroundColor(.orange)
-            } else if viewModel.selectedPendingPoints.count == viewModel.selectedCanvasPoints.count {
+            } else if viewModel.uiState.selectedPendingPoints.count == viewModel.uiState.selectedCanvasPoints.count {
                 // Check if types match properly
-                let canvasVertexCount = viewModel.selectedCanvasPoints.filter { 
+                let canvasVertexCount = viewModel.uiState.selectedCanvasPoints.filter { 
                     if case .vertex = $0.type { return true } else { return false }
                 }.count
-                let canvasEdgeCount = viewModel.selectedCanvasPoints.filter { 
+                let canvasEdgeCount = viewModel.uiState.selectedCanvasPoints.filter { 
                     if case .edge = $0.type { return true } else { return false }
                 }.count
-                let pendingVertexCount = viewModel.selectedPendingPoints.filter { 
+                let pendingVertexCount = viewModel.uiState.selectedPendingPoints.filter { 
                     if case .vertex = $0.type { return true } else { return false }
                 }.count
-                let pendingEdgeCount = viewModel.selectedPendingPoints.filter { 
+                let pendingEdgeCount = viewModel.uiState.selectedPendingPoints.filter { 
                     if case .edge = $0.type { return true } else { return false }
                 }.count
                 
@@ -104,14 +111,14 @@ struct PendingPieceView: View {
                         .foregroundColor(.red)
                 }
             } else {
-                Text("Match \(viewModel.selectedCanvasPoints.count) point\(viewModel.selectedCanvasPoints.count == 1 ? "" : "s") on this piece")
+                Text("Match \(viewModel.uiState.selectedCanvasPoints.count) point\(viewModel.uiState.selectedCanvasPoints.count == 1 ? "" : "s") on this piece")
                     .foregroundColor(.blue)
             }
         }
     }
     
     private func isPointCompatible(_ point: TangramEditorViewModel.ConnectionPoint) -> Bool {
-        for canvasPoint in viewModel.selectedCanvasPoints {
+        for canvasPoint in viewModel.uiState.selectedCanvasPoints {
             switch (point.type, canvasPoint.type) {
             case (.vertex, .vertex), (.edge, .edge):
                 return true

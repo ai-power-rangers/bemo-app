@@ -16,9 +16,14 @@ struct TangramEditorTopBar: View {
             // Left side: Back/Quit and Settings (fixed width)
             HStack(spacing: 8) {
                 // Show back button when in editor, quit button when in library
-                if viewModel.navigationState == .editor {
+                if viewModel.uiState.navigationState == .editor {
                     Button(action: {
-                        viewModel.navigationState = .library
+                        // Check if there are unsaved changes
+                        if !viewModel.puzzle.pieces.isEmpty {
+                            viewModel.showLibraryNavigationAlert = true
+                        } else {
+                            viewModel.uiState.navigationState = .library
+                        }
                     }) {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.left")
@@ -75,7 +80,7 @@ struct TangramEditorTopBar: View {
                     
                     // Confirm
                     Button(action: { 
-                        viewModel.confirmPendingPiece(canvasSize: viewModel.currentCanvasSize) 
+                        viewModel.confirmPendingPiece(canvasSize: viewModel.uiState.currentCanvasSize) 
                     }) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.title2)
@@ -144,7 +149,7 @@ struct TangramEditorTopBar: View {
     
     private var isPendingPiece: Bool {
         switch viewModel.editorState {
-        case .manipulatingFirstPiece, .manipulatingPendingPiece:
+        case .manipulatingFirstPiece, .manipulatingPendingPiece, .selectingPendingConnections, .previewingPlacement:
             return true
         default:
             return false
@@ -155,9 +160,13 @@ struct TangramEditorTopBar: View {
         switch viewModel.editorState {
         case .manipulatingFirstPiece:
             return true
-        case .manipulatingPendingPiece:
-            return !viewModel.selectedCanvasPoints.isEmpty &&
-                   viewModel.selectedPendingPoints.count == viewModel.selectedCanvasPoints.count
+        case .manipulatingPendingPiece, .selectingPendingConnections:
+            // Can place when we have matching connection counts and a valid preview
+            return !viewModel.uiState.selectedCanvasPoints.isEmpty &&
+                   viewModel.uiState.selectedPendingPoints.count == viewModel.uiState.selectedCanvasPoints.count &&
+                   viewModel.uiState.previewPiece != nil
+        case .previewingPlacement:
+            return true  // Already have a valid preview
         default:
             return false
         }

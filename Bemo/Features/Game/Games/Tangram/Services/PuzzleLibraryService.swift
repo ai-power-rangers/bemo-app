@@ -132,25 +132,107 @@ class PuzzleLibraryService {
     
     private func createFallbackPuzzles() -> [TangramPuzzle] {
         // Create a few basic puzzles as fallback if loading fails
-        [
-            TangramPuzzle(
-                name: "Basic Square",
-                category: .geometric,
-                difficulty: .easy,
-                source: .bundled
+        var puzzles: [TangramPuzzle] = []
+        
+        // Create a simple square puzzle
+        var squarePuzzle = TangramPuzzle(
+            name: "Basic Square",
+            category: .geometric,
+            difficulty: .beginner,
+            source: .bundled
+        )
+        
+        // Add pieces forming a square pattern
+        squarePuzzle.pieces = [
+            TangramPiece(
+                type: .largeTriangle1,
+                transform: CGAffineTransform(translationX: 200, y: 200).rotated(by: 0),
+                isLocked: true
             ),
-            TangramPuzzle(
-                name: "Simple House",
-                category: .objects,
-                difficulty: .easy,
-                source: .bundled
+            TangramPiece(
+                type: .largeTriangle2,
+                transform: CGAffineTransform(translationX: 400, y: 200).rotated(by: .pi/2),
+                isLocked: true
             ),
-            TangramPuzzle(
-                name: "Cat",
-                category: .animals,
-                difficulty: .medium,
-                source: .bundled
+            TangramPiece(
+                type: .mediumTriangle,
+                transform: CGAffineTransform(translationX: 300, y: 300).rotated(by: .pi/4),
+                isLocked: true
+            ),
+            TangramPiece(
+                type: .smallTriangle1,
+                transform: CGAffineTransform(translationX: 200, y: 400).rotated(by: -.pi/4),
+                isLocked: true
+            ),
+            TangramPiece(
+                type: .smallTriangle2,
+                transform: CGAffineTransform(translationX: 400, y: 400).rotated(by: .pi * 3/4),
+                isLocked: true
+            ),
+            TangramPiece(
+                type: .square,
+                transform: CGAffineTransform(translationX: 300, y: 200),
+                isLocked: true
+            ),
+            TangramPiece(
+                type: .parallelogram,
+                transform: CGAffineTransform(translationX: 300, y: 400),
+                isLocked: true
             )
         ]
+        puzzles.append(squarePuzzle)
+        
+        // Create a simple house puzzle
+        var housePuzzle = TangramPuzzle(
+            name: "Simple House",
+            category: .objects,
+            difficulty: .easy,
+            source: .bundled
+        )
+        
+        // House shape with roof
+        housePuzzle.pieces = [
+            // Roof (two large triangles)
+            TangramPiece(
+                type: .largeTriangle1,
+                transform: CGAffineTransform(translationX: 250, y: 150).rotated(by: -.pi/4),
+                isLocked: true
+            ),
+            TangramPiece(
+                type: .largeTriangle2,
+                transform: CGAffineTransform(translationX: 350, y: 150).rotated(by: .pi/4),
+                isLocked: true
+            ),
+            // Walls (square and parallelogram)
+            TangramPiece(
+                type: .square,
+                transform: CGAffineTransform(translationX: 250, y: 300),
+                isLocked: true
+            ),
+            TangramPiece(
+                type: .parallelogram,
+                transform: CGAffineTransform(translationX: 350, y: 300),
+                isLocked: true
+            ),
+            // Door/windows (small triangles and medium)
+            TangramPiece(
+                type: .mediumTriangle,
+                transform: CGAffineTransform(translationX: 300, y: 250),
+                isLocked: true
+            ),
+            TangramPiece(
+                type: .smallTriangle1,
+                transform: CGAffineTransform(translationX: 250, y: 350),
+                isLocked: true
+            ),
+            TangramPiece(
+                type: .smallTriangle2,
+                transform: CGAffineTransform(translationX: 350, y: 350),
+                isLocked: true
+            )
+        ]
+        puzzles.append(housePuzzle)
+        
+        return puzzles
     }
 }
