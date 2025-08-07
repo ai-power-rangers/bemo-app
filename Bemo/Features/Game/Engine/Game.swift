@@ -18,6 +18,9 @@ protocol Game {
     var recommendedAge: ClosedRange<Int> { get }
     var thumbnailImageName: String { get }
     
+    /// UI configuration preferences for this game
+    var gameUIConfig: GameUIConfig { get }
+    
     /// Creates and returns the SwiftUI view for this game
     /// - Parameter delegate: The delegate to communicate game events back to the host
     /// - Returns: Type-erased SwiftUI view for the game
@@ -36,4 +39,12 @@ protocol Game {
     
     /// Restores the game from a previously saved state
     func loadState(from data: Data)
+}
+
+// MARK: - Default Implementations
+extension Game {
+    /// Default UI configuration for games (can be overridden)
+    var gameUIConfig: GameUIConfig {
+        return .defaultGameConfig
+    }
 }

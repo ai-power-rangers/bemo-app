@@ -13,13 +13,38 @@ import Foundation
 import CoreGraphics
 
 struct RecognizedPiece: Identifiable {
-    let id: String
-    let shape: Shape
-    let color: Color
+    let id: String // Consistent ID for tracking same piece across frames
+    let pieceTypeId: String // e.g., "smallTriangle1", "largeTriangle2", etc.
     let position: CGPoint
     let rotation: Double // In degrees
+    let velocity: CGVector // Movement speed and direction
+    let isMoving: Bool // Whether piece is currently being moved
     let confidence: Double // 0.0 to 1.0
     let timestamp: Date
+    let frameNumber: Int // For frame-to-frame tracking
+    
+    // Legacy shape/color enums kept for backward compatibility with other games
+    var shape: Shape {
+        // Map pieceTypeId to generic shape for other games
+        if pieceTypeId.contains("Triangle") { return .triangle }
+        if pieceTypeId.contains("square") { return .square }
+        if pieceTypeId.contains("parallelogram") { return .parallelogram }
+        return .custom(pieceTypeId)
+    }
+    
+    var color: Color {
+        // Map pieceTypeId to generic color for other games
+        switch pieceTypeId {
+        case "largeTriangle1": return .red
+        case "largeTriangle2": return .blue
+        case "mediumTriangle": return .green
+        case "smallTriangle1": return .orange
+        case "smallTriangle2": return .purple
+        case "square": return .yellow
+        case "parallelogram": return .pink
+        default: return .custom(r: 0.5, g: 0.5, b: 0.5)
+        }
+    }
     
     enum Shape {
         case triangle

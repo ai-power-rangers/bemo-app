@@ -40,6 +40,7 @@ class GameLobbyViewModel {
     }
     
     private let profileService: ProfileService
+    private let supabaseService: SupabaseService?
     private let onGameSelected: (Game) -> Void
     private let onParentDashboardRequested: () -> Void
     private let onProfileSetupRequested: () -> Void
@@ -58,15 +59,18 @@ class GameLobbyViewModel {
         let game: Game
         let iconName: String
         let color: Color
+        let badge: String?
     }
     
     init(
         profileService: ProfileService,
+        supabaseService: SupabaseService? = nil,
         onGameSelected: @escaping (Game) -> Void,
         onParentDashboardRequested: @escaping () -> Void,
         onProfileSetupRequested: @escaping () -> Void
     ) {
         self.profileService = profileService
+        self.supabaseService = supabaseService
         self.onGameSelected = onGameSelected
         self.onParentDashboardRequested = onParentDashboardRequested
         self.onProfileSetupRequested = onProfileSetupRequested
@@ -96,13 +100,21 @@ class GameLobbyViewModel {
     private func loadGames() {
         // Load available games
         // In a real app, this would come from a configuration or backend
-        let tangramGame = TangramGame()
+        let tangramGame = TangramGame(supabaseService: supabaseService)
+        let tangramEditorGame = TangramEditorGame()  // Editor uses service role auth internally
         
         availableGames = [
             GameItem(
                 game: tangramGame,
                 iconName: "square.on.square",
-                color: .blue
+                color: .blue,
+                badge: nil
+            ),
+            GameItem(
+                game: tangramEditorGame,
+                iconName: "pencil.and.ruler.fill",
+                color: .orange,
+                badge: "Editor"
             )
             // Add more games here as they're implemented
         ]
