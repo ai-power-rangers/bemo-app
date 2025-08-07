@@ -64,18 +64,20 @@ The CV model outputs a JSON structure with detected Tangram pieces in a real-wor
 ### CV Coordinate System
 - **Origin**: Arbitrary point on physical plane
 - **Y-axis**: Can be negative (camera-relative)
-- **Scale**: Uses CV scale factor (~2.819)
+- **Scale**: Uses CV scale factor (~2.6-2.8)
 - **Units**: Camera pixels after homography transform
+- **⚠️ Camera Orientation**: May be inverted (180° rotated) depending on setup
 
 ### Editor/Game Coordinate System
 - **Origin**: Top-left corner (0,0)
 - **Y-axis**: Positive downward (screen coordinates)
 - **Scale**: visualScale = 50 (normalized 0-2 → visual 0-100)
 - **Units**: Screen pixels
+- **Orientation**: Standard (no rotation)
 
 ### Coordinate Transformation Pipeline
 ```
-Physical Piece → Camera View → CV Detection → Homography Transform → Game Space
+Physical Piece → Camera View → CV Detection → Homography Transform → 180° Adjustment (if needed) → Scale Conversion → Game Space
 ```
 
 ## Data Format Comparison
@@ -166,6 +168,7 @@ for each piece in detectedPieces {
    ```json
    // Raw CV output with negative Y values
    "translation": [734.56, -211.27]
+   "rotation_degrees": 45.0
    ```
 
 2. **Homography Application**
@@ -174,23 +177,33 @@ for each piece in detectedPieces {
    transformedPoint = applyHomography(cvPoint, homographyMatrix)
    ```
 
-3. **Coordinate Conversion**
+3. **180° Camera Adjustment (if camera is inverted)**
    ```swift
-   // Convert to game space (flip Y if needed)
+   // Many CV setups have inverted cameras
+   if isCameraInverted {
+       rotation += 180.0  // Add 180° to all rotations
+       position = reflectAroundCenter(position, puzzleCenter)
+   }
+   ```
+
+4. **Coordinate Conversion**
+   ```swift
+   // Scale and convert to game space
+   let scaleFactor = 50.0 / cvScale  // Game scale / CV scale
    gamePoint = CGPoint(
-       x: transformedPoint.x,
-       y: canvasHeight + transformedPoint.y  // Handle negative Y
+       x: transformedPoint.x * scaleFactor,
+       y: abs(transformedPoint.y * scaleFactor)
    )
    ```
 
-4. **Anchor Selection**
+5. **Anchor Selection**
    ```swift
    // Choose most reliable piece as reference
    anchor = pieces.filter { $0.type == .largeTriangle1 }.first
            ?? pieces.sorted { $0.area > $1.area }.first
    ```
 
-5. **Relative Position Calculation**
+6. **Relative Position Calculation**
    ```swift
    // Calculate positions relative to anchor
    relativePos = CGPoint(
@@ -200,7 +213,7 @@ for each piece in detectedPieces {
    relativeRot = piece.rotation - anchor.rotation
    ```
 
-6. **Validation Against Solution**
+7. **Validation Against Solution**
    ```swift
    // Compare with stored puzzle solution
    isCorrect = abs(relativePos.x - targetRelative.x) < tolerance &&

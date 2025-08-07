@@ -187,16 +187,18 @@ import Foundation
 import CoreGraphics
 
 class MockCVDataGenerator {
+    // IMPORTANT: Simulate inverted camera (180° rotation) to match real CV setup
+    let simulateInvertedCamera = true
     
     /// Generate mock CV data in the exact format expected from real CV
-    func generateMockCVOutput(for puzzle: GamePuzzleData, withNoise: Bool = true) -> [String: Any] {
+    func generateMockCVOutput(for puzzle: GamePuzzleData, withNoise: Bool = false) -> [String: Any] {
         let mockObjects = puzzle.targetPieces.map { targetPiece in
             generateMockPieceData(from: targetPiece, withNoise: withNoise)
         }
         
         return [
             "homography": generateMockHomography(),
-            "scale": 2.8190987423182827, // Realistic CV scale factor
+            "scale": 2.608, // Realistic CV scale factor (~2.6-2.8)
             "objects": mockObjects
         ]
     }
@@ -205,6 +207,18 @@ class MockCVDataGenerator {
         // Extract position from transform matrix
         var position = [target.transform.tx, target.transform.ty]
         var rotation = extractRotationDegrees(from: target.transform)
+        
+        // Simulate inverted camera (180° rotation)
+        if simulateInvertedCamera {
+            // Rotate 180° to simulate inverted camera
+            rotation -= 180.0  // Subtract because we're simulating CV->Game
+            
+            // Flip position around puzzle center
+            let centerX = 400.0  // Approximate puzzle center
+            let centerY = 300.0
+            position[0] = 2 * centerX - position[0]
+            position[1] = -(2 * centerY - position[1])  // Make Y negative like CV
+        }
         
         // NOTE: Noise/jitter is a stretch goal - skip for MVP
         // if withNoise {
@@ -424,11 +438,17 @@ Add the control panel to the debug overlay in `TangramGameView.swift`.
   "name": "tangram_square",
   "class_id": 1,
   "pose": {
-    "rotation_degrees": 45.0,
-    "translation": [300.0, -200.0]
+    "rotation_degrees": -135.0,  // Note: May be 180° off due to camera orientation
+    "translation": [500.0, -200.0]  // Note: Negative Y values common in CV
   }
 }
 ```
+
+**IMPORTANT**: The CV coordinate display should show:
+- Raw CV coordinates (before transformation)
+- Negative Y values (as CV outputs them)
+- Rotation in CV space (may be 180° off from game space)
+- This helps debug the transformation pipeline
 
 ### Validation Tolerances (Start Generous)
 - Position: ±15 pixels

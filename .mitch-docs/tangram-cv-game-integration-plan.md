@@ -26,7 +26,7 @@ This plan outlines the integration of computer vision (CV) data with the Tangram
 
 ## Implementation Plan
 
-### Phase 1: CV Data Processing Service (2 days)
+### Phase 1: CV Data Processing Service with 180° Rotation Handling (2 days)
 
 #### 1.1 Create `CVDataProcessor` Service
 
@@ -85,13 +85,22 @@ class CVDataProcessor {
         
         // Apply coordinate transformation
         let transformedPoint = applyHomography(translation, homography)
-        let gamePoint = convertToGameSpace(transformedPoint)
+        
+        // Handle 180° camera rotation if needed
+        var finalRotation = rotation
+        var finalPoint = transformedPoint
+        if isCameraInverted {
+            finalRotation += 180.0
+            finalPoint = reflectAroundCenter(transformedPoint)
+        }
+        
+        let gamePoint = convertToGameSpace(finalPoint)
         
         return RecognizedPiece(
             id: "cv_\(classId)_\(UUID().uuidString.prefix(8))",
             pieceTypeId: pieceType.rawValue,
             position: gamePoint,
-            rotation: rotation,
+            rotation: finalRotation,
             velocity: CGVector(dx: 0, dy: 0),
             isMoving: false,
             confidence: 0.95, // CV doesn't provide confidence, use high default
@@ -120,11 +129,34 @@ struct CoordinateTransformer {
     let homography: [[Double]]
     let cvScale: Double
     let canvasSize: CGSize
+    let needs180Rotation: Bool = true // CV camera mounted upside down
     
-    func transformCVToGameSpace(_ cvPoint: [Double]) -> CGPoint {
-        // Apply homography
-        // Scale conversion (CV scale 2.819 → game visualScale 50)
-        // Coordinate system flip if needed
+    func transformCVToGameSpace(_ cvPoint: [Double], rotation: Double) -> (CGPoint, Double) {
+        // Step 1: Apply homography
+        let homographyPoint = applyHomography(cvPoint, homography)
+        
+        // Step 2: Handle 180° rotation if camera is inverted
+        var adjustedPoint = homographyPoint
+        var adjustedRotation = rotation
+        if needs180Rotation {
+            let centerX = canvasSize.width / 2
+            let centerY = canvasSize.height / 2
+            adjustedPoint.x = 2 * centerX - homographyPoint.x
+            adjustedPoint.y = 2 * centerY - homographyPoint.y
+            adjustedRotation = normalizeAngle(rotation + 180.0)
+        }
+        
+        // Step 3: Scale conversion (CV scale to game visualScale)
+        let scaleFactor = 50.0 / cvScale
+        adjustedPoint.x *= scaleFactor
+        adjustedPoint.y *= scaleFactor
+        
+        // Step 4: Handle Y-axis (negative to positive if needed)
+        if adjustedPoint.y < 0 {
+            adjustedPoint.y = canvasSize.height + adjustedPoint.y
+        }
+        
+        return (adjustedPoint, adjustedRotation)
     }
 }
 ```
@@ -249,6 +281,26 @@ func generateMockCVData(from puzzle: GamePuzzleData, noise: NoiseLevel) -> [Stri
 - Tolerance tuning based on real-world testing
 - Performance profiling and optimization
 
+## Critical Implementation Notes
+
+### 180° Camera Rotation Handling
+
+**IMPORTANT**: The CV camera appears to be mounted inverted (180° rotated), requiring:
+1. All piece rotations need +180° adjustment
+2. All positions need reflection around puzzle center
+3. This is a **consistent** transformation across all frames
+
+```swift
+// Configuration flag for camera orientation
+let isCameraInverted = true // Set based on CV setup
+
+if isCameraInverted {
+    // Apply 180° transformation to all CV data
+    rotation += 180.0
+    position = reflectAroundCenter(position, puzzleCenter)
+}
+```
+
 ## Key Implementation Details
 
 ### Anchor Selection Algorithm
@@ -350,6 +402,24 @@ func validateRelativePosition(
 2. **Delayed feedback**
    - Mitigation: Optimistic UI updates
    - Solution: Show pending state during validation
+
+## Camera Orientation Configuration
+
+### Detecting Camera Inversion
+The CV camera may be mounted inverted (180° rotated). To detect this:
+
+1. **Test with known puzzle** - Place a completed puzzle and check if:
+   - All rotations are ~180° off
+   - Positions are reflected around center
+   
+2. **Configuration flag** - Set in CVDataProcessor:
+   ```swift
+   let isCameraInverted = true  // Set based on testing
+   ```
+
+3. **Automatic detection** - Future enhancement:
+   - Compare first few detections with expected orientations
+   - Auto-calibrate if consistent 180° offset detected
 
 ## Success Metrics
 

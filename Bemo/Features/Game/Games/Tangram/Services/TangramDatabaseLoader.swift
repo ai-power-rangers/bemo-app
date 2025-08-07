@@ -36,11 +36,24 @@ class TangramDatabaseLoader {
             
             for dto in dtos {
                 // Extract the puzzle data from the JSONB field
-                if let puzzleDict = dto.puzzle_data.value as? [String: Any] {
-                    if let gamePuzzle = PuzzleDataConverter.convertFromDatabase(puzzleDict) {
-                        puzzles.append(gamePuzzle)
-                        print("Loaded puzzle: \(gamePuzzle.name)")
+                var puzzleDict: [String: Any]?
+                
+                // Check if puzzle_data.value is a String (JSON string) or already a Dictionary
+                if let jsonString = dto.puzzle_data.value as? String {
+                    // Parse the JSON string to dictionary
+                    if let data = jsonString.data(using: .utf8),
+                       let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        puzzleDict = parsed
                     }
+                } else if let dict = dto.puzzle_data.value as? [String: Any] {
+                    // Already a dictionary
+                    puzzleDict = dict
+                }
+                
+                if let puzzleDict = puzzleDict,
+                   let gamePuzzle = PuzzleDataConverter.convertFromDatabase(puzzleDict) {
+                    puzzles.append(gamePuzzle)
+                    print("Loaded puzzle: \(gamePuzzle.name)")
                 }
             }
             
@@ -66,7 +79,21 @@ class TangramDatabaseLoader {
             for dto in dtos {
                 if dto.puzzle_id == id {
                     // Extract the puzzle data from the JSONB field
-                    if let puzzleDict = dto.puzzle_data.value as? [String: Any] {
+                    var puzzleDict: [String: Any]?
+                    
+                    // Check if puzzle_data.value is a String (JSON string) or already a Dictionary
+                    if let jsonString = dto.puzzle_data.value as? String {
+                        // Parse the JSON string to dictionary
+                        if let data = jsonString.data(using: .utf8),
+                           let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                            puzzleDict = parsed
+                        }
+                    } else if let dict = dto.puzzle_data.value as? [String: Any] {
+                        // Already a dictionary
+                        puzzleDict = dict
+                    }
+                    
+                    if let puzzleDict = puzzleDict {
                         return PuzzleDataConverter.convertFromDatabase(puzzleDict)
                     }
                 }
@@ -93,10 +120,23 @@ class TangramDatabaseLoader {
             
             for dto in dtos {
                 // Extract the puzzle data from the JSONB field
-                if let puzzleDict = dto.puzzle_data.value as? [String: Any] {
-                    if let gamePuzzle = PuzzleDataConverter.convertFromDatabase(puzzleDict) {
-                        puzzles.append(gamePuzzle)
+                var puzzleDict: [String: Any]?
+                
+                // Check if puzzle_data.value is a String (JSON string) or already a Dictionary
+                if let jsonString = dto.puzzle_data.value as? String {
+                    // Parse the JSON string to dictionary
+                    if let data = jsonString.data(using: .utf8),
+                       let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        puzzleDict = parsed
                     }
+                } else if let dict = dto.puzzle_data.value as? [String: Any] {
+                    // Already a dictionary
+                    puzzleDict = dict
+                }
+                
+                if let puzzleDict = puzzleDict,
+                   let gamePuzzle = PuzzleDataConverter.convertFromDatabase(puzzleDict) {
+                    puzzles.append(gamePuzzle)
                 }
             }
             
