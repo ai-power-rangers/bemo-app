@@ -48,7 +48,9 @@ class TangramEditorGame: Game {
     init() {
         // Create a service-role authenticated SupabaseService for the editor
         // This allows saving puzzles without user authentication
+        print("[TangramEditorGame] Creating SupabaseService with service role authentication")
         self.supabaseService = SupabaseService(useServiceRole: true)
+        print("[TangramEditorGame] SupabaseService created: \(supabaseService != nil ? "✅" : "❌")")
     }
     
     // MARK: - Game Protocol

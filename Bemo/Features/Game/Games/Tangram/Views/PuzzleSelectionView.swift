@@ -12,14 +12,14 @@
 import SwiftUI
 
 struct PuzzleSelectionView: View {
-    @State private var viewModel: PuzzleSelectionViewModel
+    let viewModel: PuzzleSelectionViewModel
     
     private let columns = [
         GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)
     ]
     
     init(viewModel: PuzzleSelectionViewModel) {
-        self._viewModel = State(initialValue: viewModel)
+        self.viewModel = viewModel
     }
     
     var body: some View {
@@ -47,27 +47,42 @@ struct PuzzleSelectionView: View {
     private var headerView: some View {
         VStack(spacing: 12) {
             HStack {
-                Button(action: viewModel.backToLobby) {
-                    Label("Back to Lobby", systemImage: "chevron.left")
+                // Title
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Puzzle Library")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                    
+                    Text("\(viewModel.filteredPuzzles.count) puzzles available")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                // View mode toggle
+                Picker("View", selection: .init(
+                    get: { viewModel.isGridView },
+                    set: { viewModel.isGridView = $0 }
+                )) {
+                    Image(systemName: "square.grid.2x2")
+                        .tag(true)
+                    Image(systemName: "list.bullet")
+                        .tag(false)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 100)
+                
+                // Back to Lobby button
+                Button(action: {
+                    print("DEBUG: Back to Lobby button tapped")
+                    viewModel.backToLobby()
+                }) {
+                    Label("Back to Lobby", systemImage: "arrow.left.circle.fill")
                         .font(.body)
-                        .fontWeight(.medium)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.regular)
-                
-                Spacer()
-                
-                Text("Select a Puzzle")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                
-                Spacer()
-                
-                Button(action: viewModel.toggleViewMode) {
-                    Image(systemName: viewModel.isGridView ? "list.bullet" : "square.grid.2x2")
-                        .font(.title2)
-                }
-                .buttonStyle(.bordered)
             }
             
             // Search bar
@@ -75,7 +90,10 @@ struct PuzzleSelectionView: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
                 
-                TextField("Search puzzles...", text: $viewModel.searchText)
+                TextField("Search puzzles...", text: .init(
+                    get: { viewModel.searchText },
+                    set: { viewModel.searchText = $0 }
+                ))
                     .textFieldStyle(.plain)
                 
                 if !viewModel.searchText.isEmpty {
@@ -232,56 +250,89 @@ struct TangramPuzzleCard: View {
     let difficultyColor: Color
     let onTap: () -> Void
     
+    @State private var isHovered = false
+    
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 8) {
-                // Thumbnail
+        Button(action: {
+            print("DEBUG: Puzzle card tapped: \(puzzle.name)")
+            onTap()
+        }) {
+            VStack(spacing: 0) {
+                // Thumbnail area
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(color.opacity(0.2))
-                        .frame(height: 120)
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [color.opacity(0.15), color.opacity(0.05)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(height: 150)
                     
                     if let thumbnail = thumbnail {
                         thumbnail
                             .resizable()
                             .scaledToFit()
-                            .frame(maxHeight: 100)
+                            .frame(maxHeight: 120)
                     } else {
-                        Image(systemName: "puzzlepiece.fill")
-                            .font(.system(size: 40))
-                            .foregroundColor(color)
+                        VStack(spacing: 8) {
+                            Image(systemName: "puzzlepiece.fill")
+                                .font(.system(size: 50))
+                                .foregroundColor(color)
+                            Text(puzzle.name)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 8)
+                        }
                     }
                 }
                 
-                // Info
-                VStack(alignment: .leading, spacing: 4) {
+                // Info section
+                VStack(alignment: .leading, spacing: 8) {
                     Text(puzzle.name)
-                        .font(.headline)
+                        .font(.system(.body, design: .rounded))
+                        .fontWeight(.semibold)
                         .lineLimit(1)
                         .foregroundColor(.primary)
                     
                     HStack {
-                        Label(puzzle.difficulty.displayName, systemImage: "star.fill")
-                            .font(.caption)
-                            .foregroundColor(difficultyColor)
+                        // Difficulty stars
+                        HStack(spacing: 2) {
+                            ForEach(0..<5) { index in
+                                Image(systemName: index < puzzle.difficulty.rawValue ? "star.fill" : "star")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(index < puzzle.difficulty.rawValue ? difficultyColor : .gray.opacity(0.3))
+                            }
+                        }
                         
                         Spacer()
                         
+                        // Category badge
                         Text(puzzle.category.rawValue)
-                            .font(.caption2)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color(UIColor.tertiarySystemBackground))
-                            .cornerRadius(4)
+                            .font(.system(size: 10))
+                            .fontWeight(.medium)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(color.opacity(0.2))
+                            .foregroundColor(color)
+                            .cornerRadius(6)
                     }
                 }
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
+                .padding(12)
+                .background(Color(UIColor.systemBackground))
             }
             .background(Color(UIColor.secondarySystemBackground))
-            .cornerRadius(12)
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(isHovered ? 0.15 : 0.05), radius: isHovered ? 8 : 4, y: 2)
+            .scaleEffect(isHovered ? 1.02 : 1.0)
+            .animation(.easeInOut(duration: 0.2), value: isHovered)
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
     }
 }
 

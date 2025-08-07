@@ -69,6 +69,7 @@ class PuzzleSelectionViewModel {
     // MARK: - Actions
     
     func selectPuzzle(_ puzzle: TangramPuzzle) {
+        print("DEBUG: PuzzleSelectionViewModel.selectPuzzle called for: \(puzzle.name)")
         onPuzzleSelected(puzzle)
     }
     
@@ -83,6 +84,7 @@ class PuzzleSelectionViewModel {
     }
     
     func backToLobby() {
+        print("DEBUG: PuzzleSelectionViewModel.backToLobby called")
         onBackToLobby?()
     }
     

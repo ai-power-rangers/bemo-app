@@ -60,6 +60,7 @@ class TangramEditorDependencyContainer {
     
     init(supabaseService: SupabaseService? = nil) {
         self.supabaseService = supabaseService
+        print("[TangramEditorDependencyContainer] Initialized with SupabaseService: \(supabaseService != nil ? "✅" : "❌ nil")")
         // Services are lazy-loaded, so nothing else to initialize here
         // This ensures services are only created when actually needed
     }

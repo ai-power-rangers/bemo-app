@@ -197,12 +197,6 @@ struct TangramGameView: View {
             }
             .buttonStyle(.bordered)
             .tint(viewModel.showHints ? .yellow : .blue)
-            
-            Button(action: viewModel.requestQuit) {
-                Label("Quit", systemImage: "xmark.circle")
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
         }
     }
     

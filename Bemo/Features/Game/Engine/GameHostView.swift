@@ -28,65 +28,68 @@ struct GameHostView: View {
                 }
             }
             
-            // Overlay UI elements
-            VStack {
-                // Top bar (quit button and progress)
-                HStack {
-                    // Quit button (if enabled)
-                    if config.showQuitButton {
-                        Button(action: {
-                            viewModel.handleQuitRequest()
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.largeTitle)
-                                .foregroundColor(.white)
-                                .background(Color.black.opacity(0.5))
-                                .clipShape(Circle())
+            // Overlay UI elements - only if we have something to show
+            if config.showQuitButton || (config.showProgressBar && viewModel.showProgress) || config.showHintButton || config.customTopBar != nil || config.customBottomBar != nil {
+                VStack {
+                    // Top bar (quit button and progress)
+                    HStack {
+                        // Quit button (if enabled)
+                        if config.showQuitButton {
+                            Button(action: {
+                                viewModel.handleQuitRequest()
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.largeTitle)
+                                    .foregroundColor(.white)
+                                    .background(Color.black.opacity(0.5))
+                                    .clipShape(Circle())
+                            }
+                            .padding()
                         }
-                        .padding()
+                        
+                        Spacer()
+                        
+                        // Progress indicator (if enabled and showing)
+                        if config.showProgressBar && viewModel.showProgress {
+                            ProgressView(value: viewModel.progress)
+                                .progressViewStyle(LinearProgressViewStyle())
+                                .frame(width: 200)
+                                .padding()
+                        }
+                    }
+                    
+                    // Custom top bar if provided
+                    if let customTopBar = config.customTopBar {
+                        customTopBar
                     }
                     
                     Spacer()
                     
-                    // Progress indicator (if enabled and showing)
-                    if config.showProgressBar && viewModel.showProgress {
-                        ProgressView(value: viewModel.progress)
-                            .progressViewStyle(LinearProgressViewStyle())
-                            .frame(width: 200)
+                    // Custom bottom bar if provided
+                    if let customBottomBar = config.customBottomBar {
+                        customBottomBar
+                    }
+                    
+                    // Bottom controls
+                    if config.showHintButton {
+                        HStack {
+                            // Hint button
+                            Button(action: {
+                                viewModel.requestHint()
+                            }) {
+                                Label("Hint", systemImage: "lightbulb.fill")
+                                    .padding()
+                                    .background(Color.blue)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(10)
+                            }
                             .padding()
-                    }
-                }
-                
-                // Custom top bar if provided
-                if let customTopBar = config.customTopBar {
-                    customTopBar
-                }
-                
-                Spacer()
-                
-                // Custom bottom bar if provided
-                if let customBottomBar = config.customBottomBar {
-                    customBottomBar
-                }
-                
-                // Bottom controls
-                if config.showHintButton {
-                    HStack {
-                        // Hint button
-                        Button(action: {
-                            viewModel.requestHint()
-                        }) {
-                            Label("Hint", systemImage: "lightbulb.fill")
-                                .padding()
-                                .background(Color.blue)
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
+                            
+                            Spacer()
                         }
-                        .padding()
-                        
-                        Spacer()
                     }
                 }
+                .allowsHitTesting(true)
             }
         }
         .alert(isPresented: $viewModel.showError) {

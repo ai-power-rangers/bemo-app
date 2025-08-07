@@ -25,11 +25,14 @@ class TangramGame: Game {
     // MARK: - Game UI Configuration
     
     var gameUIConfig: GameUIConfig {
-        GameUIConfig(
+        // Only show hint button during gameplay, not in puzzle selection
+        let showHints = viewModel?.currentPhase == .playingPuzzle
+        
+        return GameUIConfig(
             respectsSafeAreas: false,
-            showHintButton: true,
-            showProgressBar: true,
-            showQuitButton: true
+            showHintButton: showHints,
+            showProgressBar: showHints,
+            showQuitButton: false  // We handle quit in our own UI
         )
     }
     

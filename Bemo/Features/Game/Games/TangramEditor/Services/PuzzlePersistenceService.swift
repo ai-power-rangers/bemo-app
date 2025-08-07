@@ -22,6 +22,8 @@ class PuzzlePersistenceService {
     
     init(supabaseService: SupabaseService? = nil) {
         self.supabaseService = supabaseService
+        print("[PuzzlePersistenceService] Initialized with SupabaseService: \(supabaseService != nil ? "✅" : "❌ nil")")
+        
         // Get documents directory
         documentsDirectory = FileManager.default.urls(for: .documentDirectory, 
                                                       in: .userDomainMask)[0]
@@ -67,8 +69,9 @@ class PuzzlePersistenceService {
         // Update local index
         try await updatePuzzleIndex(updatedPuzzle)
         
-        // Sync to Supabase if it's an official puzzle (developer created)
+        // Sync to Supabase (all puzzles created in editor should sync)
         if let supabase = supabaseService {
+            print("[PuzzlePersistenceService] Syncing puzzle to Supabase - ID: \(updatedPuzzle.id), Name: \(updatedPuzzle.name)")
             do {
                 // Convert to DTO and save to cloud
                 let dto = try TangramPuzzleDTO(from: updatedPuzzle)
@@ -80,15 +83,18 @@ class PuzzlePersistenceService {
                         puzzleId: updatedPuzzle.id,
                         thumbnailData: thumbnailData
                     )
-                    print("Thumbnail uploaded to: \(thumbnailURL)")
+                    print("[PuzzlePersistenceService] Thumbnail uploaded to: \(thumbnailURL)")
                 }
                 
-                print("Puzzle synced to Supabase: \(updatedPuzzle.id)")
+                print("[PuzzlePersistenceService] ✅ Puzzle successfully synced to Supabase: \(updatedPuzzle.id)")
             } catch {
                 // Log but don't fail - local save succeeded
-                print("Failed to sync puzzle to cloud: \(error)")
+                print("[PuzzlePersistenceService] ❌ Failed to sync puzzle to cloud: \(error)")
+                print("[PuzzlePersistenceService] Error details: \(error.localizedDescription)")
                 // Continue with local-only save
             }
+        } else {
+            print("[PuzzlePersistenceService] ⚠️ No Supabase service available - saving locally only")
         }
         
         return updatedPuzzle
