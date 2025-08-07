@@ -144,12 +144,12 @@ struct PuzzleGameState: Codable {
     
     // MARK: - Helpers
     
-    func targetForPieceType(_ type: PieceType) -> GamePuzzleData.TargetPiece? {
-        targetPuzzle.targetPieces.first { $0.pieceType == type.rawValue }
+    func targetForPieceType(_ type: TangramPieceType) -> GamePuzzleData.TargetPiece? {
+        targetPuzzle.targetPieces.first { $0.pieceType == type }
     }
     
-    func remainingPieceTypes() -> [String] {
-        let placedTypes = Set(placedPieces.compactMap { $0.pieceType.rawValue })
+    func remainingPieceTypes() -> [TangramPieceType] {
+        let placedTypes = Set(placedPieces.map { $0.pieceType })
         return targetPuzzle.targetPieces
             .map { $0.pieceType }
             .filter { !placedTypes.contains($0) }

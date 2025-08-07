@@ -40,37 +40,8 @@ struct PuzzleLibraryView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            VStack(spacing: 12) {
-                HStack {
-                    // Back to Lobby button
-                    Button(action: { 
-                        viewModel.delegate?.gameDidRequestQuit() 
-                    }) {
-                        Label("Back to Lobby", systemImage: "chevron.left")
-                            .font(.body)
-                            .fontWeight(.medium)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    
-                    Spacer()
-                    
-                    Text("Tangram Puzzles")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                    
-                    Spacer()
-                    
-                    // Create New Button
-                    Button(action: { viewModel.createNewPuzzle() }) {
-                        Label("Create New", systemImage: "plus.circle.fill")
-                            .font(.headline)
-                    }
-                    .buttonStyle(.bordered)
-                }
-                
-                // Search and Filter Bar
-                HStack(spacing: 12) {
+            // Search and Filter Bar
+            HStack(spacing: 12) {
                     // Search field
                     HStack {
                         Image(systemName: "magnifyingglass")
@@ -101,9 +72,8 @@ struct PuzzleLibraryView: View {
                         .cornerRadius(8)
                     }
                 }
-            }
-            .padding()
-            .background(Color(.systemBackground))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             
             Divider()
             
@@ -112,42 +82,25 @@ struct PuzzleLibraryView: View {
                 emptyStateView
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        // All Puzzles (all are official)
-                        if !filteredPuzzles.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Label("All Puzzles", systemImage: "checkmark.seal.fill")
-                                        .font(.headline)
-                                        .foregroundColor(.blue)
-                                    Spacer()
-                                    Text("\(filteredPuzzles.count)")
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.horizontal)
-                                
-                                LazyVGrid(columns: columns, spacing: 16) {
-                                    ForEach(filteredPuzzles) { puzzle in
-                                        PuzzleCardView(
-                                            puzzle: puzzle,
-                                            onTap: { viewModel.loadPuzzle(from: puzzle) },
-                                            onDelete: {
-                                                puzzleToDelete = puzzle
-                                                showingDeleteAlert = true
-                                            },
-                                            onDuplicate: {
-                                                Task {
-                                                    await viewModel.duplicatePuzzle(puzzle)
-                                                }
-                                            }
-                                        )
+                    LazyVGrid(columns: columns, spacing: 16) {
+                        ForEach(filteredPuzzles) { puzzle in
+                            PuzzleCardView(
+                                puzzle: puzzle,
+                                allPuzzles: filteredPuzzles,  // Pass all puzzles for badge calculation
+                                onTap: { viewModel.loadPuzzle(from: puzzle) },
+                                onDelete: {
+                                    puzzleToDelete = puzzle
+                                    showingDeleteAlert = true
+                                },
+                                onDuplicate: {
+                                    Task {
+                                        await viewModel.duplicatePuzzle(puzzle)
                                     }
                                 }
-                                .padding(.horizontal)
-                            }
+                            )
                         }
                     }
-                    .padding(.vertical)
+                    .padding()
                 }
             }
         }
@@ -198,6 +151,7 @@ struct PuzzleLibraryView: View {
 
 struct PuzzleCardView: View {
     let puzzle: TangramPuzzle
+    let allPuzzles: [TangramPuzzle]  // Needed for badge calculation
     let onTap: () -> Void
     let onDelete: (() -> Void)?  // Optional for official puzzles
     let onDuplicate: () -> Void
@@ -206,23 +160,24 @@ struct PuzzleCardView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Thumbnail
+            // Thumbnail - maintain square frame but preserve aspect ratio
             ZStack {
+                // Background for consistent card size
+                Rectangle()
+                    .fill(Color(.systemGray6))
+                    .aspectRatio(1, contentMode: .fit)
+                
                 if let thumbnailData = puzzle.thumbnailData,
                    let uiImage = UIImage(data: thumbnailData) {
                     Image(uiImage: uiImage)
                         .resizable()
-                        .aspectRatio(1, contentMode: .fit)
+                        .scaledToFit()  // Preserve aspect ratio
+                        .padding(8)  // Add padding so puzzle doesn't touch edges
                 } else {
                     // Placeholder
-                    Rectangle()
-                        .fill(Color(.systemGray5))
-                        .aspectRatio(1, contentMode: .fit)
-                        .overlay(
-                            Image(systemName: "square.grid.3x3")
-                                .font(.largeTitle)
-                                .foregroundColor(.secondary)
-                        )
+                    Image(systemName: "square.grid.3x3")
+                        .font(.largeTitle)
+                        .foregroundColor(.secondary)
                 }
             }
             .cornerRadius(8)
@@ -231,22 +186,23 @@ struct PuzzleCardView: View {
                     .stroke(Color(.systemGray4), lineWidth: 1)
             )
             .overlay(
-                // Official badge for bundled puzzles
+                // Dynamic badge based on puzzle properties - top left corner
                 Group {
-                    // All puzzles are official
-                    VStack {
-                        HStack {
+                    if let badge = puzzle.getBadge(allPuzzles: allPuzzles) {
+                        VStack {
+                            HStack {
+                                Label(badge.rawValue, systemImage: badge.icon)
+                                    .font(.caption2)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(badge.color)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(4)
+                                    .padding(8)
+                                Spacer()
+                            }
                             Spacer()
-                            Label("Official", systemImage: "checkmark.seal.fill")
-                                .font(.caption2)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.blue)
-                                .foregroundColor(.white)
-                                .cornerRadius(4)
-                                .padding(8)
                         }
-                        Spacer()
                     }
                 }
             )

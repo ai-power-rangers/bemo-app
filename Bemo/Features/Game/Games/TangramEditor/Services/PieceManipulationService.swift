@@ -18,39 +18,51 @@ class PieceManipulationService {
     // MARK: - Public Methods
     
     /// Calculate the manipulation mode for a piece based on its connections
-    func calculateManipulationMode(piece: TangramPiece, connections: [Connection]) -> ManipulationMode {
+    func calculateManipulationMode(piece: TangramPiece, connections: [Connection], allPieces: [TangramPiece], isFirstPiece: Bool = false) -> ManipulationMode {
         // Find connections involving this piece
         let pieceConnections = connections.filter { connection in
             connection.pieceAId == piece.id || connection.pieceBId == piece.id
         }
         
-        // Multiple connections = locked
-        if pieceConnections.count >= 2 {
-            return .locked
+        // First piece is always fixed
+        if isFirstPiece {
+            return .fixed
         }
         
-        // No connections = free manipulation (but we still lock the first piece)
+        // Multiple connections = fixed
+        if pieceConnections.count >= 2 {
+            return .fixed
+        }
+        
+        // No connections = free movement
         if pieceConnections.isEmpty {
-            // First piece is always locked even without connections
-            return .locked
+            return .free
         }
         
         // Single connection - determine type
         if let connection = pieceConnections.first {
             switch connection.type {
             case .vertexToVertex(let pieceAId, let vertexA, let pieceBId, let vertexB):
-                // Get the pivot point (vertex in world space)
+                // Get the pivot point from the OTHER piece (the stationary one)
                 let isPieceA = piece.id == pieceAId
-                let vertexIndex = isPieceA ? vertexA : vertexB
-                let worldVertices = TangramCoordinateSystem.getWorldVertices(for: piece)
                 
-                guard vertexIndex < worldVertices.count else {
-                    return .locked
+                // Find the other piece to get its vertex as the pivot
+                let otherPieceId = isPieceA ? pieceBId : pieceAId
+                let otherVertexIndex = isPieceA ? vertexB : vertexA
+                
+                guard let otherPiece = allPieces.first(where: { $0.id == otherPieceId }) else {
+                    return .fixed
                 }
                 
-                let pivot = worldVertices[vertexIndex]
-                // Snap at 45° intervals
-                let snapAngles = [0, 45, 90, 135, 180, 225, 270, 315].map { Double($0) }
+                let otherWorldVertices = TangramCoordinateSystem.getWorldVertices(for: otherPiece)
+                guard otherVertexIndex < otherWorldVertices.count else {
+                    return .fixed
+                }
+                
+                // Use the vertex from the OTHER piece as the pivot point
+                let pivot = otherWorldVertices[otherVertexIndex]
+                // Snap at exact 45° intervals for clean rotations
+                let snapAngles: [Double] = [-180.0, -135.0, -90.0, -45.0, 0.0, 45.0, 90.0, 135.0, 180.0]
                 
                 return .rotatable(pivot: pivot, snapAngles: snapAngles)
                 
@@ -58,53 +70,128 @@ class PieceManipulationService {
                 // Determine which piece is sliding and which is stationary
                 let isPieceA = piece.id == pieceAId
                 
-                // For edge-to-edge, we need to get the other piece to determine the slide track
-                // This is a simplified version - in production we'd need the other piece's data
-                let edgeIndex = isPieceA ? edgeA : edgeB
-                let worldVertices = TangramCoordinateSystem.getWorldVertices(for: piece)
-                let edges = TangramGeometry.edges(for: piece.type)
-                
-                guard edgeIndex < edges.count else {
-                    return .locked
+                // Get BOTH pieces to determine proper sliding
+                guard let pieceA = allPieces.first(where: { $0.id == pieceAId }),
+                      let pieceB = allPieces.first(where: { $0.id == pieceBId }) else {
+                    return .fixed
                 }
                 
-                let edgeDef = edges[edgeIndex]
-                let edgeStart = worldVertices[edgeDef.startVertex]
-                let edgeEnd = worldVertices[edgeDef.endVertex]
+                // Get edges for both pieces
+                let edgesA = TangramGeometry.edges(for: pieceA.type)
+                let edgesB = TangramGeometry.edges(for: pieceB.type)
                 
-                // Calculate edge vector
-                let dx = edgeEnd.x - edgeStart.x
-                let dy = edgeEnd.y - edgeStart.y
-                let edgeLength = sqrt(dx * dx + dy * dy)
-                let normalizedVector = CGVector(dx: dx / edgeLength, dy: dy / edgeLength)
+                guard edgeA < edgesA.count, edgeB < edgesB.count else {
+                    return .fixed
+                }
                 
-                // Simplified slide range
-                let slideRange = 0...Double(edgeLength)
-                let snapPositions = [0.0, 0.5, 1.0]
+                // Get world vertices for both pieces
+                let worldVerticesA = TangramCoordinateSystem.getWorldVertices(for: pieceA)
+                let worldVerticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
+                
+                // Calculate both edge lengths
+                let edgeDefA = edgesA[edgeA]
+                let edgeStartA = worldVerticesA[edgeDefA.startVertex]
+                let edgeEndA = worldVerticesA[edgeDefA.endVertex]
+                let edgeLengthA = sqrt(pow(edgeEndA.x - edgeStartA.x, 2) + pow(edgeEndA.y - edgeStartA.y, 2))
+                
+                let edgeDefB = edgesB[edgeB]
+                let edgeStartB = worldVerticesB[edgeDefB.startVertex]
+                let edgeEndB = worldVerticesB[edgeDefB.endVertex]
+                let edgeLengthB = sqrt(pow(edgeEndB.x - edgeStartB.x, 2) + pow(edgeEndB.y - edgeStartB.y, 2))
+                
+                // Determine which edge is longer (the track) and which piece slides
+                // The LONGER edge is the track, the piece with SHORTER edge slides
+                let isATrack = edgeLengthA >= edgeLengthB
+                
+                // Get the track edge (from the stationary piece)
+                let (trackStart, trackEnd, trackLength, slidingLength) = isATrack ?
+                    (edgeStartA, edgeEndA, edgeLengthA, edgeLengthB) :
+                    (edgeStartB, edgeEndB, edgeLengthB, edgeLengthA)
+                
+                // Check if this piece is the sliding piece
+                let isSlidingPiece = (isATrack && piece.id == pieceBId) || (!isATrack && piece.id == pieceAId)
+                
+                if !isSlidingPiece {
+                    // This piece is the track/stationary piece - it's fixed
+                    return .fixed
+                }
+                
+                // Calculate edge vector for the track
+                let dx = trackEnd.x - trackStart.x
+                let dy = trackEnd.y - trackStart.y
+                let normalizedVector = CGVector(dx: dx / trackLength, dy: dy / trackLength)
+                
+                // Sliding range is track length minus sliding piece edge length
+                // This ensures the sliding piece's edge stays fully on the track
+                let maxSlide = Double(max(0, trackLength - slidingLength))
+                let slideRange = 0...maxSlide
+                
+                // Snap positions at exact 0%, 25%, 50%, 75%, 100% of the slide range
+                let snapPositions: [Double] = maxSlide > 0 ? 
+                    [0.0, maxSlide * 0.25, maxSlide * 0.5, maxSlide * 0.75, maxSlide].filter { $0 >= 0 && $0 <= maxSlide } : [0.0]
                 
                 return .slidable(
                     edge: ManipulationMode.Edge(
-                        start: edgeStart,
-                        end: edgeEnd,
+                        start: trackStart,
+                        end: trackEnd,
                         vector: normalizedVector
                     ),
                     range: slideRange,
                     snapPositions: snapPositions
                 )
                 
-            case .vertexToEdge:
-                // Vertex on edge - for now, lock it
-                // Could potentially allow sliding along the edge
-                return .locked
+            case .vertexToEdge(let pieceAId, let vertex, let pieceBId, let edge):
+                // IMPORTANT: For vertex-to-edge, the vertex piece can both:
+                // 1. Slide along the edge
+                // 2. Rotate while keeping the vertex on the edge
+                
+                // Determine if this piece is the vertex piece or edge piece
+                let isPieceWithVertex = piece.id == pieceAId
+                
+                if !isPieceWithVertex {
+                    // This is the edge piece, it should be fixed
+                    return .fixed
+                }
+                
+                // Get the edge piece (piece B)
+                guard let edgePiece = allPieces.first(where: { $0.id == pieceBId }) else {
+                    return .fixed
+                }
+                
+                let worldVerticesB = TangramCoordinateSystem.getWorldVertices(for: edgePiece)
+                let edgesB = TangramGeometry.edges(for: edgePiece.type)
+                
+                guard edge < edgesB.count else {
+                    return .fixed
+                }
+                
+                let edgeDef = edgesB[edge]
+                let edgeStart = worldVerticesB[edgeDef.startVertex]
+                let edgeEnd = worldVerticesB[edgeDef.endVertex]
+                
+                // Get current vertex position on the edge for rotation pivot
+                let worldVerticesA = TangramCoordinateSystem.getWorldVertices(for: piece)
+                guard vertex < worldVerticesA.count else {
+                    return .fixed
+                }
+                let currentVertexPos = worldVerticesA[vertex]
+                
+                // For vertex-to-edge: Allow rotation with the vertex as pivot
+                // The vertex must stay on the edge during rotation
+                let snapAngles: [Double] = [-180.0, -135.0, -90.0, -45.0, 0.0, 45.0, 90.0, 135.0, 180.0]
+                
+                // Use the current vertex position as the rotation pivot
+                // This vertex is constrained to stay on the edge
+                return .rotatable(pivot: currentVertexPos, snapAngles: snapAngles)
             }
         }
         
-        return .locked
+        return .fixed
     }
     
     /// Check if a piece can be rotated
-    func canRotate(piece: TangramPiece, connections: [Connection]) -> Bool {
-        let mode = calculateManipulationMode(piece: piece, connections: connections)
+    func canRotate(piece: TangramPiece, connections: [Connection], allPieces: [TangramPiece]) -> Bool {
+        let mode = calculateManipulationMode(piece: piece, connections: connections, allPieces: allPieces)
         switch mode {
         case .rotatable:
             return true
@@ -114,15 +201,15 @@ class PieceManipulationService {
     }
     
     /// Check if a piece can be flipped
-    func canFlip(piece: TangramPiece, connections: [Connection]) -> Bool {
+    func canFlip(piece: TangramPiece, connections: [Connection], allPieces: [TangramPiece]) -> Bool {
         // Only parallelogram can flip, and only when rotatable
         guard piece.type == .parallelogram else { return false }
-        return canRotate(piece: piece, connections: connections)
+        return canRotate(piece: piece, connections: connections, allPieces: allPieces)
     }
     
     /// Check if a piece can slide
-    func canSlide(piece: TangramPiece, connections: [Connection]) -> SlideConstraints? {
-        let mode = calculateManipulationMode(piece: piece, connections: connections)
+    func canSlide(piece: TangramPiece, connections: [Connection], allPieces: [TangramPiece]) -> SlideConstraints? {
+        let mode = calculateManipulationMode(piece: piece, connections: connections, allPieces: allPieces)
         switch mode {
         case .slidable(let edge, let range, let snapPositions):
             return SlideConstraints(edge: edge, range: range, snapPositions: snapPositions)
@@ -132,8 +219,8 @@ class PieceManipulationService {
     }
     
     /// Get the rotation pivot point for a piece
-    func getRotationPivot(piece: TangramPiece, connections: [Connection]) -> CGPoint? {
-        let mode = calculateManipulationMode(piece: piece, connections: connections)
+    func getRotationPivot(piece: TangramPiece, connections: [Connection], allPieces: [TangramPiece]) -> CGPoint? {
+        let mode = calculateManipulationMode(piece: piece, connections: connections, allPieces: allPieces)
         switch mode {
         case .rotatable(let pivot, _):
             return pivot
@@ -204,6 +291,89 @@ class PieceManipulationService {
         
         // Convert back to actual distance
         return range.lowerBound + nearestPosition * (range.upperBound - range.lowerBound)
+    }
+    
+    /// Calculate valid sliding range considering obstacles
+    func calculateSlideLimits(
+        piece: TangramPiece,
+        edge: ManipulationMode.Edge,
+        baseRange: ClosedRange<Double>,
+        otherPieces: [TangramPiece],
+        stepSize: Double = 2.0
+    ) -> ClosedRange<Double> {
+        // No longer need validation service - using PieceTransformEngine
+        var minValidDistance = baseRange.lowerBound
+        var maxValidDistance = baseRange.upperBound
+        
+        // Get current position along edge (assumed to be 0 for initial placement)
+        let currentPosition: Double = 0
+        
+        // Check forward (positive) direction from current position
+        for distance in stride(from: currentPosition, through: baseRange.upperBound, by: stepSize) {
+            let translation = CGAffineTransform(
+                translationX: edge.vector.dx * CGFloat(distance),
+                y: edge.vector.dy * CGFloat(distance)
+            )
+            
+            let newTransform = piece.transform.concatenating(translation)
+            let testPiece = TangramPiece(type: piece.type, transform: newTransform)
+            
+            var hasOverlap = false
+            for other in otherPieces {
+                if PieceTransformEngine.hasAreaOverlap(testPiece, other) {
+                    hasOverlap = true
+                    break
+                }
+            }
+            
+            if hasOverlap {
+                maxValidDistance = max(currentPosition, distance - stepSize)
+                break
+            }
+        }
+        
+        // Check backward (negative) direction from current position
+        for distance in stride(from: currentPosition, through: baseRange.lowerBound, by: -stepSize) {
+            let translation = CGAffineTransform(
+                translationX: edge.vector.dx * CGFloat(distance),
+                y: edge.vector.dy * CGFloat(distance)
+            )
+            
+            let newTransform = piece.transform.concatenating(translation)
+            let testPiece = TangramPiece(type: piece.type, transform: newTransform)
+            
+            var hasOverlap = false
+            for other in otherPieces {
+                if PieceTransformEngine.hasAreaOverlap(testPiece, other) {
+                    hasOverlap = true
+                    break
+                }
+            }
+            
+            if hasOverlap {
+                minValidDistance = min(currentPosition, distance + stepSize)
+                break
+            }
+        }
+        
+        return minValidDistance...maxValidDistance
+    }
+    
+    /// Calculate the valid rotation range for a piece to prevent overlaps
+    func calculateRotationLimits(
+        piece: TangramPiece,
+        pivot: CGPoint,
+        otherPieces: [TangramPiece],
+        stepDegrees: Double = 45.0  // Use 45° steps for tangram
+    ) -> (minAngle: Double, maxAngle: Double) {
+        // For vertex-to-vertex connections, test each 45° position
+        // and return the full range if any positions are valid
+        // The actual validation happens in handleRotation using PieceTransformEngine
+        
+        // For now, return full range to allow testing all positions
+        // The centralized validation in PieceTransformEngine will handle
+        // checking each position for validity
+        return (-180, 180)
     }
 }
 

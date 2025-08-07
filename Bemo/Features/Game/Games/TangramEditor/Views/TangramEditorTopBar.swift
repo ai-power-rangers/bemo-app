@@ -9,42 +9,29 @@ import SwiftUI
 
 struct TangramEditorTopBar: View {
     @Bindable var viewModel: TangramEditorViewModel
-    let delegate: GameDelegate?
+    let delegate: DevToolDelegate?
     
     var body: some View {
-        HStack(spacing: 12) {
-            // Left side: Back/Quit and Settings (fixed width)
-            HStack(spacing: 8) {
-                // Show back button when in editor, quit button when in library
-                if viewModel.uiState.navigationState == .editor {
-                    Button(action: {
-                        // Check if there are unsaved changes
-                        if !viewModel.puzzle.pieces.isEmpty {
-                            viewModel.showLibraryNavigationAlert = true
-                        } else {
-                            viewModel.uiState.navigationState = .library
-                        }
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left")
-                            Text("Library")
-                        }
-                        .font(.caption)
-                    }
+        HStack {
+            // Left side: Back button
+            Button(action: {
+                // Check if there are unsaved changes
+                if !viewModel.puzzle.pieces.isEmpty {
+                    viewModel.showLibraryNavigationAlert = true
                 } else {
-                    Button(action: {
-                        delegate?.gameDidRequestQuit()
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.primary)
-                    }
+                    viewModel.uiState.navigationState = .library
                 }
-                
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                    Text("Library")
+                }
+                .font(.body)
+                .foregroundColor(.blue)
             }
-            .frame(width: 80, alignment: .leading)
+            .frame(width: 100, alignment: .leading)
             
-            Spacer(minLength: 0)
+            Spacer()
             
             // Center: Piece controls (when pending piece is active)
             if isPendingPiece {
@@ -122,29 +109,24 @@ struct TangramEditorTopBar: View {
                 }
             }
             
-            Spacer(minLength: 0)
+            Spacer()
             
-            // Right side: Save button (fixed width)
-            HStack {
-                if viewModel.validationState.isValid && viewModel.puzzle.pieces.count >= 2 {
-                    Button(action: { viewModel.requestSave() }) {
-                        Label("Save", systemImage: "square.and.arrow.down")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.regular)
-                    .tint(.green)
-                }
+            // Right side: Save button
+            Button(action: { viewModel.requestSave() }) {
+                Text("Save")
+                    .font(.body)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(viewModel.validationState.isValid && viewModel.puzzle.pieces.count >= 2 ? Color.blue : Color.gray))
             }
+            .disabled(!(viewModel.validationState.isValid && viewModel.puzzle.pieces.count >= 2))
             .frame(width: 100, alignment: .trailing)
         }
-        .padding(.horizontal)
+        .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(
-            Color(.systemBackground).opacity(0.95)
-                .background(.ultraThinMaterial)
-        )
+        .background(Color(.systemBackground))
     }
     
     private var isPendingPiece: Bool {

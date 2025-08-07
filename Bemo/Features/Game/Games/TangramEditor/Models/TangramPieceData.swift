@@ -18,15 +18,13 @@ struct TangramPiece: Identifiable, Equatable {
     let id: String
     let type: PieceType
     var transform: CGAffineTransform
-    var isLocked: Bool
     var zIndex: Int
     var connectionPoints: [ConnectionData]  // Track active connections
     
-    init(type: PieceType, transform: CGAffineTransform = .identity, isLocked: Bool = true) {
+    init(type: PieceType, transform: CGAffineTransform = .identity) {
         self.id = UUID().uuidString
         self.type = type
         self.transform = transform
-        self.isLocked = isLocked  // Default to locked
         self.zIndex = 0
         self.connectionPoints = []
     }
@@ -36,7 +34,6 @@ struct TangramPiece: Identifiable, Equatable {
         return lhs.id == rhs.id &&
                lhs.type == rhs.type &&
                lhs.transform == rhs.transform &&
-               lhs.isLocked == rhs.isLocked &&
                lhs.zIndex == rhs.zIndex &&
                lhs.connectionPoints == rhs.connectionPoints
     }
@@ -48,7 +45,6 @@ extension TangramPiece: Codable {
         case id
         case type
         case transform
-        case isLocked
         case zIndex
         case connectionPoints
     }
@@ -59,7 +55,6 @@ extension TangramPiece: Codable {
         try container.encode(id, forKey: .id)
         try container.encode(type, forKey: .type)
         try container.encode(TransformData(transform: transform), forKey: .transform)
-        try container.encode(isLocked, forKey: .isLocked)
         try container.encode(zIndex, forKey: .zIndex)
         try container.encode(connectionPoints, forKey: .connectionPoints)
     }
@@ -71,7 +66,6 @@ extension TangramPiece: Codable {
         type = try container.decode(PieceType.self, forKey: .type)
         let transformData = try container.decode(TransformData.self, forKey: .transform)
         transform = transformData.toCGAffineTransform()
-        isLocked = try container.decode(Bool.self, forKey: .isLocked)
         zIndex = try container.decode(Int.self, forKey: .zIndex)
         connectionPoints = try container.decode([ConnectionData].self, forKey: .connectionPoints)
     }

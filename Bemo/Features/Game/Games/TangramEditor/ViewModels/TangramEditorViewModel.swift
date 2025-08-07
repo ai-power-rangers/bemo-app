@@ -19,10 +19,26 @@ class TangramEditorViewModel {
     // MARK: - Core State
     
     var puzzle: TangramPuzzle
+    var originalPuzzleData: Data? = nil  // To track if changes were made
     var savedPuzzles: [TangramPuzzle] = []
     var validationState: ValidationState = .unknown
     var availableConnectionPoints: [ConnectionPoint] = []
     var pieceManipulationModes: [String: ManipulationMode] = [:]  // PieceId -> Mode
+    
+    var hasUnsavedChanges: Bool {
+        // Compare current puzzle with original to detect changes
+        guard let originalData = originalPuzzleData else {
+            // If no original data, check if puzzle has any pieces
+            return !puzzle.pieces.isEmpty
+        }
+        
+        // Encode current puzzle and compare
+        if let currentData = try? JSONEncoder().encode(puzzle) {
+            return currentData != originalData
+        }
+        
+        return true // Assume changes if we can't encode
+    }
     
     // MARK: - UI State
     
@@ -41,44 +57,53 @@ class TangramEditorViewModel {
     var showLibraryNavigationAlert: Bool = false
     
     // Delegate
-    weak var delegate: GameDelegate?
+    weak var delegate: DevToolDelegate?
     var onPuzzleChanged: ((TangramPuzzle) -> Void)?
     
     // MARK: - Services (Dependency Injection)
     
+    let transformEngine: PieceTransformEngine
     let coordinator: TangramEditorCoordinator
     let placementService: PiecePlacementService
     let persistenceService: PuzzlePersistenceService
     let undoManager: UndoRedoManager
-    let validationService: ValidationService
-    let lockingService: PieceLockingService
     let manipulationService: PieceManipulationService
     let stateManager: TangramEditorStateMachine
     let toastService: ToastService
+    let puzzleManagementService: PuzzleManagementService?
+    
+    // MARK: - Dynamic Manipulation Constraints
+    var manipulationConstraints: [String: ManipulationConstraints] = [:]
+    var initialManipulationTransforms: [String: CGAffineTransform] = [:]  // Store initial transform when starting manipulation
+    
+    struct ManipulationConstraints {
+        var rotationLimits: (min: Double, max: Double)?
+        var slideLimits: ClosedRange<Double>?
+    }
     
     // MARK: - Initialization
     
     init(puzzle: TangramPuzzle? = nil,
+         transformEngine: PieceTransformEngine,
          coordinator: TangramEditorCoordinator,
          placementService: PiecePlacementService,
          persistenceService: PuzzlePersistenceService,
          undoManager: UndoRedoManager,
-         validationService: ValidationService,
-         lockingService: PieceLockingService,
          manipulationService: PieceManipulationService,
          stateManager: TangramEditorStateMachine,
-         toastService: ToastService) {
+         toastService: ToastService,
+         puzzleManagementService: PuzzleManagementService? = nil) {
         
         // Initialize services
+        self.transformEngine = transformEngine
         self.coordinator = coordinator
         self.placementService = placementService
         self.persistenceService = persistenceService
         self.undoManager = undoManager
-        self.validationService = validationService
-        self.lockingService = lockingService
         self.manipulationService = manipulationService
         self.stateManager = stateManager
         self.toastService = toastService
+        self.puzzleManagementService = puzzleManagementService
         
         // Initialize puzzle
         self.puzzle = puzzle ?? TangramPuzzle(name: "New Puzzle")

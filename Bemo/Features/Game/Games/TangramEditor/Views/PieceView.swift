@@ -16,10 +16,10 @@ struct PieceView: View {
     let availableConnectionPoints: [TangramEditorViewModel.ConnectionPoint]
     let selectedConnectionPoints: [TangramEditorViewModel.ConnectionPoint]
     let manipulationMode: ManipulationMode?
+    let manipulationConstraints: TangramEditorViewModel.ManipulationConstraints?
     let onRotation: ((Double) -> Void)?
     let onSlide: ((Double) -> Void)?
     let onManipulationEnd: (() -> Void)?
-    let onLockToggle: (() -> Void)?
     
     @State private var currentRotation: Double = 0
     @State private var currentSlideDistance: Double = 0
@@ -42,7 +42,7 @@ struct PieceView: View {
                     }
                 }
                 .modifier(ManipulationGestureModifier(
-                    manipulationMode: manipulationMode,
+                    manipulationMode: isSelected ? manipulationMode : nil,  // Only enable gestures when selected
                     currentRotation: $currentRotation,
                     currentSlideDistance: $currentSlideDistance,
                     isManipulating: $isManipulating,
@@ -62,67 +62,74 @@ struct PieceView: View {
                 }
             }
             
-            // Manipulation mode indicators
-            if let mode = manipulationMode, !isGhost {
+            // Manipulation mode indicators - only show when selected
+            if let mode = manipulationMode, !isGhost, isSelected {
                 manipulationIndicatorOverlay(for: mode)
             }
             
-            // Lock indicator overlay (always visible when locked)
-            if piece.isLocked && !isGhost {
-                lockIndicatorOverlay()
-            }
+            // Removed lock indicator overlay
         }
     }
     
-    @ViewBuilder
-    private func lockIndicatorOverlay() -> some View {
-        VStack {
-            HStack {
-                Spacer()
-                Image(systemName: "lock.fill")
-                    .foregroundColor(.white)
-                    .font(.caption)
-                    .padding(4)
-                    .background(Circle().fill(Color.red.opacity(0.8)))
-                    .onTapGesture {
-                        onLockToggle?()
-                    }
-            }
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .allowsHitTesting(piece.isLocked)
-    }
     
     
     @ViewBuilder
     private func manipulationIndicatorOverlay(for mode: ManipulationMode) -> some View {
         switch mode {
-        case .locked:
-            // Lock icon at piece center
-            Image(systemName: "lock.fill")
-                .foregroundColor(.gray.opacity(0.6))
-                .font(.title2)
-                .position(getPieceCenter())
+        case .fixed:
+            // No visual indicator for fixed pieces
+            EmptyView()
             
         case .rotatable(let pivot, let snapAngles):
-            // Rotation arc and snap indicators
+            // Rotation arc and snap indicators - only show when selected and manipulating
             ZStack {
-                // Pivot point
+                // Pivot point - always show when selected
                 Circle()
                     .fill(Color.blue.opacity(0.8))
                     .frame(width: 12, height: 12)
                     .position(pivot)
                 
-                // Rotation arc
-                if isManipulating {
-                    Circle()
-                        .stroke(Color.blue.opacity(0.3), lineWidth: 2)
-                        .frame(width: 100, height: 100)
-                        .position(pivot)
+                // Rotation arc with limits - only show during manipulation
+                if isSelected && isManipulating {
+                    if let limits = manipulationConstraints?.rotationLimits {
+                        // Show constrained arc
+                        Path { path in
+                            path.addArc(
+                                center: pivot,
+                                radius: 50,
+                                startAngle: Angle(degrees: limits.min),
+                                endAngle: Angle(degrees: limits.max),
+                                clockwise: false
+                            )
+                        }
+                        .stroke(Color.blue.opacity(0.5), lineWidth: 3)
+                        
+                        // Limit indicators
+                        Circle()
+                            .fill(Color.red.opacity(0.6))
+                            .frame(width: 8, height: 8)
+                            .position(snapAnglePosition(angle: limits.min, pivot: pivot))
+                        
+                        Circle()
+                            .fill(Color.red.opacity(0.6))
+                            .frame(width: 8, height: 8)
+                            .position(snapAnglePosition(angle: limits.max, pivot: pivot))
+                    } else {
+                        // Show full circle if no limits
+                        Circle()
+                            .stroke(Color.blue.opacity(0.3), lineWidth: 2)
+                            .frame(width: 100, height: 100)
+                            .position(pivot)
+                    }
                     
-                    // Snap angle indicators
-                    ForEach(snapAngles, id: \.self) { angle in
+                    // Snap angle indicators (only show valid ones)
+                    let validSnapAngles = manipulationConstraints?.rotationLimits != nil ?
+                        snapAngles.filter { angle in
+                            let limits = manipulationConstraints!.rotationLimits!
+                            return angle >= limits.min && angle <= limits.max
+                        } : snapAngles
+                    
+                    ForEach(validSnapAngles, id: \.self) { angle in
                         Circle()
                             .fill(isNearAngle(angle) ? Color.green : Color.gray.opacity(0.5))
                             .frame(width: 6, height: 6)
@@ -131,24 +138,72 @@ struct PieceView: View {
                 }
             }
             
-        case .slidable(let edge, let range, let snapPositions):
-            // Slide track and snap points
+        case .slidable(let edge, let baseRange, let snapPositions):
+            // Slide track and snap points - only show when selected
             ZStack {
-                // Slide track
-                Path { path in
-                    path.move(to: edge.start)
-                    path.addLine(to: edge.end)
-                }
-                .stroke(Color.orange.opacity(0.5), style: StrokeStyle(lineWidth: 3, dash: [5, 5]))
+                let range = manipulationConstraints?.slideLimits ?? baseRange
                 
-                // Snap points
-                ForEach(snapPositions, id: \.self) { position in
+                // Only show sliding indicators when selected
+                if isSelected {
+                    // Full theoretical track (semi-transparent)
+                    Path { path in
+                        path.move(to: edge.start)
+                        path.addLine(to: edge.end)
+                    }
+                    .stroke(Color.orange.opacity(0.2), style: StrokeStyle(lineWidth: 3, dash: [5, 5]))
+                    
+                    // Valid slide range (solid)
+                    if let limits = manipulationConstraints?.slideLimits {
+                    Path { path in
+                        let startPoint = CGPoint(
+                            x: edge.start.x + edge.vector.dx * CGFloat(limits.lowerBound),
+                            y: edge.start.y + edge.vector.dy * CGFloat(limits.lowerBound)
+                        )
+                        let endPoint = CGPoint(
+                            x: edge.start.x + edge.vector.dx * CGFloat(limits.upperBound),
+                            y: edge.start.y + edge.vector.dy * CGFloat(limits.upperBound)
+                        )
+                        path.move(to: startPoint)
+                        path.addLine(to: endPoint)
+                    }
+                    .stroke(Color.orange.opacity(0.8), lineWidth: 4)
+                    
+                    // Range limit indicators
                     Circle()
-                        .fill(isNearPosition(position, range: range) ? Color.green : Color.gray.opacity(0.5))
+                        .fill(Color.red.opacity(0.6))
                         .frame(width: 10, height: 10)
-                        .position(snapPointPosition(position: position, edge: edge, range: range))
+                        .position(CGPoint(
+                            x: edge.start.x + edge.vector.dx * CGFloat(limits.lowerBound),
+                            y: edge.start.y + edge.vector.dy * CGFloat(limits.lowerBound)
+                        ))
+                    
+                    Circle()
+                        .fill(Color.red.opacity(0.6))
+                        .frame(width: 10, height: 10)
+                        .position(CGPoint(
+                            x: edge.start.x + edge.vector.dx * CGFloat(limits.upperBound),
+                            y: edge.start.y + edge.vector.dy * CGFloat(limits.upperBound)
+                        ))
                 }
+                
+                    // Snap points within valid range
+                    ForEach(snapPositions, id: \.self) { position in
+                        let isWithinLimits = manipulationConstraints?.slideLimits != nil ?
+                            range.contains(position) : true
+                        
+                        if isWithinLimits {
+                            Circle()
+                                .fill(isNearPosition(position, range: range) ? Color.green : Color.gray.opacity(0.5))
+                                .frame(width: 10, height: 10)
+                                .position(snapPointPosition(position: position, edge: edge, range: range))
+                        }
+                    }
+                } // End of isSelected check
             }
+            
+        case .free:
+            // Free movement indicator - no visual needed
+            EmptyView()
         }
     }
     
@@ -189,8 +244,6 @@ struct PieceView: View {
     private var fillColor: Color {
         if isGhost {
             return piece.type.color.opacity(0.3)
-        } else if piece.isLocked {
-            return piece.type.color.opacity(0.5)  // Dimmer when locked
         } else {
             return piece.type.color.opacity(0.7)
         }
@@ -199,8 +252,6 @@ struct PieceView: View {
     private var borderColor: Color {
         if isGhost {
             return Color.gray
-        } else if piece.isLocked {
-            return Color.red.opacity(0.6)  // Red border when locked
         } else if isSelected {
             return Color.blue
         } else {
@@ -209,9 +260,7 @@ struct PieceView: View {
     }
     
     private var borderWidth: Double {
-        if piece.isLocked {
-            return 2
-        } else if isSelected {
+        if isSelected {
             return 3
         } else {
             return 1
@@ -288,15 +337,47 @@ struct ManipulationGestureModifier: ViewModifier {
     func body(content: Content) -> some View {
         if let mode = manipulationMode {
             switch mode {
-            case .rotatable:
+            case .rotatable(let pivot, _):
                 content
                     .rotationEffect(Angle(radians: currentRotation))
                     .gesture(
-                        RotationGesture()
-                            .onChanged { angle in
-                                currentRotation = angle.radians
-                                isManipulating = true
-                                onRotation?(angle.radians)
+                        DragGesture()
+                            .onChanged { value in
+                                // Calculate angle from pivot to current drag position
+                                let dragLocation = value.location
+                                let dx = dragLocation.x - pivot.x
+                                let dy = dragLocation.y - pivot.y
+                                let angle = atan2(dy, dx)
+                                
+                                // If this is the start of the drag, store the initial angle
+                                if !isManipulating {
+                                    isManipulating = true
+                                    // Store the initial angle offset
+                                    currentRotation = 0
+                                }
+                                
+                                // Calculate rotation relative to start
+                                let startLocation = value.startLocation
+                                let startDx = startLocation.x - pivot.x
+                                let startDy = startLocation.y - pivot.y
+                                let startAngle = atan2(startDy, startDx)
+                                let rotationDelta = angle - startAngle
+                                
+                                // CRITICAL: Snap to 45° increments for validation
+                                // Convert to degrees for snapping
+                                let deltaDegrees = rotationDelta * 180 / .pi
+                                let validAngles: [Double] = [-180, -135, -90, -45, 0, 45, 90, 135, 180]
+                                
+                                // Find nearest valid angle
+                                let snappedAngle = validAngles.min(by: { 
+                                    abs($0 - deltaDegrees) < abs($1 - deltaDegrees) 
+                                }) ?? 0
+                                
+                                // Convert back to radians
+                                let snappedRadians = snappedAngle * .pi / 180
+                                
+                                currentRotation = snappedRadians
+                                onRotation?(snappedRadians)  // Pass snapped value
                             }
                             .onEnded { _ in
                                 isManipulating = false
@@ -305,7 +386,7 @@ struct ManipulationGestureModifier: ViewModifier {
                             }
                     )
                 
-            case .slidable(let edge, _, _):
+            case .slidable(let edge, let range, _):
                 content
                     .gesture(
                         DragGesture()
@@ -313,9 +394,33 @@ struct ManipulationGestureModifier: ViewModifier {
                                 // Project drag onto edge vector
                                 let dragVector = CGVector(dx: value.translation.width, dy: value.translation.height)
                                 let dotProduct = dragVector.dx * edge.vector.dx + dragVector.dy * edge.vector.dy
-                                currentSlideDistance = dotProduct
-                                isManipulating = true
-                                onSlide?(dotProduct)
+                                
+                                // CRITICAL: Snap to discrete positions (0%, 25%, 50%, 75%, 100%)
+                                let rangeLength = range.upperBound - range.lowerBound
+                                if rangeLength > 0 {
+                                    // dotProduct is already the distance along the edge
+                                    // Clamp it to the valid range first
+                                    let clampedDistance = max(range.lowerBound, min(range.upperBound, dotProduct))
+                                    let normalizedDistance = (clampedDistance - range.lowerBound) / rangeLength
+                                    
+                                    // Snap to nearest percentage
+                                    let snapPercentages: [Double] = [0.0, 0.25, 0.5, 0.75, 1.0]
+                                    let snappedPercentage = snapPercentages.min(by: {
+                                        abs($0 - normalizedDistance) < abs($1 - normalizedDistance)
+                                    }) ?? 0
+                                    
+                                    // Calculate actual distance at snap position
+                                    let snappedDistance = range.lowerBound + (snappedPercentage * rangeLength)
+                                    
+                                    currentSlideDistance = snappedDistance
+                                    isManipulating = true
+                                    onSlide?(snappedDistance)  // Pass snapped value
+                                } else {
+                                    // No range, stay at start
+                                    currentSlideDistance = 0
+                                    isManipulating = true
+                                    onSlide?(0)
+                                }
                             }
                             .onEnded { _ in
                                 isManipulating = false
@@ -324,7 +429,11 @@ struct ManipulationGestureModifier: ViewModifier {
                             }
                     )
                 
-            case .locked:
+            case .fixed:
+                content
+                
+            case .free:
+                // Free movement - could add drag gesture here if needed
                 content
             }
         } else {

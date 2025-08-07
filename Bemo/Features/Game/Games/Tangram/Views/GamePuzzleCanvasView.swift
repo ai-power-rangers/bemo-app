@@ -61,11 +61,12 @@ struct GamePuzzleCanvasView: View {
     
     private func targetSilhouetteLayer(size: CGSize) -> some View {
         ZStack {
-            ForEach(puzzle.targetPieces, id: \.pieceType) { target in
-                let isPlaced = placedPieces.contains { $0.pieceType.rawValue == target.pieceType }
+            ForEach(0..<puzzle.targetPieces.count, id: \.self) { index in
+                let target = puzzle.targetPieces[index]
+                let isPlaced = placedPieces.contains { $0.pieceType == target.pieceType }
                 
                 SimplePieceShape(
-                    pieceType: target.pieceType,
+                    pieceType: target.pieceType.rawValue,
                     position: target.position,
                     rotation: target.rotation,
                     canvasSize: size
@@ -73,7 +74,7 @@ struct GamePuzzleCanvasView: View {
                 .fill(isPlaced ? Color.clear : silhouetteColor)
                 .overlay(
                     SimplePieceShape(
-                        pieceType: target.pieceType,
+                        pieceType: target.pieceType.rawValue,
                         position: target.position,
                         rotation: target.rotation,
                         canvasSize: size
@@ -81,7 +82,7 @@ struct GamePuzzleCanvasView: View {
                     .stroke(Color.black.opacity(0.2), lineWidth: 1)
                 )
                 .onTapGesture {
-                    onPieceTouch?(target.pieceType)
+                    onPieceTouch?(target.pieceType.rawValue)
                 }
             }
         }
@@ -148,18 +149,19 @@ struct GamePuzzleCanvasView: View {
     
     private func hintOverlay(size: CGSize) -> some View {
         ZStack {
-            ForEach(puzzle.targetPieces, id: \.pieceType) { target in
-                let isPlaced = placedPieces.contains { $0.pieceType.rawValue == target.pieceType }
+            ForEach(0..<puzzle.targetPieces.count, id: \.self) { index in
+                let target = puzzle.targetPieces[index]
+                let isPlaced = placedPieces.contains { $0.pieceType == target.pieceType }
                 
                 if !isPlaced {
                     // Show colored outline for unplaced pieces
                     SimplePieceShape(
-                        pieceType: target.pieceType,
+                        pieceType: target.pieceType.rawValue,
                         position: target.position,
                         rotation: target.rotation,
                         canvasSize: size
                     )
-                    .stroke(PieceType(rawValue: target.pieceType)?.color ?? .gray, lineWidth: 3)
+                    .stroke(target.pieceType.color, lineWidth: 3)
                     .opacity(0.7)
                     .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: showHints)
                 }

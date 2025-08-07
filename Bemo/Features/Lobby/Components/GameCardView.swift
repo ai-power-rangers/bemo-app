@@ -60,7 +60,8 @@ struct GameCardView: View {
 
 struct GameItem: Identifiable {
     let id: String
-    let game: Game
+    let game: Game?
+    let devTool: DevTool?
     let title: String
     let iconName: String
     let colorScheme: Int
@@ -69,8 +70,19 @@ struct GameItem: Identifiable {
     init(game: Game, colorScheme: Int = 1, isLocked: Bool = false) {
         self.id = game.id
         self.game = game
+        self.devTool = nil
         self.title = game.title
         self.iconName = Self.iconForGame(game.id)
+        self.colorScheme = colorScheme
+        self.isLocked = isLocked
+    }
+    
+    init(devTool: DevTool, colorScheme: Int = 1, isLocked: Bool = false) {
+        self.id = devTool.id
+        self.game = nil
+        self.devTool = devTool
+        self.title = devTool.title
+        self.iconName = Self.iconForGame(devTool.id)
         self.colorScheme = colorScheme
         self.isLocked = isLocked
     }
@@ -79,6 +91,8 @@ struct GameItem: Identifiable {
         switch gameId {
         case "tangram":
             return "square.grid.2x2"
+        case "tangram-editor":
+            return "pencil.and.ruler.fill"
         case "numbers":
             return "number"
         case "letters":

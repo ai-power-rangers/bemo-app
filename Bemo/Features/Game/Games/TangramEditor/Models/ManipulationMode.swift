@@ -13,9 +13,10 @@ import Foundation
 import CoreGraphics
 
 enum ManipulationMode: Equatable {
-    case locked                                             // 2+ connections - no movement allowed
+    case fixed                                              // 2+ connections or first piece - cannot move
     case rotatable(pivot: CGPoint, snapAngles: [Double])   // 1 vertex connection - can rotate
     case slidable(edge: Edge, range: ClosedRange<Double>, snapPositions: [Double])  // 1 edge connection - can slide
+    case free                                               // No connections - can be moved freely
     
     struct Edge: Equatable {
         let start: CGPoint
@@ -25,21 +26,23 @@ enum ManipulationMode: Equatable {
     
     var canManipulate: Bool {
         switch self {
-        case .locked:
+        case .fixed:
             return false
-        case .rotatable, .slidable:
+        case .rotatable, .slidable, .free:
             return true
         }
     }
     
     var description: String {
         switch self {
-        case .locked:
-            return "Locked (2+ connections)"
+        case .fixed:
+            return "Fixed position (2+ connections)"
         case .rotatable:
             return "Rotatable around vertex"
         case .slidable:
             return "Slidable along edge"
+        case .free:
+            return "Free movement"
         }
     }
 }
