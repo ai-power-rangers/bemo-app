@@ -11,6 +11,7 @@
 
 import SpriteKit
 import SwiftUI
+import UIKit
 
 class TangramPuzzleScene: SKScene {
     
@@ -47,8 +48,8 @@ class TangramPuzzleScene: SKScene {
     
     // Visual settings
     private let targetAlpha: CGFloat = 0.3
-    private let snapDistance: CGFloat = 40.0
-    private let rotationSnapTolerance: CGFloat = 15.0 // degrees
+    private let snapDistance: CGFloat = 60.0  // Increased for easier snapping
+    private let rotationSnapTolerance: CGFloat = 30.0 // degrees - more forgiving
     
     // Touch tracking for rotation
     private var initialTouchAngle: CGFloat = 0
@@ -141,6 +142,16 @@ class TangramPuzzleScene: SKScene {
         let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
         let transformedVertices = TangramGameGeometry.transformVertices(scaledVertices, with: target.transform)
         
+        // Calculate the center of the transformed piece
+        var centerX: CGFloat = 0
+        var centerY: CGFloat = 0
+        for vertex in transformedVertices {
+            centerX += vertex.x
+            centerY += vertex.y
+        }
+        centerX /= CGFloat(transformedVertices.count)
+        centerY /= CGFloat(transformedVertices.count)
+        
         // Create shape from transformed vertices
         // Just flip Y for SpriteKit coordinate system
         let path = UIBezierPath()
@@ -168,6 +179,9 @@ class TangramPuzzleScene: SKScene {
         shape.lineWidth = 1.0
         shape.position = CGPoint.zero
         shape.name = "target_\(target.pieceType.rawValue)"
+        
+        // Store the actual center position for validation
+        shape.userData = ["centerX": centerX, "centerY": -centerY]  // Store with flipped Y
         
         targetPieces[target.pieceType.rawValue] = shape
         puzzleLayer.addChild(shape)
@@ -259,9 +273,7 @@ class TangramPuzzleScene: SKScene {
                 initialPieceRotation = piece.zRotation
                 isRotating = false
                 
-                // Visual feedback
-                let scaleUp = SKAction.scale(to: 1.1, duration: 0.1)
-                piece.run(scaleUp)
+                // No scaling - just bring to front
                 
                 break
             }
@@ -328,41 +340,34 @@ class TangramPuzzleScene: SKScene {
         
         selected.isSelected = false
         
-        // Return to normal scale
-        let scaleDown = SKAction.scale(to: 1.0, duration: 0.1)
-        selected.run(scaleDown)
-        
         // Check if close enough to snap
-        if let pieceType = selected.pieceType {
-            // Find the matching target piece
-            let matchingTarget = puzzle?.targetPieces.first { $0.pieceType == pieceType }
+        if let pieceType = selected.pieceType,
+           let target = targetPieces[pieceType.rawValue] {
             
-            if let target = targetPieces[pieceType.rawValue],
-               let targetData = matchingTarget {
-                
-                // Calculate the expected position for this piece
-                let targetWorldPos = CGPoint(
-                    x: targetData.transform.tx + puzzleLayer.position.x,
-                    y: -targetData.transform.ty + puzzleLayer.position.y
-                )
-                
-                let distance = hypot(selected.position.x - targetWorldPos.x,
-                                   selected.position.y - targetWorldPos.y)
-                
-                // Get the correct rotation from the target data
-                let targetRotation = atan2(-targetData.transform.b, targetData.transform.a)
-                var rotationDiff = abs(selected.zRotation - targetRotation)
-                
-                // Normalize rotation difference
-                while rotationDiff > .pi { rotationDiff = 2 * .pi - rotationDiff }
-                
-                if distance < snapDistance && rotationDiff < rotationSnapTolerance * .pi / 180 {
-                    // Snap to position
-                    snapToTarget(piece: selected, targetRotation: targetRotation, targetWorldPos: targetWorldPos)
-                } else {
-                    // Return original z-position
-                    selected.zPosition = CGFloat(availablePieces.count)
-                }
+            // Get the actual center of the target piece from userData
+            let centerX = target.userData?["centerX"] as? CGFloat ?? 0
+            let centerY = target.userData?["centerY"] as? CGFloat ?? 0
+            
+            // Calculate world position
+            let targetWorldPos = CGPoint(
+                x: centerX + puzzleLayer.position.x,
+                y: centerY + puzzleLayer.position.y
+            )
+            
+            let distance = hypot(selected.position.x - targetWorldPos.x,
+                               selected.position.y - targetWorldPos.y)
+            
+            print("Piece \(pieceType.rawValue): distance = \(distance), snapDistance = \(snapDistance)")
+            print("  Selected pos: \(selected.position)")
+            print("  Target world pos: \(targetWorldPos)")
+            print("  Target center: (\(centerX), \(centerY))")
+            
+            if distance < snapDistance {
+                // Snap to position
+                snapToTarget(piece: selected, targetRotation: selected.zRotation, targetWorldPos: targetWorldPos)
+            } else {
+                // Return original z-position
+                selected.zPosition = CGFloat(availablePieces.count)
             }
         }
         
@@ -376,30 +381,29 @@ class TangramPuzzleScene: SKScene {
         guard let pieceType = piece.pieceType,
               let target = targetPieces[pieceType.rawValue] else { return }
         
-        // Find the matching target piece data
-        let matchingTarget = puzzle?.targetPieces.first { $0.pieceType == pieceType }
+        // Get the actual center of the target piece from userData
+        let centerX = target.userData?["centerX"] as? CGFloat ?? 0
+        let centerY = target.userData?["centerY"] as? CGFloat ?? 0
         
-        if let targetData = matchingTarget {
-            // Calculate the expected position for this piece
-            let targetWorldPos = CGPoint(
-                x: targetData.transform.tx + puzzleLayer.position.x,
-                y: -targetData.transform.ty + puzzleLayer.position.y
-            )
-            
-            let distance = hypot(piece.position.x - targetWorldPos.x,
-                               piece.position.y - targetWorldPos.y)
-            
-            if distance < snapDistance * 1.5 {
-                // Show snap preview
-                target.alpha = 0.5
-                target.strokeColor = SKColor.systemGreen
-                target.lineWidth = 2.0
-            } else {
-                // Reset preview
-                target.alpha = targetAlpha
-                target.strokeColor = SKColor.darkGray
-                target.lineWidth = 1.0
-            }
+        // Calculate world position
+        let targetWorldPos = CGPoint(
+            x: centerX + puzzleLayer.position.x,
+            y: centerY + puzzleLayer.position.y
+        )
+        
+        let distance = hypot(piece.position.x - targetWorldPos.x,
+                           piece.position.y - targetWorldPos.y)
+        
+        if distance < snapDistance * 1.5 {
+            // Show snap preview
+            target.alpha = 0.5
+            target.strokeColor = SKColor.systemGreen
+            target.lineWidth = 2.0
+        } else {
+            // Reset preview
+            target.alpha = targetAlpha
+            target.strokeColor = SKColor.darkGray
+            target.lineWidth = 1.0
         }
     }
     
@@ -422,8 +426,15 @@ class TangramPuzzleScene: SKScene {
                 target.alpha = 0
             }
             
+            // Visual feedback for correct placement
+            self.showCorrectPlacementFeedback(for: piece)
+            
             // Celebration effect
             self.showCompletionEffect(at: piece.position)
+            
+            // Update progress immediately
+            let progress = Double(self.completedPieces.count) / Double(self.puzzle?.targetPieces.count ?? 1)
+            self.updateProgress(progress)
             
             // Notify delegate
             self.onPieceCompleted?(pieceType.rawValue)
@@ -443,6 +454,37 @@ class TangramPuzzleScene: SKScene {
     }
     
     // MARK: - Visual Effects
+    
+    private func showCorrectPlacementFeedback(for piece: PuzzlePieceNode) {
+        // Create a green checkmark that appears and fades
+        let checkmark = SKLabelNode(text: "✓")
+        checkmark.fontSize = 40
+        checkmark.fontColor = .systemGreen
+        checkmark.position = piece.position
+        checkmark.zPosition = 300
+        effectsLayer.addChild(checkmark)
+        
+        // Animate the checkmark
+        let scaleUp = SKAction.scale(to: 1.5, duration: 0.2)
+        let wait = SKAction.wait(forDuration: 0.3)
+        let fadeOut = SKAction.fadeOut(withDuration: 0.3)
+        let remove = SKAction.removeFromParent()
+        
+        checkmark.run(SKAction.sequence([scaleUp, wait, fadeOut, remove]))
+        
+        // Also flash the piece in green
+        if let shape = piece.children.first as? SKShapeNode {
+            let originalColor = shape.fillColor
+            let flashGreen = SKAction.run { shape.fillColor = .systemGreen }
+            let wait = SKAction.wait(forDuration: 0.2)
+            let restoreColor = SKAction.run { shape.fillColor = originalColor }
+            shape.run(SKAction.sequence([flashGreen, wait, restoreColor]))
+        }
+        
+        // Haptic feedback for successful placement
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
+    }
     
     private func showCompletionEffect(at position: CGPoint) {
         // Create a star burst effect
@@ -551,8 +593,8 @@ class TangramPuzzleScene: SKScene {
         buttonContainer.addChild(label)
         
         buttonContainer.name = "backButton"
-        // Position below safe area
-        buttonContainer.position = CGPoint(x: 70, y: size.height - safeAreaTop - 40)
+        // Position below safe area with extra padding for status bar
+        buttonContainer.position = CGPoint(x: 70, y: size.height - safeAreaTop - 60)
         
         self.backButton = buttonContainer
         uiLayer.addChild(buttonContainer)
@@ -588,8 +630,8 @@ class TangramPuzzleScene: SKScene {
             self.startTimerButton = timerContainer
         }
         
-        // Position below safe area
-        timerContainer.position = CGPoint(x: 200, y: size.height - safeAreaTop - 40)
+        // Position below safe area with extra padding for status bar
+        timerContainer.position = CGPoint(x: 200, y: size.height - safeAreaTop - 60)
         uiLayer.addChild(timerContainer)
     }
     
@@ -601,8 +643,8 @@ class TangramPuzzleScene: SKScene {
         let progressBg = SKShapeNode(rectOf: CGSize(width: barWidth, height: barHeight), cornerRadius: 4)
         progressBg.fillColor = SKColor.systemGray5
         progressBg.strokeColor = SKColor.clear
-        // Position below safe area
-        progressBg.position = CGPoint(x: size.width - 100, y: size.height - safeAreaTop - 40)
+        // Position below safe area with extra padding for status bar
+        progressBg.position = CGPoint(x: size.width - 100, y: size.height - safeAreaTop - 60)
         
         // Progress fill
         let fillWidth = barWidth * CGFloat(progress)
@@ -636,7 +678,7 @@ class TangramPuzzleScene: SKScene {
         
         buttonContainer.name = "hintsButton"
         // Position below other UI elements
-        buttonContainer.position = CGPoint(x: size.width - 50, y: size.height - safeAreaTop - 100)
+        buttonContainer.position = CGPoint(x: size.width - 50, y: size.height - safeAreaTop - 120)
         
         self.hintsButton = buttonContainer
         uiLayer.addChild(buttonContainer)
@@ -727,8 +769,8 @@ class TangramPuzzleScene: SKScene {
         buttonContainer.addChild(arrow)
         
         buttonContainer.name = "nextButton"
-        // Position below safe area
-        buttonContainer.position = CGPoint(x: 70, y: size.height - safeAreaTop - 40)
+        // Position below safe area with extra padding for status bar
+        buttonContainer.position = CGPoint(x: 70, y: size.height - safeAreaTop - 60)
         
         self.nextButton = buttonContainer
         uiLayer.addChild(buttonContainer)
@@ -814,8 +856,6 @@ class TangramPuzzleScene: SKScene {
         // Deselect the piece
         if let selected = selectedPiece {
             selected.isSelected = false
-            let scaleDown = SKAction.scale(to: 1.0, duration: 0.1)
-            selected.run(scaleDown)
             selectedPiece = nil
         }
         
