@@ -13,7 +13,7 @@ import Foundation
 import CoreGraphics
 
 /// Simplified puzzle data for gameplay - no editor dependencies
-struct GamePuzzleData: Codable {
+struct GamePuzzleData: Codable, Equatable {
     let id: String
     let name: String
     let category: String
@@ -21,7 +21,7 @@ struct GamePuzzleData: Codable {
     let targetPieces: [TargetPiece]
     
     /// A target position for a piece in the puzzle solution
-    struct TargetPiece: Codable {
+    struct TargetPiece: Codable, Equatable {
         let pieceType: String  // PieceType rawValue
         let position: CGPoint
         let rotation: Double   // In degrees

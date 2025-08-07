@@ -699,7 +699,7 @@ struct LearningStats {
 
 extension SupabaseService {
     
-    /// Fetch all official tangram puzzles from Supabase
+    /// Fetch all tangram puzzles from Supabase (all are official)
     func fetchOfficialTangramPuzzles() async throws -> [TangramPuzzleDTO] {
         guard isConnected || useServiceRole else {
             throw SupabaseError.notAuthenticated
@@ -879,7 +879,7 @@ struct TangramPuzzleDTO: Codable {
     let name: String
     let category: String
     let difficulty: Int
-    let puzzle_data: Data  // Entire TangramPuzzle stored as JSONB
+    let puzzle_data: AnyCodable  // Entire TangramPuzzle stored as JSONB (must be AnyCodable for JSONB)
     let solution_checksum: String?
     let is_official: Bool
     let tags: [String]?
@@ -890,8 +890,9 @@ struct TangramPuzzleDTO: Codable {
     
     // Convert to TangramPuzzle model
     func toTangramPuzzle() throws -> TangramPuzzle {
-        // Decode the entire puzzle from the puzzle_data JSONB column
-        let puzzle = try JSONDecoder().decode(TangramPuzzle.self, from: puzzle_data)
+        // First convert AnyCodable back to Data, then decode
+        let jsonData = try JSONSerialization.data(withJSONObject: puzzle_data.value, options: [])
+        let puzzle = try JSONDecoder().decode(TangramPuzzle.self, from: jsonData)
         return puzzle
     }
     
@@ -903,15 +904,19 @@ struct TangramPuzzleDTO: Codable {
         self.category = puzzle.category.rawValue
         self.difficulty = puzzle.difficulty.rawValue
         
-        // Encode the entire puzzle as JSONB
-        self.puzzle_data = try JSONEncoder().encode(puzzle)
+        // Encode the puzzle to JSON data first, then convert to dictionary for JSONB storage
+        let jsonData = try JSONEncoder().encode(puzzle)
+        let jsonObject = try JSONSerialization.jsonObject(with: jsonData, options: [])
+        self.puzzle_data = AnyCodable(jsonObject)
         
         self.solution_checksum = puzzle.solutionChecksum
-        self.is_official = true  // All saved puzzles are official
+        // All puzzles created in the editor are official puzzles
+        self.is_official = true
         self.tags = puzzle.tags
         self.order_index = 0  // Default order
         self.thumbnail_path = nil  // Set after upload
-        self.published_at = ISO8601DateFormatter().string(from: Date())  // Publish immediately
+        // Publish immediately - all editor puzzles are official
+        self.published_at = ISO8601DateFormatter().string(from: Date())
         self.metadata = AnyCodable([:] as [String: String])  // Empty metadata as AnyCodable
     }
 }

@@ -33,6 +33,11 @@ class TangramGameViewModel {
     var showPlacementCelebration: Bool = false
     var useSpriteKit: Bool = true // Toggle for SpriteKit vs SwiftUI canvas
     
+    // Timer properties
+    var timerStarted: Bool = false
+    var elapsedTime: TimeInterval = 0
+    private var timerTask: Task<Void, Never>?
+    
     // CV Tracking
     var placedPieces: [PlacedPiece] = []
     var anchorPiece: PlacedPiece?
@@ -63,21 +68,28 @@ class TangramGameViewModel {
     
     func selectPuzzle(_ puzzle: TangramPuzzle) {
         // Convert editor puzzle to game puzzle data
-        selectedPuzzle = GamePuzzleData(from: puzzle)
-        gameState = PuzzleGameState(targetPuzzle: selectedPuzzle!)
+        let gamePuzzleData = GamePuzzleData(from: puzzle)
+        selectedPuzzle = gamePuzzleData
+        gameState = PuzzleGameState(targetPuzzle: gamePuzzleData)
         currentPhase = .playingPuzzle
         progress = 0.0
         showHints = false
+        // Reset timer
+        timerStarted = false
+        elapsedTime = 0
         // Update progress to 0 when starting
         delegate?.gameDidUpdateProgress(Float(0.0))
     }
     
     func exitToSelection() {
+        stopTimer()
         currentPhase = .selectingPuzzle
         selectedPuzzle = nil
         gameState = nil
         progress = 0.0
         showHints = false
+        timerStarted = false
+        elapsedTime = 0
     }
     
     func requestQuit() {
@@ -98,6 +110,9 @@ class TangramGameViewModel {
     }
     
     func loadNextPuzzle() {
+        // Stop timer when loading next puzzle
+        stopTimer()
+        
         // Get next puzzle from library
         let currentIndex = puzzleLibraryService.availablePuzzles.firstIndex { $0.id == selectedPuzzle?.id } ?? 0
         let nextIndex = (currentIndex + 1) % puzzleLibraryService.availablePuzzles.count
@@ -109,6 +124,37 @@ class TangramGameViewModel {
             // No more puzzles, go back to selection
             exitToSelection()
         }
+    }
+    
+    // MARK: - Timer Management
+    
+    func startTimer() {
+        guard !timerStarted else { return }
+        
+        timerStarted = true
+        elapsedTime = 0
+        
+        // Start timer task
+        timerTask = Task { @MainActor in
+            while !Task.isCancelled && timerStarted {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second
+                if timerStarted {
+                    elapsedTime += 0.1
+                }
+            }
+        }
+    }
+    
+    func stopTimer() {
+        timerStarted = false
+        timerTask?.cancel()
+        timerTask = nil
+    }
+    
+    var formattedTime: String {
+        let minutes = Int(elapsedTime) / 60
+        let seconds = Int(elapsedTime) % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
     
     // MARK: - Touch-based Testing
@@ -204,6 +250,7 @@ class TangramGameViewModel {
     
     func handlePuzzleCompletion() {
         // Puzzle completed via SpriteKit
+        stopTimer()
         currentPhase = .puzzleComplete
         let xpAwarded = calculateXP()
         delegate?.gameDidCompleteLevel(xpAwarded: xpAwarded)

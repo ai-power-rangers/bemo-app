@@ -41,164 +41,85 @@ struct TangramGameView: View {
     // MARK: - Game Views
     
     private var gamePlayView: some View {
-        VStack(spacing: 20) {
-            // Header with puzzle info
+        VStack(spacing: 0) {
+            // Clean header with timer and progress
             gameHeader
-            
-            // Main puzzle canvas - Using SpriteKit
-            if let puzzle = viewModel.selectedPuzzle {
-                VStack(spacing: 0) {
-                    // Toggle between SwiftUI and SpriteKit canvas
-                    if viewModel.useSpriteKit {
-                        TangramSpriteView(
-                            puzzle: puzzle,
-                            placedPieces: $viewModel.placedPieces,
-                            showHints: viewModel.showHints,
-                            onPieceCompleted: { pieceType in
-                                viewModel.handlePieceCompletion(pieceType: pieceType)
-                            },
-                            onPuzzleCompleted: {
-                                viewModel.handlePuzzleCompletion()
-                            }
-                        )
-                        .padding()
-                    } else {
-                        // Original SwiftUI canvas
-                        GamePuzzleCanvasView(
-                            puzzle: puzzle,
-                            placedPieces: viewModel.placedPieces,
-                            anchorPieceId: viewModel.anchorPiece?.id,
-                            showHints: viewModel.showHints,
-                            canvasSize: viewModel.canvasSize,
-                            onPieceTouch: { pieceType in
-                                viewModel.handlePieceTouch(pieceType: pieceType)
-                            }
-                        )
-                        .padding()
-                    }
-                }
-                .overlay(alignment: .top) {
-                    // Show placement feedback
-                    if viewModel.showPlacementCelebration {
-                        Text("✨ Perfect! ✨")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundColor(.green)
-                            .padding()
-                            .background(Color.white.opacity(0.9))
-                            .cornerRadius(10)
-                            .transition(.scale.combined(with: .opacity))
-                            .animation(.spring(), value: viewModel.showPlacementCelebration)
-                    }
-                }
-            }
-            
-            // Control buttons
-            gameControls
-            
-            // Commented out CV Mock Controls for simplified testing
-            /*
-            #if DEBUG
-            // CV Mock Controls Toggle
-            HStack {
-                Spacer()
-                Button(action: { showCVMock.toggle() }) {
-                    Image(systemName: showCVMock ? "hammer.fill" : "hammer")
-                        .foregroundColor(.orange)
-                }
                 .padding()
-            }
-            #endif
-            */
-        }
-        .padding()
-        /*
-        .overlay(alignment: .bottomTrailing) {
-            #if DEBUG
-            if showCVMock {
-                CVMockControlView(
-                    mockPieces: $mockPieces,
-                    onPiecesChanged: { pieces in
-                        // Process mock CV input through the game
-                        let outcome = viewModel.processMockCVInput(pieces)
-                        print("CV Mock outcome: \(outcome)")
+            
+            // Main puzzle canvas - Always use SpriteKit
+            if let puzzle = viewModel.selectedPuzzle {
+                TangramSpriteView(
+                    puzzle: puzzle,
+                    placedPieces: $viewModel.placedPieces,
+                    showHints: viewModel.showHints,
+                    onPieceCompleted: { pieceType in
+                        viewModel.handlePieceCompletion(pieceType: pieceType)
+                    },
+                    onPuzzleCompleted: {
+                        viewModel.handlePuzzleCompletion()
                     }
                 )
-                .padding()
             }
-            #endif
+            
         }
-        */
     }
     
     private var gameHeader: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(viewModel.selectedPuzzle?.name ?? "Puzzle")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                
-                HStack(spacing: 12) {
-                    Label(
-                        difficultyName,
-                        systemImage: "star.fill"
-                    )
-                    .font(.caption)
-                    .foregroundColor(difficultyColor)
-                    
-                    Label(
-                        viewModel.selectedPuzzle?.category ?? "",
-                        systemImage: categoryIcon
-                    )
-                    .font(.caption)
+        HStack(spacing: 16) {
+            // Back button or Next button when complete
+            if viewModel.currentPhase == .puzzleComplete {
+                Button(action: viewModel.loadNextPuzzle) {
+                    Label("Next", systemImage: "arrow.right")
+                        .font(.body.weight(.medium))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+            } else {
+                Button(action: viewModel.exitToSelection) {
+                    Image(systemName: "chevron.left")
+                        .font(.body.weight(.medium))
+                }
+                .buttonStyle(.plain)
+            }
+            
+            // Timer with start button
+            HStack(spacing: 8) {
+                Image(systemName: "timer")
+                    .font(.body)
                     .foregroundColor(.secondary)
+                
+                if viewModel.timerStarted {
+                    Text(viewModel.formattedTime)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundColor(.primary)
+                } else {
+                    Button("Start") {
+                        viewModel.startTimer()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
             }
             
             Spacer()
             
-            // Progress indicator
-            VStack(alignment: .trailing, spacing: 4) {
-                Text("Progress")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                ProgressView(value: viewModel.progress)
-                    .frame(width: 100)
-                    .tint(.green)
+            // Hint button (only during play)
+            if viewModel.currentPhase == .playingPuzzle {
+                Button(action: viewModel.toggleHints) {
+                    Image(systemName: viewModel.showHints ? "lightbulb.fill" : "lightbulb")
+                        .font(.body)
+                        .foregroundColor(viewModel.showHints ? .yellow : .secondary)
+                }
+                .buttonStyle(.plain)
             }
+            
+            // Progress bar
+            ProgressView(value: viewModel.progress)
+                .frame(width: 150)
+                .tint(viewModel.currentPhase == .puzzleComplete ? .green : .blue)
         }
     }
     
-    private var gameControls: some View {
-        HStack(spacing: 20) {
-            Button(action: viewModel.exitToSelection) {
-                Label("Back", systemImage: "chevron.left")
-            }
-            .buttonStyle(.bordered)
-            
-            Spacer()
-            
-            // Toggle between SwiftUI and SpriteKit
-            Button(action: { viewModel.useSpriteKit.toggle() }) {
-                Label(
-                    viewModel.useSpriteKit ? "SpriteKit" : "SwiftUI",
-                    systemImage: viewModel.useSpriteKit ? "sparkles" : "square.grid.2x2"
-                )
-            }
-            .buttonStyle(.bordered)
-            .tint(.purple)
-            
-            Button(action: viewModel.toggleHints) {
-                Label(
-                    viewModel.showHints ? "Hide Hints" : "Show Hints",
-                    systemImage: viewModel.showHints ? "lightbulb.fill" : "lightbulb"
-                )
-            }
-            .buttonStyle(.bordered)
-            .tint(viewModel.showHints ? .yellow : .blue)
-        }
-    }
     
     // MARK: - Helper Properties
     
