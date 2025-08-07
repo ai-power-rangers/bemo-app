@@ -47,13 +47,20 @@ extension TangramEditorViewModel {
         
         switch editorState {
         case .manipulatingFirstPiece(let type, let rotation, _):
-            // Place first piece at center (convert degrees to radians)
-            var piece = placementService.placeFirstPiece(
-                type: type,
-                rotation: rotation * .pi / 180,
+            // Use transform engine to calculate placement transform
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let tempPiece = TangramPiece(type: type, transform: .identity)
+            
+            let result = transformEngine.calculateTransform(
+                for: tempPiece,
+                operation: .place(center: center, rotation: rotation * .pi / 180),
+                connection: nil,
+                otherPieces: [],
                 canvasSize: size
             )
-            // First piece doesn't need special treatment anymore
+            
+            // Create piece with the calculated transform
+            var piece = TangramPiece(type: type, transform: result.transform)
             puzzle.pieces.append(piece)
             // Clear pending piece type after successful placement
             uiState.pendingPieceType = nil
@@ -336,171 +343,68 @@ extension TangramEditorViewModel {
     /// Handle rotation gesture for a piece with single vertex connection
     func handleRotation(pieceId: String, angle: Double) {
         guard let mode = pieceManipulationModes[pieceId],
-              let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else {
+              case .rotatable(let pivot, _) = mode,
+              let piece = puzzle.pieces.first(where: { $0.id == pieceId }) else {
             return
         }
         
-        switch mode {
-        case .rotatable(let pivot, _):
-            let piece = puzzle.pieces[pieceIndex]
+        // Store initial transform if this is the first manipulation
+        if initialManipulationTransforms[pieceId] == nil {
+            initialManipulationTransforms[pieceId] = piece.transform
+        }
+        
+        // Get the initial transform (before any rotation in this gesture)
+        guard let initialTransform = initialManipulationTransforms[pieceId] else {
+            return
+        }
+        
+        // Create a piece with the initial transform to apply the rotation to
+        var rotatingPiece = piece
+        rotatingPiece.transform = initialTransform
+        
+        // Get the connection for this piece
+        let connection = puzzle.connections.first { $0.involvesPiece(pieceId) }
+        let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
+        
+        // Use unified transform engine - angle is the delta from the initial position
+        let result = transformEngine.calculateTransform(
+            for: rotatingPiece,
+            operation: .rotate(angle: angle, pivot: pivot),
+            connection: connection,
+            otherPieces: otherPieces,
+            canvasSize: uiState.currentCanvasSize
+        )
+        
+        // Apply result to UI state
+        if result.isValid {
+            uiState.ghostTransform = result.transform
+            uiState.showSnapIndicator = true
+            uiState.manipulatingPieceId = pieceId
             
-            // Store initial transform if not already stored
-            if initialManipulationTransforms[pieceId] == nil {
-                initialManipulationTransforms[pieceId] = piece.transform
+            // Store snap indicators if available
+            if let snapInfo = result.snapInfo {
+                // Could be used to show snap points in UI
             }
+        } else {
+            // No preview for invalid positions
+            uiState.ghostTransform = nil
+            uiState.showSnapIndicator = false
+            uiState.manipulatingPieceId = pieceId
             
-            guard let initialTransform = initialManipulationTransforms[pieceId] else { return }
-            
-            // IMPORTANT: 'angle' is already a DELTA in RADIANS, already snapped by PieceView
-            // No conversion or snapping needed!
-            let deltaRadians = angle
-            
-            // Find the connection for this piece
-            let relevantConnection = puzzle.connections.first { conn in
-                conn.involvesPiece(pieceId)
-            }
-            
-            // Get which vertex of this piece is connected
-            var pieceVertexIndex = 0
-            if let connection = relevantConnection {
-                switch connection.type {
-                case .vertexToVertex(let pieceAId, let vertexA, _, let vertexB):
-                    pieceVertexIndex = (pieceAId == pieceId) ? vertexA : vertexB
-                case .vertexToEdge(let pieceAId, let vertex, let pieceBId, let edge):
-                    if pieceAId == pieceId {
-                        pieceVertexIndex = vertex
-                        // For vertex-to-edge, we need special handling
-                        // The vertex can slide along the edge during rotation
-                        // This requires calculating where on the edge the vertex projects to
-                    } else {
-                        return // This piece is the edge, not the vertex
-                    }
-                default:
-                    return // Edge-to-edge connections don't rotate
+            // Show validation feedback
+            if let violation = result.violations.first {
+                switch violation.type {
+                case .overlap:
+                    // Silent - visual feedback is enough
+                    break
+                case .connectionBroken:
+                    // Silent - shouldn't happen with proper constraints
+                    break
+                case .outOfBounds:
+                    // Silent - allow temporary out of bounds during manipulation
+                    break
                 }
             }
-            
-            // Get the piece's LOCAL vertex (in piece coordinate space)
-            let geometry = TangramGeometry.vertices(for: piece.type)
-            guard pieceVertexIndex < geometry.count else { return }
-            let localVertex = geometry[pieceVertexIndex]
-            
-            // Scale to visual space
-            let visualVertex = CGPoint(
-                x: localVertex.x * CGFloat(TangramConstants.visualScale),
-                y: localVertex.y * CGFloat(TangramConstants.visualScale)
-            )
-            
-            // Get the initial rotation from the initial transform
-            let initialRotation = atan2(initialTransform.b, initialTransform.a)
-            
-            // Calculate the new total rotation (initial + delta)
-            let totalRotation = initialRotation + deltaRadians
-            
-            // CORRECT APPROACH: Rotate around the pivot point, not the origin
-            // The connected vertex must stay exactly at the pivot point
-            
-            // First apply the initial transform to get current vertex position
-            let currentVertex = visualVertex.applying(initialTransform)
-            
-            // Calculate the offset from the pivot to maintain connection
-            let offsetX = pivot.x - currentVertex.x
-            let offsetY = pivot.y - currentVertex.y
-            
-            // Special handling for vertex-to-edge connections
-            var correctedTransform: CGAffineTransform
-            
-            if let connection = relevantConnection,
-               case .vertexToEdge(_, _, let pieceBId, let edgeIndex) = connection.type {
-                // For vertex-to-edge: the vertex can slide along the edge during rotation
-                // Calculate the rotated position, then project it onto the edge
-                
-                // First, create the standard rotation transform
-                var rotTransform = CGAffineTransform.identity
-                rotTransform = rotTransform.translatedBy(x: pivot.x, y: pivot.y)
-                rotTransform = rotTransform.rotated(by: totalRotation)
-                rotTransform = rotTransform.translatedBy(x: -visualVertex.x, y: -visualVertex.y)
-                
-                // Apply this transform to find where the vertex would be
-                let rotatedVertex = visualVertex.applying(rotTransform)
-                
-                // Get the edge piece and its edge
-                if let edgePiece = puzzle.pieces.first(where: { $0.id == pieceBId }) {
-                    let edgeVertices = TangramCoordinateSystem.getWorldVertices(for: edgePiece)
-                    let edges = TangramGeometry.edges(for: edgePiece.type)
-                    
-                    if edgeIndex < edges.count {
-                        let edgeDef = edges[edgeIndex]
-                        let edgeStart = edgeVertices[edgeDef.startVertex]
-                        let edgeEnd = edgeVertices[edgeDef.endVertex]
-                        
-                        // Project the rotated vertex onto the edge
-                        let edgeVector = CGVector(dx: edgeEnd.x - edgeStart.x, dy: edgeEnd.y - edgeStart.y)
-                        let edgeLength = sqrt(edgeVector.dx * edgeVector.dx + edgeVector.dy * edgeVector.dy)
-                        
-                        if edgeLength > 0.001 {
-                            // Calculate projection
-                            let toVertex = CGVector(dx: rotatedVertex.x - edgeStart.x, dy: rotatedVertex.y - edgeStart.y)
-                            let t = max(0, min(1, (toVertex.dx * edgeVector.dx + toVertex.dy * edgeVector.dy) / (edgeLength * edgeLength)))
-                            
-                            // Find the closest point on the edge
-                            let projectedPoint = CGPoint(
-                                x: edgeStart.x + t * edgeVector.dx,
-                                y: edgeStart.y + t * edgeVector.dy
-                            )
-                            
-                            // Adjust the transform to place vertex at the projected point
-                            correctedTransform = CGAffineTransform.identity
-                            correctedTransform = correctedTransform.translatedBy(x: projectedPoint.x, y: projectedPoint.y)
-                            correctedTransform = correctedTransform.rotated(by: totalRotation)
-                            correctedTransform = correctedTransform.translatedBy(x: -visualVertex.x, y: -visualVertex.y)
-                        } else {
-                            correctedTransform = rotTransform
-                        }
-                    } else {
-                        correctedTransform = rotTransform
-                    }
-                } else {
-                    correctedTransform = rotTransform
-                }
-            } else {
-                // Standard vertex-to-vertex rotation
-                // Create transform that:
-                // 1. Translates piece so connected vertex is at origin
-                // 2. Rotates by the total angle
-                // 3. Translates back so vertex is at pivot
-                correctedTransform = CGAffineTransform.identity
-                correctedTransform = correctedTransform.translatedBy(x: pivot.x, y: pivot.y)
-                correctedTransform = correctedTransform.rotated(by: totalRotation)
-                correctedTransform = correctedTransform.translatedBy(x: -visualVertex.x, y: -visualVertex.y)
-            }
-            
-            // CRITICAL: Use comprehensive validation
-            // Create a test piece with the same ID for connection validation
-            var testPiece = piece  // Copy the existing piece
-            testPiece.transform = correctedTransform  // Update only the transform
-            let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
-            
-            if PuzzleValidationRules.isValidPlacement(
-                piece: testPiece,
-                withTransform: correctedTransform,
-                amongPieces: otherPieces,
-                maintainingConnection: relevantConnection
-            ) {
-                // Only show preview if valid
-                uiState.ghostTransform = correctedTransform
-                uiState.showSnapIndicator = true
-                uiState.manipulatingPieceId = pieceId
-            } else {
-                // NO PREVIEW for invalid positions
-                uiState.ghostTransform = nil
-                uiState.showSnapIndicator = false
-                // Keep manipulatingPieceId to track we're still manipulating
-                uiState.manipulatingPieceId = pieceId
-            }
-            
-        default:
-            break
         }
     }
     
@@ -532,65 +436,55 @@ extension TangramEditorViewModel {
     /// Handle sliding gesture for a piece with single edge connection
     func handleSlide(pieceId: String, distance: Double) {
         guard let mode = pieceManipulationModes[pieceId],
-              let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else {
+              case .slidable(let edge, _, _) = mode,
+              let piece = puzzle.pieces.first(where: { $0.id == pieceId }) else {
             return
         }
         
-        switch mode {
-        case .slidable(let edge, let baseRange, _):
-            let piece = puzzle.pieces[pieceIndex]
-            
-            // Store initial transform if not already stored
-            if initialManipulationTransforms[pieceId] == nil {
-                initialManipulationTransforms[pieceId] = piece.transform
-            }
-            
-            guard let initialTransform = initialManipulationTransforms[pieceId] else { return }
-            
-            // IMPORTANT: 'distance' is already snapped by PieceView
-            // No additional snapping needed!
-            let snappedDistance = distance
-            
-            // Create translation from initial position
-            let translation = CGAffineTransform(
-                translationX: edge.vector.dx * CGFloat(snappedDistance),
-                y: edge.vector.dy * CGFloat(snappedDistance)
-            )
-            
-            // Apply to initial transform
-            let finalTransform = initialTransform.concatenating(translation)
-            
-            // Find the connection this piece is maintaining
-            let relevantConnection = puzzle.connections.first { conn in
-                conn.pieceAId == pieceId || conn.pieceBId == pieceId
-            }
-            
-            // CRITICAL: Use comprehensive validation
-            // Create a test piece with the same ID for connection validation
-            var testPiece = piece  // Copy the existing piece
-            testPiece.transform = finalTransform  // Update only the transform
-            let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
-            
-            if PuzzleValidationRules.isValidPlacement(
-                piece: testPiece,
-                withTransform: finalTransform,
-                amongPieces: otherPieces,
-                maintainingConnection: relevantConnection
-            ) {
-                // Only show preview if valid
-                uiState.ghostTransform = finalTransform
-                uiState.showSnapIndicator = true
-                uiState.manipulatingPieceId = pieceId
-            } else {
-                // NO PREVIEW for invalid positions
-                uiState.ghostTransform = nil
-                uiState.showSnapIndicator = false
-                // Keep manipulatingPieceId to track we're still manipulating
-                uiState.manipulatingPieceId = pieceId
-            }
-            
-        default:
-            break
+        // Store initial transform if this is the first manipulation
+        if initialManipulationTransforms[pieceId] == nil {
+            initialManipulationTransforms[pieceId] = piece.transform
+        }
+        
+        // Get the initial transform (before any sliding in this gesture)
+        guard let initialTransform = initialManipulationTransforms[pieceId] else {
+            return
+        }
+        
+        // Create a piece with the initial transform to apply the slide to
+        var slidingPiece = piece
+        slidingPiece.transform = initialTransform
+        
+        // Get the connection for this piece
+        let connection = puzzle.connections.first { $0.involvesPiece(pieceId) }
+        let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
+        
+        // Convert ManipulationMode.Edge to PieceTransformEngine.Edge
+        let engineEdge = PieceTransformEngine.Edge(
+            start: edge.start,
+            end: edge.end,
+            vector: edge.vector
+        )
+        
+        // Use unified transform engine - distance is the delta from the initial position
+        let result = transformEngine.calculateTransform(
+            for: slidingPiece,
+            operation: .slide(distance: distance, edge: engineEdge),
+            connection: connection,
+            otherPieces: otherPieces,
+            canvasSize: uiState.currentCanvasSize
+        )
+        
+        // Apply result to UI state (same as rotation)
+        if result.isValid {
+            uiState.ghostTransform = result.transform
+            uiState.showSnapIndicator = true
+            uiState.manipulatingPieceId = pieceId
+        } else {
+            // No preview for invalid positions
+            uiState.ghostTransform = nil
+            uiState.showSnapIndicator = false
+            uiState.manipulatingPieceId = pieceId
         }
     }
     

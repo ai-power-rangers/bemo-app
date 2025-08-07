@@ -5,24 +5,21 @@
 //  Service for managing tangram piece placement logic
 //
 
+// TODO: REFACTOR TO USE PieceTransformEngine
+// This service currently has its own placement logic which can diverge from PieceTransformEngine.
+// To ensure consistency between preview and actual placement, this should delegate to
+// PieceTransformEngine.calculateTransform() for all transform calculations.
+// This refactor will eliminate duplicate logic and ensure preview always matches placement.
+
 import Foundation
 import CoreGraphics
 
 class PiecePlacementService {
     
-    private let geometryService: GeometryService
     private let connectionService: ConnectionService
-    private let validationService: ValidationService
-    private let constraintManager: ConstraintManager
     
-    init(geometryService: GeometryService = GeometryService(),
-         connectionService: ConnectionService = ConnectionService(),
-         validationService: ValidationService = ValidationService(),
-         constraintManager: ConstraintManager = ConstraintManager()) {
-        self.geometryService = geometryService
+    init(connectionService: ConnectionService = ConnectionService()) {
         self.connectionService = connectionService
-        self.validationService = validationService
-        self.constraintManager = constraintManager
     }
     
     // MARK: - Piece Placement

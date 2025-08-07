@@ -20,6 +20,7 @@ struct TangramSpriteView: View {
     let formattedTime: String
     let progress: Double
     let isPuzzleComplete: Bool
+    let currentHint: TangramHintEngine.HintData?
     let onPieceCompleted: (String) -> Void
     let onPuzzleCompleted: () -> Void
     let onBackPressed: () -> Void
@@ -72,6 +73,12 @@ struct TangramSpriteView: View {
                 tangramScene.updateCompletionState(isPuzzleComplete)
             }
         }
+        .onChange(of: currentHint) { _ in
+            if let tangramScene = scene as? TangramPuzzleScene,
+               let hint = currentHint {
+                tangramScene.showStructuredHint(hint)
+            }
+        }
     }
     
     private func configureScene(size: CGSize, safeAreaTop: CGFloat) {
@@ -89,14 +96,8 @@ struct TangramSpriteView: View {
         tangramScene.onStartTimer = onStartTimer
         tangramScene.onToggleHints = onToggleHints
         
-        // Load the puzzle and set initial UI state
+        // Load the puzzle (no UI elements needed - handled by SwiftUI)
         tangramScene.loadPuzzle(puzzle)
-        tangramScene.setupUIElements(
-            timerText: formattedTime,
-            timerStarted: timerStarted,
-            progress: progress,
-            showHints: showHints
-        )
     }
     
     @ViewBuilder

@@ -25,59 +25,37 @@ struct TangramGameView: View {
     }
     
     var body: some View {
-        Group {
-            switch viewModel.currentPhase {
-            case .selectingPuzzle:
-                puzzleSelectionView
-                
-            case .playingPuzzle:
-                gamePlayView
-                
-            case .puzzleComplete:
-                completionView
+        NavigationStack {
+            Group {
+                switch viewModel.currentPhase {
+                case .selectingPuzzle:
+                    puzzleSelectionView
+                    
+                case .playingPuzzle:
+                    gamePlayView
+                    
+                case .puzzleComplete:
+                    completionView
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color("GameBackground", bundle: nil))
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color("GameBackground", bundle: nil))
+        .onAppear {
+            // Remove navigation bar shadow
+            let appearance = UINavigationBarAppearance()
+            appearance.configureWithOpaqueBackground()
+            appearance.shadowColor = .clear
+            appearance.shadowImage = UIImage()
+            UINavigationBar.appearance().standardAppearance = appearance
+            UINavigationBar.appearance().scrollEdgeAppearance = appearance
+        }
     }
     
     // MARK: - Puzzle Selection View
     
     private var puzzleSelectionView: some View {
         VStack(spacing: 0) {
-            // Header with back button
-            HStack {
-                Button(action: {
-                    viewModel.requestQuit()
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 20, weight: .medium))
-                        Text("Back")
-                            .font(.system(size: 17, weight: .medium))
-                    }
-                }
-                .foregroundColor(.primary)
-                
-                Spacer()
-                
-                Text("Choose a Puzzle")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                
-                Spacer()
-                
-                // Invisible spacer for balance
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left")
-                    Text("Back")
-                }
-                .opacity(0)
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 12)
-            .background(Color(UIColor.systemBackground))
-            .padding(.top)  // Add padding for status bar
             
             // Filter chips
             ScrollView(.horizontal, showsIndicators: false) {
@@ -150,7 +128,20 @@ struct TangramGameView: View {
             }
         }
         .background(Color(UIColor.secondarySystemBackground))
-        .ignoresSafeArea(edges: .bottom)  // Only ignore bottom safe area
+        .navigationTitle("Choose a Puzzle")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    viewModel.requestQuit()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
+                    }
+                }
+            }
+        }
     }
     
     private var availableCategories: [String] {
@@ -203,7 +194,6 @@ struct TangramGameView: View {
     
     private var gamePlayView: some View {
         Group {
-            // Full-screen SpriteKit with all UI handled inside the scene
             if let puzzle = viewModel.selectedPuzzle {
                 TangramSpriteView(
                     puzzle: puzzle,
@@ -213,6 +203,7 @@ struct TangramGameView: View {
                     formattedTime: viewModel.formattedTime,
                     progress: viewModel.progress,
                     isPuzzleComplete: viewModel.currentPhase == .puzzleComplete,
+                    currentHint: viewModel.currentHint,
                     onPieceCompleted: { pieceType in
                         viewModel.handlePieceCompletion(pieceType: pieceType)
                     },
@@ -232,69 +223,63 @@ struct TangramGameView: View {
                         viewModel.toggleHints()
                     }
                 )
-                .ignoresSafeArea() // Full screen
+                .ignoresSafeArea(edges: .bottom) // Only ignore bottom
             } else {
                 Text("No puzzle selected")
                     .foregroundColor(.secondary)
             }
         }
-    }
-    
-    private var gameHeader: some View {
-        HStack(spacing: 16) {
-            // Back button or Next button when complete
-            if viewModel.currentPhase == .puzzleComplete {
-                Button(action: viewModel.loadNextPuzzle) {
-                    Label("Next", systemImage: "arrow.right")
-                        .font(.body.weight(.medium))
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-            } else {
-                Button(action: viewModel.exitToSelection) {
-                    Image(systemName: "chevron.left")
-                        .font(.body.weight(.medium))
-                }
-                .buttonStyle(.plain)
-            }
-            
-            // Timer with start button
-            HStack(spacing: 8) {
-                Image(systemName: "timer")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                
-                if viewModel.timerStarted {
-                    Text(viewModel.formattedTime)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundColor(.primary)
-                } else {
-                    Button("Start") {
-                        viewModel.startTimer()
+        .navigationTitle(viewModel.selectedPuzzle?.name ?? "Puzzle")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    viewModel.exitToSelection()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
                 }
             }
             
-            Spacer()
-            
-            // Hint button (only during play)
-            if viewModel.currentPhase == .playingPuzzle {
-                Button(action: viewModel.toggleHints) {
-                    Image(systemName: viewModel.showHints ? "lightbulb.fill" : "lightbulb")
-                        .font(.body)
-                        .foregroundColor(viewModel.showHints ? .yellow : .secondary)
+            ToolbarItem(placement: .navigationBarTrailing) {
+                HStack(spacing: 16) {
+                    // Timer
+                    HStack(spacing: 4) {
+                        Image(systemName: "timer")
+                        if viewModel.timerStarted {
+                            Text(viewModel.formattedTime)
+                                .font(.system(.caption, design: .monospaced))
+                        } else {
+                            Button("Start") {
+                                viewModel.startTimer()
+                            }
+                            .font(.caption)
+                        }
+                    }
+                    
+                    // Hints
+                    Button(action: {
+                        viewModel.toggleHints()
+                    }) {
+                        Image(systemName: viewModel.showHints ? "lightbulb.fill" : "lightbulb")
+                            .foregroundColor(viewModel.showHints ? .yellow : .primary)
+                    }
                 }
-                .buttonStyle(.plain)
             }
-            
+        }
+        .overlay(alignment: .top) {
             // Progress bar
             ProgressView(value: viewModel.progress)
-                .frame(width: 150)
                 .tint(viewModel.currentPhase == .puzzleComplete ? .green : .blue)
+                .padding(.horizontal)
+                .padding(.top, 4)
         }
     }
+    
+    // Removed unused gameHeader - timer is now in the navigation toolbar
     
     
     // MARK: - Helper Properties

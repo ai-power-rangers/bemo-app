@@ -10,9 +10,6 @@ import CoreGraphics
 
 class ConnectionService {
     
-    private let constraintManager = ConstraintManager()
-    private let geometryService = GeometryService()
-    
     // MARK: - Connection Creation
     
     /// Create a connection between two pieces
@@ -62,7 +59,9 @@ class ConnectionService {
             let worldVertexA = worldVerticesA[vertexA]
             let worldVertexB = worldVerticesB[vertexB]
             
-            if geometryService.pointsEqual(worldVertexA, worldVertexB) {
+            // Check if vertices are equal with tolerance
+            let tolerance: CGFloat = 1e-5
+            if abs(worldVertexA.x - worldVertexB.x) < tolerance && abs(worldVertexA.y - worldVertexB.y) < tolerance {
                 return Constraint(
                     type: .rotation(around: worldVertexA, range: 0...360),
                     affectedPieceId: pieceBId
@@ -92,10 +91,10 @@ class ConnectionService {
             let edgeEndA = worldVerticesA[edgesA[edgeA].endVertex]
             
             // Calculate actual edge lengths in world space
-            let edgeLengthA = geometryService.distance(from: edgeStartA, to: edgeEndA)
+            let edgeLengthA = sqrt(pow(edgeEndA.x - edgeStartA.x, 2) + pow(edgeEndA.y - edgeStartA.y, 2))
             let edgeStartB = worldVerticesB[edgesB[edgeB].startVertex]
             let edgeEndB = worldVerticesB[edgesB[edgeB].endVertex]
-            let edgeLengthB = geometryService.distance(from: edgeStartB, to: edgeEndB)
+            let edgeLengthB = sqrt(pow(edgeEndB.x - edgeStartB.x, 2) + pow(edgeEndB.y - edgeStartB.y, 2))
             
             // Determine which edge is longer (the track) and which is sliding
             let (trackStart, trackEnd, trackLength, slidingLength, affectedPiece) = 
@@ -103,8 +102,9 @@ class ConnectionService {
                 (edgeStartA, edgeEndA, edgeLengthA, edgeLengthB, pieceBId) :
                 (edgeStartB, edgeEndB, edgeLengthB, edgeLengthA, pieceAId)
             
-            let edgeVector = geometryService.edgeVector(from: trackStart, to: trackEnd)
-            let normalizedVector = geometryService.normalizeVector(edgeVector)
+            let edgeVector = CGVector(dx: trackEnd.x - trackStart.x, dy: trackEnd.y - trackStart.y)
+            let magnitude = sqrt(edgeVector.dx * edgeVector.dx + edgeVector.dy * edgeVector.dy)
+            let normalizedVector = CGVector(dx: edgeVector.dx / magnitude, dy: edgeVector.dy / magnitude)
             
             // Sliding range is the track length minus the sliding piece length
             let slidingRange: Double = max(0, trackLength - slidingLength)
@@ -133,9 +133,10 @@ class ConnectionService {
             let edgeStartB = worldVerticesB[edgesB[edge].startVertex]
             let edgeEndB = worldVerticesB[edgesB[edge].endVertex]
             
-            let edgeVector = geometryService.edgeVector(from: edgeStartB, to: edgeEndB)
-            let normalizedVector = geometryService.normalizeVector(edgeVector)
-            let edgeLength = geometryService.distance(from: edgeStartB, to: edgeEndB)
+            let edgeVector = CGVector(dx: edgeEndB.x - edgeStartB.x, dy: edgeEndB.y - edgeStartB.y)
+            let magnitude = sqrt(edgeVector.dx * edgeVector.dx + edgeVector.dy * edgeVector.dy)
+            let normalizedVector = CGVector(dx: edgeVector.dx / magnitude, dy: edgeVector.dy / magnitude)
+            let edgeLength = magnitude
             
             return Constraint(
                 type: .translation(along: normalizedVector, range: 0...edgeLength),
@@ -202,7 +203,24 @@ class ConnectionService {
         
         for connection in pieceConnections {
             if connection.constraint.affectedPieceId == pieceId {
-                resultTransform = constraintManager.applyConstraint(connection.constraint, to: resultTransform, parameter: parameter)
+                // Apply constraint based on type
+                switch connection.constraint.type {
+                case .rotation(let pivot, _):
+                    // Apply rotation constraint around pivot
+                    resultTransform = resultTransform.translatedBy(x: pivot.x, y: pivot.y)
+                        .rotated(by: parameter)
+                        .translatedBy(x: -pivot.x, y: -pivot.y)
+                case .translation(let direction, let range):
+                    // Apply translation constraint along direction
+                    let distance = max(range.lowerBound, min(parameter, range.upperBound))
+                    resultTransform = resultTransform.translatedBy(
+                        x: direction.dx * distance,
+                        y: direction.dy * distance
+                    )
+                case .fixed:
+                    // Fixed constraint - no transformation applied
+                    break
+                }
             }
         }
         
@@ -232,7 +250,7 @@ class ConnectionService {
             
             let pointA = verticesA[vertexA]
             let pointB = verticesB[vertexB]
-            return geometryService.pointsEqual(pointA, pointB, tolerance: tolerance)
+            return abs(pointA.x - pointB.x) < tolerance && abs(pointA.y - pointB.y) < tolerance
             
         case .edgeToEdge(let pieceAId, let edgeA, _, let edgeB):
             guard let pieceAObj = pieces.first(where: { $0.id == pieceAId }) else {
@@ -258,26 +276,27 @@ class ConnectionService {
             let edgeB = (edgeStartB, edgeEndB)
             
             // Check if edges coincide or partially coincide
-            if geometryService.edgesCoincide(edgeA, edgeB, tolerance: tolerance) {
+            // Check if edges coincide (same line, overlapping)
+            // This is a simplified check - edges coincide if endpoints match
+            let aStartMatchesBStart = abs(edgeStartA.x - edgeStartB.x) < tolerance && abs(edgeStartA.y - edgeStartB.y) < tolerance
+            let aStartMatchesBEnd = abs(edgeStartA.x - edgeEndB.x) < tolerance && abs(edgeStartA.y - edgeEndB.y) < tolerance
+            let aEndMatchesBStart = abs(edgeEndA.x - edgeStartB.x) < tolerance && abs(edgeEndA.y - edgeStartB.y) < tolerance
+            let aEndMatchesBEnd = abs(edgeEndA.x - edgeEndB.x) < tolerance && abs(edgeEndA.y - edgeEndB.y) < tolerance
+            
+            if (aStartMatchesBStart && aEndMatchesBEnd) || (aStartMatchesBEnd && aEndMatchesBStart) {
                 return true
             }
             
             // Check if the shorter edge lies along the longer edge
-            let lengthA = geometryService.distance(from: edgeStartA, to: edgeEndA)
-            let lengthB = geometryService.distance(from: edgeStartB, to: edgeEndB)
+            let lengthA = sqrt(pow(edgeEndA.x - edgeStartA.x, 2) + pow(edgeEndA.y - edgeStartA.y, 2))
+            let lengthB = sqrt(pow(edgeEndB.x - edgeStartB.x, 2) + pow(edgeEndB.y - edgeStartB.y, 2))
             
             if lengthA > lengthB {
-                return geometryService.edgePartiallyCoincides(
-                    shorterEdge: edgeB, 
-                    longerEdge: edgeA, 
-                    tolerance: tolerance
-                )
+                // Check if shorter edge lies along longer edge
+                return isEdgeOnLine(edge: edgeB, line: edgeA, tolerance: tolerance)
             } else {
-                return geometryService.edgePartiallyCoincides(
-                    shorterEdge: edgeA, 
-                    longerEdge: edgeB, 
-                    tolerance: tolerance
-                )
+                // Check if shorter edge lies along longer edge
+                return isEdgeOnLine(edge: edgeA, line: edgeB, tolerance: tolerance)
             }
             
         case .vertexToEdge(let pieceAId, let vertex, let pieceBId, let edge):
@@ -298,7 +317,46 @@ class ConnectionService {
             let edgeEndB = verticesB[edgeDefB.endVertex]
             
             // Check if vertex lies on the edge
-            return geometryService.pointOnLineSegment(vertexPoint, edgeStartB, edgeEndB)
+            // Check if vertex lies on the edge
+            return isPointOnLineSegment(vertexPoint, edgeStartB, edgeEndB)
         }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func isEdgeOnLine(edge: (CGPoint, CGPoint), line: (CGPoint, CGPoint), tolerance: CGFloat) -> Bool {
+        // Check if both endpoints of the edge lie on the line
+        return isPointOnLineSegment(edge.0, line.0, line.1, tolerance: tolerance) &&
+               isPointOnLineSegment(edge.1, line.0, line.1, tolerance: tolerance)
+    }
+    
+    private func isPointOnLineSegment(_ point: CGPoint, _ lineStart: CGPoint, _ lineEnd: CGPoint, tolerance: CGFloat = 1e-5) -> Bool {
+        // Vector from lineStart to lineEnd
+        let lineVec = CGVector(dx: lineEnd.x - lineStart.x, dy: lineEnd.y - lineStart.y)
+        // Vector from lineStart to point
+        let pointVec = CGVector(dx: point.x - lineStart.x, dy: point.y - lineStart.y)
+        
+        // Calculate parameter t for projection
+        let lineLengthSquared = lineVec.dx * lineVec.dx + lineVec.dy * lineVec.dy
+        if lineLengthSquared < tolerance {
+            // Line is essentially a point
+            return abs(point.x - lineStart.x) < tolerance && abs(point.y - lineStart.y) < tolerance
+        }
+        
+        let t = (pointVec.dx * lineVec.dx + pointVec.dy * lineVec.dy) / lineLengthSquared
+        
+        // Check if projection is within segment bounds
+        if t < -tolerance || t > 1 + tolerance {
+            return false
+        }
+        
+        // Calculate perpendicular distance
+        let projectedPoint = CGPoint(
+            x: lineStart.x + t * lineVec.dx,
+            y: lineStart.y + t * lineVec.dy
+        )
+        
+        let distance = sqrt(pow(point.x - projectedPoint.x, 2) + pow(point.y - projectedPoint.y, 2))
+        return distance < tolerance
     }
 }

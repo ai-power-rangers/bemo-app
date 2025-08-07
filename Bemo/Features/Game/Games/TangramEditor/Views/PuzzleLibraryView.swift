@@ -43,31 +43,41 @@ struct PuzzleLibraryView: View {
             // Header
             VStack(spacing: 12) {
                 HStack {
-                    // Back to Lobby button
+                    // Back button (left)
                     Button(action: { 
                         viewModel.delegate?.gameDidRequestQuit() 
                     }) {
-                        Label("Back to Lobby", systemImage: "chevron.left")
-                            .font(.body)
-                            .fontWeight(.medium)
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                            Text("Back")
+                        }
+                        .font(.body)
+                        .foregroundColor(.blue)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .frame(width: 100, alignment: .leading)
                     
                     Spacer()
                     
-                    Text("Tangram Puzzles")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+                    // Title (centered)
+                    Text("Tangram Library")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
                     
                     Spacer()
                     
-                    // Create New Button
+                    // Create button (right)
                     Button(action: { viewModel.createNewPuzzle() }) {
-                        Label("Create New", systemImage: "plus.circle.fill")
-                            .font(.headline)
+                        Image(systemName: "plus")
+                            .font(.title2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.blue)
                     }
-                    .buttonStyle(.bordered)
+                    .frame(width: 100, alignment: .trailing)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color(.systemBackground))
                 
                 // Search and Filter Bar
                 HStack(spacing: 12) {
@@ -101,9 +111,8 @@ struct PuzzleLibraryView: View {
                         .cornerRadius(8)
                     }
                 }
+                .padding(.horizontal, 16)
             }
-            .padding()
-            .background(Color(.systemBackground))
             
             Divider()
             

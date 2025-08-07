@@ -9,24 +9,16 @@ import Foundation
 import CoreGraphics
 
 /// Coordinates complex operations between services for the Tangram Editor
+@MainActor
 class TangramEditorCoordinator {
     
     private let placementService: PiecePlacementService
     private let connectionService: ConnectionService
-    private let validationService: ValidationService
-    private let geometryService: GeometryService
-    private let constraintManager: ConstraintManager
     
     init(placementService: PiecePlacementService = PiecePlacementService(),
-         connectionService: ConnectionService = ConnectionService(),
-         validationService: ValidationService = ValidationService(),
-         geometryService: GeometryService = GeometryService(),
-         constraintManager: ConstraintManager = ConstraintManager()) {
+         connectionService: ConnectionService = ConnectionService()) {
         self.placementService = placementService
         self.connectionService = connectionService
-        self.validationService = validationService
-        self.geometryService = geometryService
-        self.constraintManager = constraintManager
     }
     
     // MARK: - Complex Piece Placement
@@ -108,7 +100,9 @@ class TangramEditorCoordinator {
             print("DEBUG OVERLAP: Checking against \(existingPiece.type)")
             print("DEBUG OVERLAP: Existing vertices: \(existingVertices)")
             
-            if geometryService.polygonsOverlap(newVertices, existingVertices) {
+            // Use PieceTransformEngine's overlap detection
+            let testPiece = newPiece
+            if PieceTransformEngine.hasAreaOverlap(testPiece, existingPiece) {
                 print("ERROR: Overlap detected between new \(type) and existing \(existingPiece.type)")
                 return .failure(.overlappingPieces)
             } else {
@@ -142,7 +136,21 @@ class TangramEditorCoordinator {
     
     /// Perform complete validation of puzzle state
     func validatePuzzle(_ puzzle: TangramPuzzle) -> ValidationState {
-        return validationService.validate(puzzle: puzzle)
+        // Check for overlaps between all pieces
+        for i in 0..<puzzle.pieces.count {
+            for j in (i+1)..<puzzle.pieces.count {
+                if PieceTransformEngine.hasAreaOverlap(puzzle.pieces[i], puzzle.pieces[j]) {
+                    return .invalid(reason: "Pieces overlap")
+                }
+            }
+        }
+        
+        // Check if puzzle has at least one piece
+        if puzzle.pieces.isEmpty {
+            return .unknown
+        }
+        
+        return .valid
     }
     
     /// Check if a specific piece placement is valid
@@ -150,14 +158,9 @@ class TangramEditorCoordinator {
         piece: TangramPiece,
         existingPieces: [TangramPiece]
     ) -> Bool {
-        // Use centralized coordinate system for overlap checking
-        let pieceVertices = TangramCoordinateSystem.getWorldVertices(for: piece)
-        
         // Check for overlaps
         for existing in existingPieces {
-            let existingVertices = TangramCoordinateSystem.getWorldVertices(for: existing)
-            
-            if geometryService.polygonsOverlap(pieceVertices, existingVertices) {
+            if PieceTransformEngine.hasAreaOverlap(piece, existing) {
                 return false
             }
         }

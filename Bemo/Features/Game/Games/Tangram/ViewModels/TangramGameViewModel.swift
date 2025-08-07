@@ -42,11 +42,19 @@ class TangramGameViewModel {
     var placedPieces: [PlacedPiece] = []
     var anchorPiece: PlacedPiece?
     
+    // Hint System
+    var currentHint: TangramHintEngine.HintData?
+    var hintHistory: [TangramHintEngine.HintData] = []
+    var lastMovedPiece: TangramPieceType?
+    var lastProgressTime = Date()
+    var isShowingHintAnimation: Bool = false
+    
     // MARK: - Dependencies
     
     private weak var delegate: GameDelegate?
     private let databaseLoader: TangramDatabaseLoader
     private let puzzleLibraryService: PuzzleLibraryService
+    private let hintEngine = TangramHintEngine()
     var availablePuzzles: [GamePuzzleData] = []
     
     // MARK: - Initialization
@@ -124,15 +132,47 @@ class TangramGameViewModel {
     }
     
     func requestHint() {
-        showHints = true
-        gameState?.incrementHintCount()
-        delegate?.gameDidRequestHint()
+        // Legacy method - redirect to new structured hint system
+        requestStructuredHint()
     }
     
     func toggleHints() {
         showHints.toggle()
         if showHints {
+            // When toggling on, also request a structured hint
+            requestStructuredHint()
+        } else {
+            // Clear current hint when toggling off
+            currentHint = nil
+            isShowingHintAnimation = false
+        }
+    }
+    
+    func requestStructuredHint() {
+        guard let puzzle = selectedPuzzle else { return }
+        
+        let timeSinceProgress = Date().timeIntervalSince(lastProgressTime)
+        
+        // Get intelligent hint
+        currentHint = hintEngine.determineNextHint(
+            puzzle: puzzle,
+            placedPieces: placedPieces,
+            lastMovedPiece: lastMovedPiece,
+            timeSinceLastProgress: timeSinceProgress,
+            previousHints: hintHistory
+        )
+        
+        if let hint = currentHint {
+            // Track hint
+            hintHistory.append(hint)
             gameState?.incrementHintCount()
+            
+            // Show animation
+            isShowingHintAnimation = true
+            showHints = true
+            
+            // Notify delegate
+            delegate?.gameDidRequestHint()
         }
     }
     
@@ -388,6 +428,23 @@ class TangramGameViewModel {
             piece.validationState = isCorrect ? PlacedPiece.ValidationState.correct : PlacedPiece.ValidationState.incorrect
             placedPieces[i] = piece
         }
+    }
+    
+    // MARK: - Hint System Tracking
+    
+    func onPieceMoved(_ pieceType: TangramPieceType) {
+        lastMovedPiece = pieceType
+    }
+    
+    func onPieceValidated(_ pieceType: TangramPieceType, isCorrect: Bool) {
+        if isCorrect {
+            lastProgressTime = Date()
+            lastMovedPiece = nil
+        }
+    }
+    
+    func clearHintAnimation() {
+        isShowingHintAnimation = false
     }
     
     // MARK: - Progress Management (Phase 3)

@@ -16,7 +16,6 @@ struct TangramEditorContainerView: View {
             if viewModel.uiState.navigationState == .editor {
                 TangramEditorTopBar(viewModel: viewModel, delegate: viewModel.delegate)
                     .background(Color(.systemBackground))
-                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 2)
                 
                 // State indicator - always visible under top bar
                 Text(viewModel.currentStateDescription)
@@ -61,7 +60,6 @@ struct TangramEditorContainerView: View {
             if viewModel.uiState.navigationState == .editor {
                 TangramEditorBottomBar(viewModel: viewModel)
                     .background(Color(.systemBackground))
-                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: -2)
             }
         }
         .animation(.easeInOut(duration: 0.3), value: viewModel.uiState.navigationState)

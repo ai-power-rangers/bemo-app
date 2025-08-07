@@ -301,7 +301,7 @@ class PieceManipulationService {
         otherPieces: [TangramPiece],
         stepSize: Double = 2.0
     ) -> ClosedRange<Double> {
-        let validationService = ValidationService()
+        // No longer need validation service - using PieceTransformEngine
         var minValidDistance = baseRange.lowerBound
         var maxValidDistance = baseRange.upperBound
         
@@ -320,7 +320,7 @@ class PieceManipulationService {
             
             var hasOverlap = false
             for other in otherPieces {
-                if validationService.hasAreaOverlap(pieceA: testPiece, pieceB: other) {
+                if PieceTransformEngine.hasAreaOverlap(testPiece, other) {
                     hasOverlap = true
                     break
                 }
@@ -344,7 +344,7 @@ class PieceManipulationService {
             
             var hasOverlap = false
             for other in otherPieces {
-                if validationService.hasAreaOverlap(pieceA: testPiece, pieceB: other) {
+                if PieceTransformEngine.hasAreaOverlap(testPiece, other) {
                     hasOverlap = true
                     break
                 }
@@ -368,10 +368,10 @@ class PieceManipulationService {
     ) -> (minAngle: Double, maxAngle: Double) {
         // For vertex-to-vertex connections, test each 45° position
         // and return the full range if any positions are valid
-        // The actual validation happens in handleRotation using PuzzleValidationRules
+        // The actual validation happens in handleRotation using PieceTransformEngine
         
         // For now, return full range to allow testing all positions
-        // The centralized validation in PuzzleValidationRules will handle
+        // The centralized validation in PieceTransformEngine will handle
         // checking each position for validity
         return (-180, 180)
     }

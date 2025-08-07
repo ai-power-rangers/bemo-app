@@ -46,11 +46,11 @@ class TangramEditorViewModel {
     
     // MARK: - Services (Dependency Injection)
     
+    let transformEngine: PieceTransformEngine
     let coordinator: TangramEditorCoordinator
     let placementService: PiecePlacementService
     let persistenceService: PuzzlePersistenceService
     let undoManager: UndoRedoManager
-    let validationService: ValidationService
     let manipulationService: PieceManipulationService
     let stateManager: TangramEditorStateMachine
     let toastService: ToastService
@@ -68,22 +68,22 @@ class TangramEditorViewModel {
     // MARK: - Initialization
     
     init(puzzle: TangramPuzzle? = nil,
+         transformEngine: PieceTransformEngine,
          coordinator: TangramEditorCoordinator,
          placementService: PiecePlacementService,
          persistenceService: PuzzlePersistenceService,
          undoManager: UndoRedoManager,
-         validationService: ValidationService,
          manipulationService: PieceManipulationService,
          stateManager: TangramEditorStateMachine,
          toastService: ToastService,
          puzzleManagementService: PuzzleManagementService? = nil) {
         
         // Initialize services
+        self.transformEngine = transformEngine
         self.coordinator = coordinator
         self.placementService = placementService
         self.persistenceService = persistenceService
         self.undoManager = undoManager
-        self.validationService = validationService
         self.manipulationService = manipulationService
         self.stateManager = stateManager
         self.toastService = toastService

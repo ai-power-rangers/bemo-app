@@ -258,13 +258,16 @@ extension TangramEditorViewModel {
                     connections: connections,
                     existingPieces: puzzle.pieces
                 ) {
-                    // CRITICAL: Validate before showing preview
-                    if PuzzleValidationRules.isValidPlacement(
-                        piece: placedPiece,
-                        withTransform: placedPiece.transform,
-                        amongPieces: puzzle.pieces,
-                        maintainingConnection: nil  // New piece, no existing connection
-                    ) {
+                    // Use transform engine for validation
+                    let result = transformEngine.calculateTransform(
+                        for: placedPiece,
+                        operation: .place(center: CGPoint.zero, rotation: 0), // Already positioned
+                        connection: nil,
+                        otherPieces: puzzle.pieces,
+                        canvasSize: uiState.currentCanvasSize
+                    )
+                    
+                    if result.isValid {
                         uiState.previewPiece = placedPiece
                         uiState.previewTransform = placedPiece.transform
                     } else {
