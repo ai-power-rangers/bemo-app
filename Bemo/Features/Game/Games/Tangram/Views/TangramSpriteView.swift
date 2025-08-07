@@ -79,14 +79,14 @@ struct TangramSpriteView: View {
     @ViewBuilder
     private var hintsOverlay: some View {
         ZStack {
-            ForEach(puzzle.targetPieces, id: \.pieceType) { target in
-                let isPlaced = placedPieces.contains { $0.pieceType.rawValue == target.pieceType }
+            ForEach(0..<puzzle.targetPieces.count, id: \.self) { index in
+                let target = puzzle.targetPieces[index]
+                let isPlaced = placedPieces.contains { $0.pieceType == target.pieceType }
                 
                 if !isPlaced {
                     HintOutlineShape(
                         pieceType: target.pieceType,
-                        position: target.position,
-                        rotation: target.rotation
+                        transform: target.transform
                     )
                     .stroke(
                         pieceTypeColor(target.pieceType),
@@ -102,71 +102,43 @@ struct TangramSpriteView: View {
         }
     }
     
-    private func pieceTypeColor(_ pieceType: String) -> Color {
+    private func pieceTypeColor(_ pieceType: TangramPieceType) -> Color {
         // Map piece types to colors
         switch pieceType {
-        case "largeTriangle1", "largeTriangle2":
+        case .largeTriangle1, .largeTriangle2:
             return .blue
-        case "mediumTriangle":
+        case .mediumTriangle:
             return .green
-        case "smallTriangle1", "smallTriangle2":
+        case .smallTriangle1, .smallTriangle2:
             return .orange
-        case "square":
+        case .square:
             return .yellow
-        case "parallelogram":
+        case .parallelogram:
             return .purple
-        default:
-            return .gray
         }
     }
 }
 
 // Simple shape for hint outlines
 struct HintOutlineShape: Shape {
-    let pieceType: String
-    let position: CGPoint
-    let rotation: Double
+    let pieceType: TangramPieceType
+    let transform: CGAffineTransform
     
     func path(in rect: CGRect) -> Path {
         var path = Path()
         
-        // Simplified shape outlines
-        let center = CGPoint(
-            x: rect.width * position.x / 600,
-            y: rect.height * position.y / 600
-        )
+        // Get the actual vertices for this piece type
+        let normalizedVertices = TangramGameGeometry.normalizedVertices(for: pieceType)
+        let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
+        let transformedVertices = TangramGameGeometry.transformVertices(scaledVertices, with: transform)
         
-        switch pieceType {
-        case "smallTriangle1", "smallTriangle2":
-            path.move(to: center)
-            path.addLine(to: CGPoint(x: center.x + 30, y: center.y))
-            path.addLine(to: CGPoint(x: center.x, y: center.y + 30))
+        // Draw the shape using transformed vertices
+        if let firstVertex = transformedVertices.first {
+            path.move(to: firstVertex)
+            for vertex in transformedVertices.dropFirst() {
+                path.addLine(to: vertex)
+            }
             path.closeSubpath()
-            
-        case "mediumTriangle":
-            path.move(to: center)
-            path.addLine(to: CGPoint(x: center.x + 45, y: center.y))
-            path.addLine(to: CGPoint(x: center.x, y: center.y + 45))
-            path.closeSubpath()
-            
-        case "largeTriangle1", "largeTriangle2":
-            path.move(to: center)
-            path.addLine(to: CGPoint(x: center.x + 60, y: center.y))
-            path.addLine(to: CGPoint(x: center.x, y: center.y + 60))
-            path.closeSubpath()
-            
-        case "square":
-            path.addRect(CGRect(x: center.x - 25, y: center.y - 25, width: 50, height: 50))
-            
-        case "parallelogram":
-            path.move(to: CGPoint(x: center.x - 25, y: center.y))
-            path.addLine(to: CGPoint(x: center.x + 25, y: center.y))
-            path.addLine(to: CGPoint(x: center.x + 10, y: center.y + 30))
-            path.addLine(to: CGPoint(x: center.x - 40, y: center.y + 30))
-            path.closeSubpath()
-            
-        default:
-            path.addEllipse(in: CGRect(x: center.x - 25, y: center.y - 25, width: 50, height: 50))
         }
         
         return path

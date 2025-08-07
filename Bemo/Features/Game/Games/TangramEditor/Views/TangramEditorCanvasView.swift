@@ -215,8 +215,7 @@ struct TangramEditorCanvasView: View {
                 manipulationMode: nil,
                 onRotation: { _ in },
                 onSlide: { _ in },
-                onManipulationEnd: { },
-                onLockToggle: { }
+                onManipulationEnd: { }
             )
             .opacity(0.5)  // Make it semi-transparent
             .allowsHitTesting(false)  // Don't interfere with interactions
@@ -249,15 +248,15 @@ struct TangramEditorCanvasView: View {
                                 viewModel.confirmRotation()
                             case .slidable:
                                 viewModel.confirmSlide()
-                            case .locked:
+                            case .fixed:
+                                break
+                            case .free:
+                                // Handle free movement if needed
                                 break
                             }
                         }
                     }
                 },
-                onLockToggle: {
-                    viewModel.togglePieceLock(id: piece.id)
-                }
             )
             .onTapGesture(count: 2) {
                 if canSelectPieces {

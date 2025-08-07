@@ -45,32 +45,56 @@ class TangramGameViewModel {
     // MARK: - Dependencies
     
     private weak var delegate: GameDelegate?
+    private let databaseLoader: TangramDatabaseLoader
     private let puzzleLibraryService: PuzzleLibraryService
-    private(set) var puzzleSelectionViewModel: PuzzleSelectionViewModel!
+    var availablePuzzles: [GamePuzzleData] = []
     
     // MARK: - Initialization
     
     init(delegate: GameDelegate, supabaseService: SupabaseService? = nil) {
         self.delegate = delegate
+        self.databaseLoader = TangramDatabaseLoader(supabaseService: supabaseService)
         self.puzzleLibraryService = PuzzleLibraryService(supabaseService: supabaseService)
-        self.puzzleSelectionViewModel = PuzzleSelectionViewModel(
-            libraryService: puzzleLibraryService,
-            onPuzzleSelected: { [weak self] puzzle in
-                self?.selectPuzzle(puzzle)
-            },
-            onBackToLobby: { [weak self] in
-                self?.requestQuit()
+        
+        // Load puzzles from database
+        Task { @MainActor in
+            do {
+                let puzzles = try await self.databaseLoader.loadOfficialPuzzles()
+                self.availablePuzzles = puzzles
+                print("Loaded \(puzzles.count) puzzles from database")
+                for puzzle in puzzles {
+                    print("  - \(puzzle.name) (\(puzzle.category))")
+                }
+            } catch {
+                print("Failed to load puzzles: \(error)")
             }
-        )
+        }
     }
     
     // MARK: - Game Actions
     
-    func selectPuzzle(_ puzzle: TangramPuzzle) {
-        // Convert editor puzzle to game puzzle data
-        let gamePuzzleData = GamePuzzleData(from: puzzle)
-        selectedPuzzle = gamePuzzleData
-        gameState = PuzzleGameState(targetPuzzle: gamePuzzleData)
+    func selectPuzzle(_ puzzleData: Any) {
+        // Handle different data formats
+        var gamePuzzleData: GamePuzzleData?
+        
+        if let puzzle = puzzleData as? GamePuzzleData {
+            // Already in the right format
+            gamePuzzleData = puzzle
+        } else if let dictionary = puzzleData as? [String: Any] {
+            // Convert from dictionary
+            gamePuzzleData = PuzzleDataConverter.convertFromDatabase(dictionary)
+        } else if let codableData = puzzleData as? Decodable {
+            // Convert from codable
+            gamePuzzleData = PuzzleDataConverter.convertFromCodable(codableData)
+        }
+        
+        guard let puzzle = gamePuzzleData else {
+            print("Error: Failed to convert puzzle data")
+            return
+        }
+        
+        selectedPuzzle = puzzle
+        gameState = PuzzleGameState(targetPuzzle: puzzle)
         currentPhase = .playingPuzzle
         progress = 0.0
         showHints = false
@@ -113,12 +137,12 @@ class TangramGameViewModel {
         // Stop timer when loading next puzzle
         stopTimer()
         
-        // Get next puzzle from library
-        let currentIndex = puzzleLibraryService.availablePuzzles.firstIndex { $0.id == selectedPuzzle?.id } ?? 0
-        let nextIndex = (currentIndex + 1) % puzzleLibraryService.availablePuzzles.count
+        // Get next puzzle from available puzzles
+        let currentIndex = availablePuzzles.firstIndex { $0.id == selectedPuzzle?.id } ?? 0
+        let nextIndex = (currentIndex + 1) % availablePuzzles.count
         
-        if nextIndex < puzzleLibraryService.availablePuzzles.count {
-            let nextPuzzle = puzzleLibraryService.availablePuzzles[nextIndex]
+        if nextIndex < availablePuzzles.count {
+            let nextPuzzle = availablePuzzles[nextIndex]
             selectPuzzle(nextPuzzle)
         } else {
             // No more puzzles, go back to selection
@@ -163,23 +187,28 @@ class TangramGameViewModel {
         guard let puzzle = selectedPuzzle else { return }
         
         // Find the target piece in the puzzle
-        guard let targetPiece = puzzle.targetPieces.first(where: { $0.pieceType == pieceType }) else {
+        guard let targetPiece = puzzle.targetPieces.first(where: { $0.pieceType.rawValue == pieceType }) else {
             return
         }
         
-        // Check if piece is already placed
-        let alreadyPlaced = placedPieces.contains { $0.pieceType.rawValue == pieceType }
+        // Check if piece is already placed - convert String to TangramPieceType
+        guard let tangramPieceType = TangramPieceType(rawValue: pieceType) else { return }
+        let alreadyPlaced = placedPieces.contains { $0.pieceType == tangramPieceType }
         
         if alreadyPlaced {
             // Remove the piece
-            placedPieces.removeAll { $0.pieceType.rawValue == pieceType }
+            placedPieces.removeAll { $0.pieceType == tangramPieceType }
         } else {
             // Create a perfectly placed piece
+            // Extract position from transform (tx, ty) and rotation from transform matrix
+            let position = CGPoint(x: targetPiece.transform.tx, y: targetPiece.transform.ty)
+            let rotation = atan2(targetPiece.transform.b, targetPiece.transform.a) * 180.0 / .pi
+            
             let mockPiece = RecognizedPiece(
                 id: "touch_\(pieceType)_\(UUID().uuidString.prefix(8))",
                 pieceTypeId: pieceType,
-                position: targetPiece.position,
-                rotation: targetPiece.rotation,
+                position: position,
+                rotation: rotation,
                 velocity: CGVector(dx: 0, dy: 0),
                 isMoving: false,
                 confidence: 1.0,
@@ -188,7 +217,7 @@ class TangramGameViewModel {
             )
             
             var placed = PlacedPiece(from: mockPiece)
-            placed.validationState = .correct
+            placed.validationState = PlacedPiece.ValidationState.correct
             
             // Add to placed pieces
             placedPieces.append(placed)
@@ -235,8 +264,10 @@ class TangramGameViewModel {
         var placed = PlacedPiece(from: mockPiece)
         placed.validationState = .correct
         
-        // Update placed pieces
-        placedPieces.removeAll { $0.pieceType.rawValue == pieceType }
+        // Update placed pieces - convert String to TangramPieceType
+        if let tangramPieceType = TangramPieceType(rawValue: pieceType) {
+            placedPieces.removeAll { $0.pieceType == tangramPieceType }
+        }
         placedPieces.append(placed)
         
         // Update progress
@@ -340,7 +371,7 @@ class TangramGameViewModel {
             
             // Only validate stationary pieces
             guard piece.isPlacedLongEnough() else {
-                piece.validationState = .pending
+                piece.validationState = PlacedPiece.ValidationState.pending
                 placedPieces[i] = piece
                 continue
             }
@@ -348,10 +379,10 @@ class TangramGameViewModel {
             // Check if this piece matches any target position
             let isCorrect = puzzle.targetPieces.contains { target in
                 // For now, simple matching - will need proper position extraction
-                target.pieceType == piece.pieceType.rawValue
+                target.pieceType == piece.pieceType
             }
             
-            piece.validationState = isCorrect ? .correct : .incorrect
+            piece.validationState = isCorrect ? PlacedPiece.ValidationState.correct : PlacedPiece.ValidationState.incorrect
             placedPieces[i] = piece
         }
     }

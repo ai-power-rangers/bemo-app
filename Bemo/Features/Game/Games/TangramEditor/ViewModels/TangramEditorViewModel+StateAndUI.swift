@@ -102,17 +102,14 @@ extension TangramEditorViewModel {
     // MARK: - Selection Management
     
     func selectPiece(id: String) {
-        // Check if piece is locked before allowing selection
-        guard let piece = puzzle.pieces.first(where: { $0.id == id }) else { return }
+        // Check if piece exists
+        guard puzzle.pieces.first(where: { $0.id == id }) != nil else { return }
         
-        if piece.isLocked {
-            // Transition to locked piece state
-            _ = transitionToState(.pieceSelected(id: id, isLocked: true))
-        } else {
-            if uiState.editMode == .select {
-                uiState.selectedPieceIds.insert(id)
-                _ = transitionToState(.pieceSelected(id: id, isLocked: false))
-            }
+        // Transition to piece selected state
+        _ = transitionToState(.pieceSelected(id: id))
+        
+        if uiState.editMode == .select {
+            uiState.selectedPieceIds.insert(id)
         }
     }
     

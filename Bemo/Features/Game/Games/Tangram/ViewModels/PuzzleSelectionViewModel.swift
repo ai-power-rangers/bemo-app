@@ -69,7 +69,7 @@ class PuzzleSelectionViewModel {
     // MARK: - Actions
     
     func selectPuzzle(_ puzzle: TangramPuzzle) {
-        print("DEBUG: PuzzleSelectionViewModel.selectPuzzle called for: \(puzzle.name)")
+        print("DEBUG: PuzzleSelectionViewModel.selectPuzzle called")
         onPuzzleSelected(puzzle)
     }
     
@@ -89,11 +89,11 @@ class PuzzleSelectionViewModel {
     }
     
     func thumbnailImage(for puzzle: TangramPuzzle) -> Image? {
-        libraryService.thumbnailImage(for: puzzle)
+        return libraryService.thumbnailImage(for: puzzle)
     }
     
     func thumbnailColor(for puzzle: TangramPuzzle) -> Color {
-        libraryService.thumbnailColor(for: puzzle)
+        return libraryService.thumbnailColor(for: puzzle)
     }
     
     // MARK: - Display Helpers

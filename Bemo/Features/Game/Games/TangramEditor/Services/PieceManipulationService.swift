@@ -18,21 +18,25 @@ class PieceManipulationService {
     // MARK: - Public Methods
     
     /// Calculate the manipulation mode for a piece based on its connections
-    func calculateManipulationMode(piece: TangramPiece, connections: [Connection]) -> ManipulationMode {
+    func calculateManipulationMode(piece: TangramPiece, connections: [Connection], isFirstPiece: Bool = false) -> ManipulationMode {
         // Find connections involving this piece
         let pieceConnections = connections.filter { connection in
             connection.pieceAId == piece.id || connection.pieceBId == piece.id
         }
         
-        // Multiple connections = locked
-        if pieceConnections.count >= 2 {
-            return .locked
+        // First piece is always fixed
+        if isFirstPiece {
+            return .fixed
         }
         
-        // No connections = free manipulation (but we still lock the first piece)
+        // Multiple connections = fixed
+        if pieceConnections.count >= 2 {
+            return .fixed
+        }
+        
+        // No connections = free movement
         if pieceConnections.isEmpty {
-            // First piece is always locked even without connections
-            return .locked
+            return .free
         }
         
         // Single connection - determine type
@@ -45,7 +49,7 @@ class PieceManipulationService {
                 let worldVertices = TangramCoordinateSystem.getWorldVertices(for: piece)
                 
                 guard vertexIndex < worldVertices.count else {
-                    return .locked
+                    return .fixed
                 }
                 
                 let pivot = worldVertices[vertexIndex]
@@ -65,7 +69,7 @@ class PieceManipulationService {
                 let edges = TangramGeometry.edges(for: piece.type)
                 
                 guard edgeIndex < edges.count else {
-                    return .locked
+                    return .fixed
                 }
                 
                 let edgeDef = edges[edgeIndex]
@@ -93,13 +97,13 @@ class PieceManipulationService {
                 )
                 
             case .vertexToEdge:
-                // Vertex on edge - for now, lock it
+                // Vertex on edge - for now, fix it
                 // Could potentially allow sliding along the edge
-                return .locked
+                return .fixed
             }
         }
         
-        return .locked
+        return .fixed
     }
     
     /// Check if a piece can be rotated

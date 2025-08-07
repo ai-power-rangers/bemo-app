@@ -51,7 +51,6 @@ class TangramEditorViewModel {
     let persistenceService: PuzzlePersistenceService
     let undoManager: UndoRedoManager
     let validationService: ValidationService
-    let lockingService: PieceLockingService
     let manipulationService: PieceManipulationService
     let stateManager: TangramEditorStateMachine
     let toastService: ToastService
@@ -64,7 +63,6 @@ class TangramEditorViewModel {
          persistenceService: PuzzlePersistenceService,
          undoManager: UndoRedoManager,
          validationService: ValidationService,
-         lockingService: PieceLockingService,
          manipulationService: PieceManipulationService,
          stateManager: TangramEditorStateMachine,
          toastService: ToastService) {
@@ -75,7 +73,6 @@ class TangramEditorViewModel {
         self.persistenceService = persistenceService
         self.undoManager = undoManager
         self.validationService = validationService
-        self.lockingService = lockingService
         self.manipulationService = manipulationService
         self.stateManager = stateManager
         self.toastService = toastService

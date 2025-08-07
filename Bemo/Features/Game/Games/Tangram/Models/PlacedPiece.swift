@@ -17,7 +17,7 @@ struct PlacedPiece: Identifiable, Codable {
     // MARK: - Properties from CV
     
     let id: String // Consistent piece ID from CV
-    let pieceType: PieceType
+    let pieceType: TangramPieceType
     var position: CGPoint
     var rotation: Double
     var velocity: CGVector
@@ -46,7 +46,7 @@ struct PlacedPiece: Identifiable, Codable {
     
     init(from recognized: RecognizedPiece) {
         self.id = recognized.id
-        self.pieceType = PieceType(rawValue: recognized.pieceTypeId) ?? .smallTriangle1
+        self.pieceType = TangramPieceType(rawValue: recognized.pieceTypeId) ?? .smallTriangle1
         self.position = recognized.position
         self.rotation = recognized.rotation
         self.velocity = recognized.velocity

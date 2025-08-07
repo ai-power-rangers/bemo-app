@@ -206,23 +206,24 @@ struct PuzzleCardView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Thumbnail
+            // Thumbnail - maintain square frame but preserve aspect ratio
             ZStack {
+                // Background for consistent card size
+                Rectangle()
+                    .fill(Color(.systemGray6))
+                    .aspectRatio(1, contentMode: .fit)
+                
                 if let thumbnailData = puzzle.thumbnailData,
                    let uiImage = UIImage(data: thumbnailData) {
                     Image(uiImage: uiImage)
                         .resizable()
-                        .aspectRatio(1, contentMode: .fit)
+                        .scaledToFit()  // Preserve aspect ratio
+                        .padding(8)  // Add padding so puzzle doesn't touch edges
                 } else {
                     // Placeholder
-                    Rectangle()
-                        .fill(Color(.systemGray5))
-                        .aspectRatio(1, contentMode: .fit)
-                        .overlay(
-                            Image(systemName: "square.grid.3x3")
-                                .font(.largeTitle)
-                                .foregroundColor(.secondary)
-                        )
+                    Image(systemName: "square.grid.3x3")
+                        .font(.largeTitle)
+                        .foregroundColor(.secondary)
                 }
             }
             .cornerRadius(8)

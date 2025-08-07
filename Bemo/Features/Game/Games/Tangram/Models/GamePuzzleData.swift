@@ -5,14 +5,14 @@
 //  Simplified puzzle data model for Tangram gameplay
 //
 
-// WHAT: Lightweight puzzle representation for gameplay, containing only validation-relevant data
-// ARCHITECTURE: Model in MVVM-S, used by TangramGame for puzzle validation without editor dependencies
-// USAGE: Created from TangramPuzzle data, stores target positions for piece validation
+// WHAT: Self-contained puzzle representation with full transform data for accurate rendering
+// ARCHITECTURE: Model in MVVM-S, stores complete piece transforms for SpriteKit rendering
+// USAGE: Stores puzzle solution with CGAffineTransform for each piece
 
 import Foundation
 import CoreGraphics
 
-/// Simplified puzzle data for gameplay - no editor dependencies
+/// Self-contained puzzle data for gameplay - no editor dependencies
 struct GamePuzzleData: Codable, Equatable {
     let id: String
     let name: String
@@ -20,58 +20,76 @@ struct GamePuzzleData: Codable, Equatable {
     let difficulty: Int
     let targetPieces: [TargetPiece]
     
-    /// A target position for a piece in the puzzle solution
-    struct TargetPiece: Codable, Equatable {
-        let pieceType: String  // PieceType rawValue
-        let position: CGPoint
-        let rotation: Double   // In degrees
+    /// A target piece with full transform data for accurate rendering
+    struct TargetPiece: Equatable {
+        let pieceType: TangramPieceType
+        let transform: CGAffineTransform  // Full transform matrix for exact positioning
+        
+        /// Computed position from transform (translation components)
+        var position: CGPoint {
+            CGPoint(x: transform.tx, y: transform.ty)
+        }
+        
+        /// Computed rotation in degrees from transform
+        var rotation: Double {
+            atan2(Double(transform.b), Double(transform.a)) * 180.0 / .pi
+        }
         
         /// Check if a placed piece matches this target within tolerances
-        func matches(_ placed: PlacedPiece, positionTolerance: Double = 10.0, rotationTolerance: Double = 5.0) -> Bool {
-            guard placed.pieceType.rawValue == pieceType else { return false }
+        func matches(_ placed: PlacedPiece) -> Bool {
+            guard placed.pieceType == pieceType else { return false }
             
-            // Check position tolerance
-            let dx = abs(placed.position.x - position.x)
-            let dy = abs(placed.position.y - position.y)
-            let distance = sqrt(dx * dx + dy * dy)
-            guard distance <= positionTolerance else { return false }
+            // Get transformed vertices for both pieces
+            let targetVertices = getTransformedVertices()
+            let placedVertices = getPlacedPieceVertices(placed)
             
-            // Check rotation tolerance
-            var rotationDiff = abs(placed.rotation - rotation)
-            // Normalize rotation difference to 0-180 range
-            while rotationDiff > 180 { rotationDiff -= 360 }
-            if rotationDiff > 180 { rotationDiff = 360 - rotationDiff }
+            // Check if vertices match within tolerance
+            return verticesMatch(targetVertices, placedVertices, tolerance: TangramGameConstants.positionTolerance)
+        }
+        
+        /// Get vertices transformed to world position
+        private func getTransformedVertices() -> [CGPoint] {
+            let normalizedVertices = TangramGameGeometry.normalizedVertices(for: pieceType)
+            let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
+            return TangramGameGeometry.transformVertices(scaledVertices, with: transform)
+        }
+        
+        /// Get vertices for a placed piece
+        private func getPlacedPieceVertices(_ placed: PlacedPiece) -> [CGPoint] {
+            let normalizedVertices = TangramGameGeometry.normalizedVertices(for: placed.pieceType)
+            let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
             
-            return rotationDiff <= rotationTolerance
+            // Create transform from placed piece position and rotation
+            var pieceTransform = CGAffineTransform.identity
+            pieceTransform = pieceTransform.rotated(by: placed.rotation * .pi / 180)
+            pieceTransform = pieceTransform.translatedBy(x: placed.position.x, y: placed.position.y)
+            
+            return TangramGameGeometry.transformVertices(scaledVertices, with: pieceTransform)
+        }
+        
+        /// Check if two sets of vertices match within tolerance
+        private func verticesMatch(_ vertices1: [CGPoint], _ vertices2: [CGPoint], tolerance: CGFloat) -> Bool {
+            guard vertices1.count == vertices2.count else { return false }
+            
+            for i in 0..<vertices1.count {
+                let distance = hypot(vertices1[i].x - vertices2[i].x, vertices1[i].y - vertices2[i].y)
+                if distance > tolerance { return false }
+            }
+            return true
         }
     }
     
-    /// Convert from editor's TangramPuzzle (when loading from persistence)
-    init(from editorPuzzle: TangramPuzzle) {
-        self.id = editorPuzzle.id
-        self.name = editorPuzzle.name
-        self.category = editorPuzzle.category.rawValue
-        self.difficulty = editorPuzzle.difficulty.rawValue
-        
-        // Extract target positions from editor pieces
-        self.targetPieces = editorPuzzle.pieces.map { piece in
-            // Extract position and rotation from CGAffineTransform
-            let transform = piece.transform
-            
-            // Position is the translation components
-            let position = CGPoint(x: transform.tx, y: transform.ty)
-            
-            // Rotation in radians from the transform matrix
-            // atan2 gives us the angle from the rotation components
-            let rotationRadians = atan2(transform.b, transform.a)
-            let rotationDegrees = rotationRadians * 180.0 / .pi
-            
-            return TargetPiece(
-                pieceType: piece.type.rawValue,
-                position: position,
-                rotation: rotationDegrees
-            )
-        }
+    /// Create from raw puzzle data (from database or JSON)
+    /// NOTE: This preserves the full transform matrix for accurate rendering
+    init(fromDatabaseData data: Any) {
+        // For now, create a test puzzle until we implement proper database loading
+        // This will be replaced with actual database parsing
+        let testPuzzle = Self.createTestPuzzle()
+        self.id = testPuzzle.id
+        self.name = testPuzzle.name
+        self.category = testPuzzle.category
+        self.difficulty = testPuzzle.difficulty
+        self.targetPieces = testPuzzle.targetPieces
     }
     
     /// Create from simplified data (for testing or bundled puzzles)
@@ -81,6 +99,85 @@ struct GamePuzzleData: Codable, Equatable {
         self.category = category
         self.difficulty = difficulty
         self.targetPieces = targetPieces
+    }
+    
+    /// Create a test puzzle with a simple shape
+    static func createTestPuzzle() -> GamePuzzleData {
+        // Create a simple test puzzle with 3 pieces forming a triangle
+        let pieces = [
+            TargetPiece(
+                pieceType: .largeTriangle1,
+                transform: CGAffineTransform(translationX: 100, y: 100)
+            ),
+            TargetPiece(
+                pieceType: .largeTriangle2,
+                transform: CGAffineTransform(translationX: 200, y: 100)
+                    .rotated(by: .pi / 2)
+            ),
+            TargetPiece(
+                pieceType: .square,
+                transform: CGAffineTransform(translationX: 150, y: 150)
+            )
+        ]
+        
+        return GamePuzzleData(
+            id: "test-puzzle",
+            name: "Test Triangle",
+            category: "Test",
+            difficulty: 1,
+            targetPieces: pieces
+        )
+    }
+}
+
+// MARK: - Codable Support for CGAffineTransform
+
+extension GamePuzzleData.TargetPiece: Codable {
+    enum CodingKeys: String, CodingKey {
+        case pieceType
+        case transform
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        pieceType = try container.decode(TangramPieceType.self, forKey: .pieceType)
+        
+        // Decode CGAffineTransform components
+        let transformData = try container.decode(TransformData.self, forKey: .transform)
+        transform = CGAffineTransform(
+            a: transformData.a,
+            b: transformData.b,
+            c: transformData.c,
+            d: transformData.d,
+            tx: transformData.tx,
+            ty: transformData.ty
+        )
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(pieceType, forKey: .pieceType)
+        
+        // Encode CGAffineTransform components
+        let transformData = TransformData(
+            a: transform.a,
+            b: transform.b,
+            c: transform.c,
+            d: transform.d,
+            tx: transform.tx,
+            ty: transform.ty
+        )
+        try container.encode(transformData, forKey: .transform)
+    }
+    
+    // Helper struct to make CGAffineTransform codable
+    private struct TransformData: Codable {
+        let a: CGFloat
+        let b: CGFloat
+        let c: CGFloat
+        let d: CGFloat
+        let tx: CGFloat
+        let ty: CGFloat
     }
 }
 
@@ -106,12 +203,12 @@ struct GameProgress {
         Date().timeIntervalSince(lastProgressTime)
     }
     
-    mutating func markPieceCorrect(_ pieceType: String) {
-        correctPieces.insert(pieceType)
+    mutating func markPieceCorrect(_ pieceType: TangramPieceType) {
+        correctPieces.insert(pieceType.rawValue)
         lastProgressTime = Date()
     }
     
-    mutating func markPieceIncorrect(_ pieceType: String) {
-        correctPieces.remove(pieceType)
+    mutating func markPieceIncorrect(_ pieceType: TangramPieceType) {
+        correctPieces.remove(pieceType.rawValue)
     }
 }

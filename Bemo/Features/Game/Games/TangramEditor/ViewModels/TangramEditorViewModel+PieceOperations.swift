@@ -53,7 +53,7 @@ extension TangramEditorViewModel {
                 rotation: rotation * .pi / 180,
                 canvasSize: size
             )
-            piece.isLocked = true  // First piece is always locked
+            // First piece doesn't need special treatment anymore
             puzzle.pieces.append(piece)
             // Clear pending piece type after successful placement
             uiState.pendingPieceType = nil
@@ -61,9 +61,9 @@ extension TangramEditorViewModel {
             // After placing first piece, transition to selecting next piece
             _ = transitionToState(.selectingNextPiece)
             setupNewState()  // Clear pending state properly
-            autoLockPieces()  // Auto-lock based on connections
             updateManipulationModes()
             validate()
+            // No need to recenter for first piece - it's already centered
             notifyPuzzleChanged()
             toastService.showSuccess("First piece placed")
             
@@ -120,9 +120,10 @@ extension TangramEditorViewModel {
                 print("[DEBUG] After force cleanup - selectedPendingPoints: \(uiState.selectedPendingPoints.count)")
                 print("[DEBUG] Final state: \(editorState)")
                 
-                autoLockPieces()
                 updateManipulationModes()
                 validate()
+                // Recenter puzzle after adding connected piece
+                recenterPuzzle()
                 notifyPuzzleChanged()
                 toastService.showSuccess("Piece connected successfully")
             } else {
@@ -142,9 +143,10 @@ extension TangramEditorViewModel {
             // Setup the new state (clears pending state)
             setupNewState()
             
-            autoLockPieces()  // Auto-lock based on connections
             updateManipulationModes()
             validate()
+            // Recenter puzzle after preview placement
+            recenterPuzzle()
             notifyPuzzleChanged()
             toastService.showSuccess("Piece placed successfully")
             
@@ -214,11 +216,12 @@ extension TangramEditorViewModel {
     // MARK: - Piece Operations
     
     func removePiece(id: String) {
-        // Check if piece is locked
-        guard let piece = puzzle.pieces.first(where: { $0.id == id }) else { return }
+        // Check if piece can be removed (not structurally critical)
+        guard puzzle.pieces.first(where: { $0.id == id }) != nil else { return }
         
-        if piece.isLocked {
-            handleError(.operationNotAllowed("Piece must be unlocked before deletion"))
+        // For now, allow deletion of any piece except the first one
+        if puzzle.pieces.first?.id == id && puzzle.pieces.count > 1 {
+            handleError(.operationNotAllowed("Cannot delete the base piece while other pieces exist"))
             return
         }
         
@@ -233,12 +236,12 @@ extension TangramEditorViewModel {
     }
     
     func removeSelectedPieces() {
-        // Check if any selected pieces are locked
+        // Check if any selected pieces are the base piece
         let selectedPieces = puzzle.pieces.filter { uiState.selectedPieceIds.contains($0.id) }
-        let lockedPieces = selectedPieces.filter { $0.isLocked }
         
-        if !lockedPieces.isEmpty {
-            handleError(.operationNotAllowed("\(lockedPieces.count) piece(s) must be unlocked before deletion"))
+        if let firstPiece = puzzle.pieces.first,
+           selectedPieces.contains(where: { $0.id == firstPiece.id }) && puzzle.pieces.count > 1 {
+            handleError(.operationNotAllowed("Cannot delete the base piece while other pieces exist"))
             return
         }
         
@@ -265,58 +268,19 @@ extension TangramEditorViewModel {
         notifyPuzzleChanged()
     }
     
-    // MARK: - Piece Locking
-    
-    func togglePieceLock(id: String) {
-        undoManager.saveState(puzzle: puzzle)
-        
-        let result = lockingService.toggleLock(id: id, in: &puzzle)
-        switch result {
-        case .success(let isNowLocked):
-            if isNowLocked {
-                _ = transitionToState(.pieceSelected(id: id, isLocked: true))
-                toastService.showInfo("Piece locked")
-            } else {
-                _ = transitionToState(.pieceSelected(id: id, isLocked: false))
-                toastService.showSuccess("Piece unlocked")
-            }
-            updateManipulationModes()
-            notifyPuzzleChanged()
-            
-        case .failure(let error):
-            handleError(error)
-        }
-    }
-    
-    func unlockPiece(id: String) {
-        undoManager.saveState(puzzle: puzzle)
-        
-        let result = lockingService.unlockPiece(id: id, in: &puzzle)
-        switch result {
-        case .success:
-            _ = transitionToState(.manipulatingExistingPiece(id: id, mode: determineManipulationMode(for: id)))
-            updateManipulationModes()
-            notifyPuzzleChanged()
-            
-        case .failure(let error):
-            handleError(error)
-        }
-    }
-    
-    func autoLockPieces() {
-        lockingService.autoLockPieces(in: &puzzle)
-        updateManipulationModes()
-    }
+    // MARK: - Piece Manipulation Management
     
     // MARK: - Manipulation Mode Management
     
     /// Determine manipulation mode for a piece based on its connections
     func determineManipulationMode(for pieceId: String) -> ManipulationMode {
         guard let piece = puzzle.pieces.first(where: { $0.id == pieceId }) else {
-            return .locked
+            return .fixed
         }
         
-        return manipulationService.calculateManipulationMode(piece: piece, connections: puzzle.connections)
+        // Check if it's the first piece
+        let isFirstPiece = puzzle.pieces.first?.id == pieceId
+        return manipulationService.calculateManipulationMode(piece: piece, connections: puzzle.connections, isFirstPiece: isFirstPiece)
     }
     
     /// Update manipulation modes for all pieces

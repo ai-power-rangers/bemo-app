@@ -66,23 +66,25 @@ class TangramEditorStateMachine {
                 return "Rotate the piece around the connection point"
             case .slidable:
                 return "Slide the piece along the edge"
-            case .locked:
-                return "Piece position is locked by connections"
+            case .fixed:
+                return "Piece position is fixed by connections"
+            case .free:
+                return "Move the piece freely"
             }
         case .previewingPlacement:
             return "Confirm or cancel piece placement"
-        case .pieceSelected(_, let isLocked):
-            return isLocked ? "Piece is locked. Unlock to edit" : "Piece selected for editing"
-        case .unlockingPiece:
-            return "Unlocking piece for manipulation"
+        case .pieceSelected:
+            return "Piece selected for editing"
         case .manipulatingExistingPiece(_, let mode):
             switch mode {
             case .rotatable:
                 return "Rotate the piece around the connection point"
             case .slidable:
                 return "Slide the piece along the edge"
-            case .locked:
+            case .fixed:
                 return "Piece cannot be manipulated"
+            case .free:
+                return "Move the piece freely"
             }
         case .error(let message):
             return message
@@ -155,11 +157,9 @@ class TangramEditorStateMachine {
             return true  // For cancellation
             
         // Editing flow
-        case (.pieceSelected, .unlockingPiece):
+        case (.pieceSelected, .manipulatingExistingPiece):
             return true
         case (.pieceSelected, .idle):
-            return true
-        case (.unlockingPiece, .manipulatingExistingPiece):
             return true
         case (.manipulatingExistingPiece, .idle):
             return true
@@ -197,8 +197,7 @@ enum EditorState: Equatable {
     case previewingPlacement(piece: TangramPiece)
     
     // Editing existing pieces
-    case pieceSelected(id: String, isLocked: Bool)
-    case unlockingPiece(id: String)
+    case pieceSelected(id: String)
     case manipulatingExistingPiece(id: String, mode: ManipulationMode)
     
     // Error recovery
@@ -223,9 +222,7 @@ enum EditorState: Equatable {
             return lType == rType && lMode == rMode && lRot == rRot
         case (.previewingPlacement(let lPiece), .previewingPlacement(let rPiece)):
             return lPiece == rPiece
-        case (.pieceSelected(let lId, let lLocked), .pieceSelected(let rId, let rLocked)):
-            return lId == rId && lLocked == rLocked
-        case (.unlockingPiece(let lId), .unlockingPiece(let rId)):
+        case (.pieceSelected(let lId), .pieceSelected(let rId)):
             return lId == rId
         case (.manipulatingExistingPiece(let lId, let lMode), 
               .manipulatingExistingPiece(let rId, let rMode)):

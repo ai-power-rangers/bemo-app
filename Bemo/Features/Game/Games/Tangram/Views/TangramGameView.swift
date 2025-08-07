@@ -25,7 +25,50 @@ struct TangramGameView: View {
         Group {
             switch viewModel.currentPhase {
             case .selectingPuzzle:
-                PuzzleSelectionView(viewModel: viewModel.puzzleSelectionViewModel)
+                VStack {
+                    Text("Tangram Puzzles")
+                        .font(.largeTitle)
+                        .padding()
+                    
+                    if viewModel.availablePuzzles.isEmpty {
+                        Text("Loading puzzles from database...")
+                            .foregroundColor(.secondary)
+                            .padding()
+                        
+                        ProgressView()
+                            .padding()
+                    } else {
+                        Text("Available Puzzles:")
+                            .font(.headline)
+                            .padding()
+                        
+                        VStack(spacing: 20) {
+                            ForEach(viewModel.availablePuzzles, id: \.id) { puzzle in
+                                Button(action: {
+                                    viewModel.selectPuzzle(puzzle)
+                                }) {
+                                    VStack {
+                                        Text(puzzle.name)
+                                            .font(.title2)
+                                            .fontWeight(.semibold)
+                                        Text("Category: \(puzzle.category)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        Text("Difficulty: \(puzzle.difficulty)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.blue.opacity(0.1))
+                                    .cornerRadius(10)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding()
+                    }
+                }
                 
             case .playingPuzzle:
                 gamePlayView

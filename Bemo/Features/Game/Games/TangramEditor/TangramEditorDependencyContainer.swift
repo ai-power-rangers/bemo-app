@@ -40,9 +40,6 @@ class TangramEditorDependencyContainer {
         return ValidationService()
     }()
     
-    lazy var lockingService: PieceLockingService = {
-        return PieceLockingService()
-    }()
     
     lazy var manipulationService: PieceManipulationService = {
         return PieceManipulationService()
@@ -76,7 +73,6 @@ class TangramEditorDependencyContainer {
             persistenceService: persistenceService,
             undoManager: undoManager,
             validationService: validationService,
-            lockingService: lockingService,
             manipulationService: manipulationService,
             stateManager: stateManager,
             toastService: toastService

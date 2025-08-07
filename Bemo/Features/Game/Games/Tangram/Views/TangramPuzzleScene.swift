@@ -2,12 +2,12 @@
 //  TangramPuzzleScene.swift
 //  Bemo
 //
-//  SpriteKit scene for Tangram puzzle gameplay with physics and animations
+//  SpriteKit scene for Tangram puzzle gameplay with accurate geometry rendering
 //
 
-// WHAT: SpriteKit scene managing puzzle pieces, physics, and animations
-// ARCHITECTURE: SKScene integrated into SwiftUI via SpriteView
-// USAGE: Handles all game canvas rendering and interactions
+// WHAT: SpriteKit scene that renders tangram pieces using proper vertex-based geometry
+// ARCHITECTURE: SKScene integrated into SwiftUI, uses transform-based positioning
+// USAGE: Handles puzzle rendering with accurate piece shapes and transforms
 
 import SpriteKit
 import SwiftUI
@@ -97,21 +97,32 @@ class TangramPuzzleScene: SKScene {
     }
     
     private func createTargetPiece(_ target: GamePuzzleData.TargetPiece) {
-        let shape = createPieceShape(type: target.pieceType)
+        // Get transformed vertices for the target piece
+        let normalizedVertices = TangramGameGeometry.normalizedVertices(for: target.pieceType)
+        let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
+        let transformedVertices = TangramGameGeometry.transformVertices(scaledVertices, with: target.transform)
+        
+        // Create shape from transformed vertices
+        let path = UIBezierPath()
+        if let firstVertex = transformedVertices.first {
+            path.move(to: firstVertex)
+            for vertex in transformedVertices.dropFirst() {
+                path.addLine(to: vertex)
+            }
+            path.close()
+        }
+        
+        let shape = SKShapeNode(path: path.cgPath)
         shape.fillColor = SKColor.black
         shape.alpha = targetAlpha
         shape.strokeColor = SKColor.darkGray
         shape.lineWidth = 1.0
         
-        // Position relative to puzzle center (top half of screen)
-        shape.position = CGPoint(
-            x: puzzleCenter.x + target.position.x - 300,
-            y: puzzleCenter.y + target.position.y - 300
-        )
-        shape.zRotation = CGFloat(target.rotation * .pi / 180)
-        shape.name = "target_\(target.pieceType)"
+        // Offset to center the puzzle in the view
+        shape.position = CGPoint(x: puzzleCenter.x, y: puzzleCenter.y)
+        shape.name = "target_\(target.pieceType.rawValue)"
         
-        targetPieces[target.pieceType] = shape
+        targetPieces[target.pieceType.rawValue] = shape
         puzzleLayer.addChild(shape)
     }
     
@@ -138,10 +149,10 @@ class TangramPuzzleScene: SKScene {
             
             // Random initial rotation
             piece.zRotation = CGFloat.random(in: 0...(2 * .pi))
-            piece.name = "piece_\(pieceType)"
+            piece.name = "piece_\(pieceType.rawValue)"
             piece.zPosition = CGFloat(index)
             
-            availablePieces[pieceType] = piece
+            availablePieces[pieceType.rawValue] = piece
             piecesLayer.addChild(piece)
         }
     }
@@ -156,7 +167,8 @@ class TangramPuzzleScene: SKScene {
         // Check if we tapped a movable piece
         for node in nodes {
             if let piece = node as? PuzzlePieceNode,
-               !completedPieces.contains(piece.pieceType ?? "") {
+               let pieceType = piece.pieceType,
+               !completedPieces.contains(pieceType.rawValue) {
                 selectedPiece = piece
                 piece.isSelected = true
                 
@@ -223,7 +235,7 @@ class TangramPuzzleScene: SKScene {
         
         // Check if close enough to snap
         if let pieceType = selected.pieceType,
-           let target = targetPieces[pieceType] {
+           let target = targetPieces[pieceType.rawValue] {
             
             let distance = hypot(selected.position.x - target.position.x,
                                selected.position.y - target.position.y)
@@ -255,7 +267,7 @@ class TangramPuzzleScene: SKScene {
     
     private func checkSnapPreview(for piece: PuzzlePieceNode) {
         guard let pieceType = piece.pieceType,
-              let target = targetPieces[pieceType] else { return }
+              let target = targetPieces[pieceType.rawValue] else { return }
         
         let distance = hypot(piece.position.x - target.position.x,
                            piece.position.y - target.position.y)
@@ -283,7 +295,7 @@ class TangramPuzzleScene: SKScene {
         
         piece.run(snapGroup) {
             // Mark as completed
-            self.completedPieces.insert(pieceType)
+            self.completedPieces.insert(pieceType.rawValue)
             piece.isCompleted = true
             piece.zPosition = 10 // Above unplaced pieces but below selected
             
@@ -294,7 +306,7 @@ class TangramPuzzleScene: SKScene {
             self.showCompletionEffect(at: piece.position)
             
             // Notify delegate
-            self.onPieceCompleted?(pieceType)
+            self.onPieceCompleted?(pieceType.rawValue)
             
             // Check if puzzle is complete
             self.checkPuzzleCompletion()
@@ -372,145 +384,79 @@ class TangramPuzzleScene: SKScene {
     
     // MARK: - Helper Methods
     
-    private func createPieceShape(type: String) -> SKShapeNode {
-        let path = UIBezierPath()
+    private func createPieceShape(type: TangramPieceType) -> SKShapeNode {
+        // Get normalized vertices from geometry
+        let normalizedVertices = TangramGameGeometry.normalizedVertices(for: type)
         
-        switch type {
-        case "smallTriangle1", "smallTriangle2":
-            path.move(to: CGPoint(x: 0, y: 0))
-            path.addLine(to: CGPoint(x: 50, y: 0))
-            path.addLine(to: CGPoint(x: 0, y: 50))
-            path.close()
-            
-        case "mediumTriangle":
-            path.move(to: CGPoint(x: 0, y: 0))
-            path.addLine(to: CGPoint(x: 70, y: 0))
-            path.addLine(to: CGPoint(x: 0, y: 70))
-            path.close()
-            
-        case "largeTriangle1", "largeTriangle2":
-            path.move(to: CGPoint(x: 0, y: 0))
-            path.addLine(to: CGPoint(x: 100, y: 0))
-            path.addLine(to: CGPoint(x: 0, y: 100))
-            path.close()
-            
-        case "square":
-            path.move(to: CGPoint(x: -25, y: -25))
-            path.addLine(to: CGPoint(x: 25, y: -25))
-            path.addLine(to: CGPoint(x: 25, y: 25))
-            path.addLine(to: CGPoint(x: -25, y: 25))
-            path.close()
-            
-        case "parallelogram":
-            path.move(to: CGPoint(x: 0, y: 0))
-            path.addLine(to: CGPoint(x: 70, y: 0))
-            path.addLine(to: CGPoint(x: 35, y: 35))
-            path.addLine(to: CGPoint(x: -35, y: 35))
-            path.close()
-            
-        default:
-            // Default shape
-            path.move(to: CGPoint(x: -25, y: -25))
-            path.addLine(to: CGPoint(x: 25, y: -25))
-            path.addLine(to: CGPoint(x: 25, y: 25))
-            path.addLine(to: CGPoint(x: -25, y: 25))
+        // Scale vertices to visual size
+        let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
+        
+        // Create path from scaled vertices
+        let path = UIBezierPath()
+        if let firstVertex = scaledVertices.first {
+            path.move(to: firstVertex)
+            for vertex in scaledVertices.dropFirst() {
+                path.addLine(to: vertex)
+            }
             path.close()
         }
         
-        return SKShapeNode(path: path.cgPath)
+        let shape = SKShapeNode(path: path.cgPath)
+        shape.fillColor = TangramGameConstants.Colors.uiColor(for: type)
+        shape.strokeColor = shape.fillColor.darker(by: 20)
+        shape.lineWidth = 2
+        
+        return shape
     }
 }
 
 // MARK: - Puzzle Piece Node
 
-class PuzzlePieceNode: SKSpriteNode {
-    var pieceType: String?
+class PuzzlePieceNode: SKNode {
+    var pieceType: TangramPieceType?
     var isSelected: Bool = false
     var isCompleted: Bool = false
+    private var shapeNode: SKShapeNode?
     
-    init(pieceType: String) {
-        // Create texture from piece type
-        let color = Self.pieceTypeToColor(pieceType)
-        let texture = SKTexture(image: Self.createPieceImage(type: pieceType, color: color))
-        
-        super.init(texture: texture, color: .clear, size: CGSize(width: 100, height: 100))
+    init(pieceType: TangramPieceType) {
+        super.init()
         
         self.pieceType = pieceType
-        self.name = "piece_\(pieceType)"
+        self.name = "piece_\(pieceType.rawValue)"
+        
+        // Create shape node with proper geometry
+        let shapeNode = createShape(for: pieceType)
+        self.shapeNode = shapeNode
+        addChild(shapeNode)
     }
     
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
     
-    private static func pieceTypeToColor(_ pieceType: String) -> UIColor {
-        switch pieceType {
-        case "largeTriangle1", "largeTriangle2":
-            return .systemBlue
-        case "mediumTriangle":
-            return .systemGreen
-        case "smallTriangle1", "smallTriangle2":
-            return .systemOrange
-        case "square":
-            return .systemYellow
-        case "parallelogram":
-            return .systemPurple
-        default:
-            return .systemGray
-        }
-    }
-    
-    private static func createPieceImage(type: String, color: UIColor) -> UIImage {
-        let size = CGSize(width: 100, height: 100)
-        let renderer = UIGraphicsImageRenderer(size: size)
+    private func createShape(for pieceType: TangramPieceType) -> SKShapeNode {
+        // Get normalized vertices from geometry
+        let normalizedVertices = TangramGameGeometry.normalizedVertices(for: pieceType)
         
-        return renderer.image { ctx in
-            color.setFill()
-            
-            let path = UIBezierPath()
-            switch type {
-            case "smallTriangle1", "smallTriangle2":
-                path.move(to: CGPoint(x: 25, y: 25))
-                path.addLine(to: CGPoint(x: 75, y: 25))
-                path.addLine(to: CGPoint(x: 25, y: 75))
-                
-            case "mediumTriangle":
-                path.move(to: CGPoint(x: 15, y: 15))
-                path.addLine(to: CGPoint(x: 85, y: 15))
-                path.addLine(to: CGPoint(x: 15, y: 85))
-                
-            case "largeTriangle1", "largeTriangle2":
-                path.move(to: CGPoint(x: 0, y: 0))
-                path.addLine(to: CGPoint(x: 100, y: 0))
-                path.addLine(to: CGPoint(x: 0, y: 100))
-                
-            case "square":
-                path.move(to: CGPoint(x: 25, y: 25))
-                path.addLine(to: CGPoint(x: 75, y: 25))
-                path.addLine(to: CGPoint(x: 75, y: 75))
-                path.addLine(to: CGPoint(x: 25, y: 75))
-                
-            case "parallelogram":
-                path.move(to: CGPoint(x: 15, y: 40))
-                path.addLine(to: CGPoint(x: 85, y: 40))
-                path.addLine(to: CGPoint(x: 70, y: 60))
-                path.addLine(to: CGPoint(x: 0, y: 60))
-                
-            default:
-                path.move(to: CGPoint(x: 25, y: 25))
-                path.addLine(to: CGPoint(x: 75, y: 25))
-                path.addLine(to: CGPoint(x: 75, y: 75))
-                path.addLine(to: CGPoint(x: 25, y: 75))
+        // Scale vertices to visual size
+        let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
+        
+        // Create path from scaled vertices
+        let path = UIBezierPath()
+        if let firstVertex = scaledVertices.first {
+            path.move(to: firstVertex)
+            for vertex in scaledVertices.dropFirst() {
+                path.addLine(to: vertex)
             }
-            
             path.close()
-            path.fill()
-            
-            // Add subtle border
-            color.darker(by: 20).setStroke()
-            path.lineWidth = 2
-            path.stroke()
         }
+        
+        let shape = SKShapeNode(path: path.cgPath)
+        shape.fillColor = TangramGameConstants.Colors.uiColor(for: pieceType)
+        shape.strokeColor = shape.fillColor.darker(by: 20)
+        shape.lineWidth = 2
+        
+        return shape
     }
 }
 
