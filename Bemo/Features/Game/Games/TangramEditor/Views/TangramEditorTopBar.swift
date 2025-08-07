@@ -9,7 +9,7 @@ import SwiftUI
 
 struct TangramEditorTopBar: View {
     @Bindable var viewModel: TangramEditorViewModel
-    let delegate: GameDelegate?
+    let delegate: DevToolDelegate?
     
     var body: some View {
         HStack {

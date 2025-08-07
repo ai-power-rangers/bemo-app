@@ -16,6 +16,7 @@ class APIService {
     private let baseURL = "https://api.bemoapp.com/v1"
     private let session = URLSession.shared
     private weak var authenticationService: AuthenticationService?
+    private weak var supabaseService: SupabaseService?
     private var cancellables = Set<AnyCancellable>()
     
     enum APIError: Error {
@@ -25,10 +26,15 @@ class APIService {
         case networkError(Error)
         case unauthorized
         case serverError(Int)
+        case supabaseNotAvailable
     }
     
     init(authenticationService: AuthenticationService? = nil) {
         self.authenticationService = authenticationService
+    }
+    
+    func setSupabaseService(_ supabaseService: SupabaseService) {
+        self.supabaseService = supabaseService
     }
     
     // MARK: - User Management
@@ -52,7 +58,22 @@ class APIService {
     // MARK: - Profile Management
     
     func createChildProfile(userId: String, name: String, age: Int, gender: String) -> AnyPublisher<UserProfile, APIError> {
-        // Stub implementation
+        guard let supabaseService = supabaseService else {
+            return Fail(error: APIError.supabaseNotAvailable)
+                .eraseToAnyPublisher()
+        }
+        
+        // Verify Supabase is connected before attempting profile creation
+        guard supabaseService.isConnected else {
+            print("DEBUG: APIService - Supabase not connected, cannot create profile")
+            print("DEBUG: This is likely due to Supabase configuration issues (audience mismatch)")
+            return Fail(error: APIError.supabaseNotAvailable)
+                .eraseToAnyPublisher()
+        }
+        
+        print("DEBUG: APIService - Creating profile for user: \(userId), name: '\(name)', age: \(age)")
+        
+        // Create profile object
         let profile = UserProfile(
             id: UUID().uuidString,
             userId: userId,
@@ -62,9 +83,19 @@ class APIService {
             totalXP: 0,
             preferences: UserPreferences()
         )
-        return Just(profile)
-            .setFailureType(to: APIError.self)
-            .eraseToAnyPublisher()
+        
+        // Use Supabase to persist the profile
+        return Future { promise in
+            Task {
+                do {
+                    try await supabaseService.syncChildProfile(profile)
+                    promise(.success(profile))
+                } catch {
+                    promise(.failure(.networkError(error)))
+                }
+            }
+        }
+        .eraseToAnyPublisher()
     }
     
     func getChildProfiles(userId: String) -> AnyPublisher<[UserProfile], APIError> {

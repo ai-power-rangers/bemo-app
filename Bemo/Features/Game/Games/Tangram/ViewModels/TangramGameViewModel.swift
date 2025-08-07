@@ -55,12 +55,20 @@ class TangramGameViewModel {
     private let databaseLoader: TangramDatabaseLoader
     private let puzzleLibraryService: PuzzleLibraryService
     private let hintEngine = TangramHintEngine()
+    private let supabaseService: SupabaseService?
     var availablePuzzles: [GamePuzzleData] = []
+    
+    // MARK: - Metrics Tracking
+    
+    private var gameProgress: GameProgress?
+    private var currentSessionId: String?
+    private var currentChildProfileId: String?
     
     // MARK: - Initialization
     
     init(delegate: GameDelegate, supabaseService: SupabaseService? = nil, puzzleManagementService: PuzzleManagementService? = nil) {
         self.delegate = delegate
+        self.supabaseService = supabaseService
         self.databaseLoader = TangramDatabaseLoader(supabaseService: supabaseService)
         self.puzzleLibraryService = PuzzleLibraryService(supabaseService: supabaseService)
         
@@ -112,15 +120,34 @@ class TangramGameViewModel {
         // Reset timer
         timerStarted = false
         elapsedTime = 0
+        
+        // Initialize GameProgress for automatic time tracking
+        gameProgress = GameProgress(
+            puzzleId: puzzle.id,
+            correctPieces: Set(),
+            totalPieces: puzzle.targetPieces.count,
+            hintsUsed: 0,
+            startTime: Date(),
+            lastProgressTime: Date()
+        )
+        
+        // Start game session if we have supabase service
+        startGameSession(puzzleId: puzzle.id, puzzleName: puzzle.name, difficulty: puzzle.difficulty)
+        
         // Update progress to 0 when starting
         delegate?.gameDidUpdateProgress(Float(0.0))
     }
     
     func exitToSelection() {
         stopTimer()
+        
+        // End game session if active
+        endGameSession(completed: false)
+        
         currentPhase = .selectingPuzzle
         selectedPuzzle = nil
         gameState = nil
+        gameProgress = nil
         progress = 0.0
         showHints = false
         timerStarted = false
@@ -132,29 +159,27 @@ class TangramGameViewModel {
     }
     
     func requestHint() {
-        // Legacy method - redirect to new structured hint system
         requestStructuredHint()
     }
     
     func toggleHints() {
-        showHints.toggle()
-        if showHints {
-            // When toggling on, also request a structured hint
-            requestStructuredHint()
-        } else {
-            // Clear current hint when toggling off
-            currentHint = nil
-            isShowingHintAnimation = false
-        }
+        print("DEBUG: toggleHints called")
+        // Just request a hint, don't toggle state
+        requestStructuredHint()
     }
     
     func requestStructuredHint() {
-        guard let puzzle = selectedPuzzle else { return }
+        print("DEBUG: requestStructuredHint called")
+        guard let puzzle = selectedPuzzle else { 
+            print("DEBUG: No selected puzzle")
+            return 
+        }
         
         let timeSinceProgress = Date().timeIntervalSince(lastProgressTime)
         
         // Get intelligent hint
-        currentHint = hintEngine.determineNextHint(
+        print("DEBUG: Calling hintEngine.determineNextHint")
+        let hint = hintEngine.determineNextHint(
             puzzle: puzzle,
             placedPieces: placedPieces,
             lastMovedPiece: lastMovedPiece,
@@ -162,10 +187,24 @@ class TangramGameViewModel {
             previousHints: hintHistory
         )
         
-        if let hint = currentHint {
+        print("DEBUG: Got hint: \(hint != nil)")
+        if let hint = hint {
+            print("DEBUG: Hint type: \(hint.hintType)")
+            print("DEBUG: Hint target piece: \(hint.targetPiece.rawValue)")
+            
+            // Set the hint directly - no need for nil pattern
+            print("DEBUG: Setting currentHint directly")
+            currentHint = hint
+            
             // Track hint
             hintHistory.append(hint)
             gameState?.incrementHintCount()
+            
+            // Update game progress
+            gameProgress?.hintsUsed += 1
+            
+            // Track hint event to database
+            trackHintUsage(hint: hint)
             
             // Show animation
             isShowingHintAnimation = true
@@ -290,7 +329,7 @@ class TangramGameViewModel {
     
     // MARK: - SpriteKit Handlers
     
-    func handlePieceCompletion(pieceType: String) {
+    func handlePieceCompletion(pieceType: String, isFlipped: Bool = false) {
         // Create a correctly placed piece
         let mockPiece = RecognizedPiece(
             id: "sprite_\(pieceType)_\(UUID().uuidString.prefix(8))",
@@ -305,6 +344,7 @@ class TangramGameViewModel {
         )
         
         var placed = PlacedPiece(from: mockPiece)
+        placed.isFlipped = isFlipped  // Track flip state from SpriteKit
         placed.validationState = .correct
         
         // Update placed pieces - convert String to TangramPieceType
@@ -326,6 +366,10 @@ class TangramGameViewModel {
         // Puzzle completed via SpriteKit
         stopTimer()
         currentPhase = .puzzleComplete
+        
+        // Track completion metrics
+        trackPuzzleCompletion()
+        
         let xpAwarded = calculateXP()
         delegate?.gameDidCompleteLevel(xpAwarded: xpAwarded)
     }
@@ -419,10 +463,10 @@ class TangramGameViewModel {
                 continue
             }
             
-            // Check if this piece matches any target position
+            // Check if this piece matches any target position with proper validation
             let isCorrect = puzzle.targetPieces.contains { target in
-                // For now, simple matching - will need proper position extraction
-                target.pieceType == piece.pieceType
+                // Use the proper matches() method that validates position and rotation
+                target.matches(piece)
             }
             
             piece.validationState = isCorrect ? PlacedPiece.ValidationState.correct : PlacedPiece.ValidationState.incorrect
@@ -460,13 +504,30 @@ class TangramGameViewModel {
     
     private func completePuzzle() {
         currentPhase = .puzzleComplete
+        
+        // Track completion metrics
+        trackPuzzleCompletion()
+        
         let xpAwarded = calculateXP()
         delegate?.gameDidCompleteLevel(xpAwarded: xpAwarded)
     }
     
     private func calculateXP() -> Int {
-        // Base XP with modifiers for hints, time, etc.
-        return 100
+        guard let progress = gameProgress else { return 100 }
+        
+        let completionTime = Date().timeIntervalSince(progress.startTime)
+        
+        // Base XP
+        let baseXP = 100
+        
+        // Time bonus (lose 1 XP per 10 seconds, max 50 bonus)
+        let timeBonus = max(0, 50 - Int(completionTime / 10))
+        
+        // Hint penalty (10 XP per hint used)
+        let hintPenalty = progress.hintsUsed * 10
+        
+        // Calculate final XP (minimum 10)
+        return max(10, baseXP + timeBonus - hintPenalty)
     }
     
     // MARK: - Game State Management
@@ -489,5 +550,152 @@ class TangramGameViewModel {
         // Restore placed pieces (not optional - array is always present)
         placedPieces = state.placedPieces
         updateAnchorPiece()
+    }
+    
+    // MARK: - Metrics Tracking
+    
+    func setChildProfileId(_ childId: String) {
+        currentChildProfileId = childId
+    }
+    
+    private func startGameSession(puzzleId: String, puzzleName: String, difficulty: Int) {
+        Task {
+            guard let supabase = supabaseService,
+                  let childId = currentChildProfileId else {
+                print("Warning: Cannot start game session - missing supabase service or child ID")
+                return
+            }
+            
+            // Check if we're authenticated
+            if !supabase.isConnected {
+                print("Warning: Not authenticated with Supabase - game session will not be tracked")
+                return
+            }
+            
+            do {
+                currentSessionId = try await supabase.startGameSession(
+                    childProfileId: childId,
+                    gameId: "tangram",
+                    sessionData: [
+                        "puzzle_id": puzzleId,
+                        "puzzle_name": puzzleName,
+                        "difficulty": difficulty
+                    ]
+                )
+                print("Started game session: \(currentSessionId ?? "unknown")")
+            } catch {
+                print("Failed to start game session: \(error)")
+                // Don't let tracking errors interrupt gameplay
+                currentSessionId = nil
+            }
+        }
+    }
+    
+    private func endGameSession(completed: Bool) {
+        Task {
+            guard let supabase = supabaseService,
+                  let sessionId = currentSessionId else {
+                return
+            }
+            
+            let finalXP = completed ? calculateXP() : 0
+            let levelsCompleted = completed ? 1 : 0
+            
+            do {
+                try await supabase.endGameSession(
+                    sessionId: sessionId,
+                    finalXPEarned: finalXP,
+                    finalLevelsCompleted: levelsCompleted,
+                    finalSessionData: [
+                        "completed": completed,
+                        "hints_used": gameProgress?.hintsUsed ?? 0,
+                        "completion_time": gameProgress.map { Date().timeIntervalSince($0.startTime) } ?? 0
+                    ]
+                )
+                print("Ended game session: \(sessionId)")
+            } catch {
+                print("Failed to end game session: \(error)")
+            }
+            
+            currentSessionId = nil
+        }
+    }
+    
+    private func trackHintUsage(hint: TangramHintEngine.HintData) {
+        Task {
+            guard let supabase = supabaseService,
+                  let childId = currentChildProfileId,
+                  let puzzle = selectedPuzzle,
+                  let progress = gameProgress else {
+                return
+            }
+            
+            // Check if we're authenticated
+            if !supabase.isConnected {
+                print("Warning: Not authenticated - hint usage will not be tracked")
+                return
+            }
+            
+            do {
+                try await supabase.trackLearningEvent(
+                    childProfileId: childId,
+                    eventType: "hint_used",
+                    gameId: "tangram",
+                    xpAwarded: 0,
+                    eventData: [
+                        "puzzle_id": puzzle.id,
+                        "puzzle_name": puzzle.name,
+                        "hint_type": String(describing: hint.hintType),
+                        "hint_reason": String(describing: hint.reason),
+                        "target_piece": hint.targetPiece.rawValue,
+                        "time_since_start": Date().timeIntervalSince(progress.startTime),
+                        "pieces_completed": progress.correctPieces.count,
+                        "total_hints_used": progress.hintsUsed
+                    ],
+                    sessionId: currentSessionId
+                )
+            } catch {
+                print("Failed to track hint usage: \(error)")
+                // Don't let tracking errors interrupt gameplay
+            }
+        }
+    }
+    
+    private func trackPuzzleCompletion() {
+        Task {
+            guard let supabase = supabaseService,
+                  let childId = currentChildProfileId,
+                  let puzzle = selectedPuzzle,
+                  let progress = gameProgress else {
+                return
+            }
+            
+            let completionTime = Date().timeIntervalSince(progress.startTime)
+            let finalXP = calculateXP()
+            
+            do {
+                try await supabase.trackLearningEvent(
+                    childProfileId: childId,
+                    eventType: "puzzle_completed",
+                    gameId: "tangram",
+                    xpAwarded: finalXP,
+                    eventData: [
+                        "puzzle_id": puzzle.id,
+                        "puzzle_name": puzzle.name,
+                        "difficulty": puzzle.difficulty,
+                        "completion_time_seconds": completionTime,
+                        "hints_used": progress.hintsUsed,
+                        "xp_awarded": finalXP
+                    ],
+                    sessionId: currentSessionId
+                )
+                
+                // End the session as completed
+                endGameSession(completed: true)
+                
+            } catch {
+                print("Failed to track puzzle completion: \(error)")
+            }
+        }
     }
 }

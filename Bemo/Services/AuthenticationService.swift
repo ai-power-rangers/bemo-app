@@ -34,6 +34,9 @@ class AuthenticationService: NSObject {
     // Optional Supabase integration - will be injected after initialization
     private weak var supabaseService: SupabaseService?
     
+    // Optional profile service - will be injected after initialization
+    private weak var profileService: ProfileService?
+    
     // Optional error tracking - will be injected after initialization
     private weak var errorTrackingService: ErrorTrackingService?
     
@@ -45,6 +48,7 @@ class AuthenticationService: NSObject {
         case unknown
         case tokenExpired
         case networkError
+        case supabaseConnectionFailed
         
         var errorDescription: String? {
             switch self {
@@ -62,6 +66,8 @@ class AuthenticationService: NSObject {
                 return "Session expired"
             case .networkError:
                 return "Network error"
+            case .supabaseConnectionFailed:
+                return "Database connection failed. Please try again."
             }
         }
     }
@@ -75,6 +81,10 @@ class AuthenticationService: NSObject {
     
     func setSupabaseService(_ supabaseService: SupabaseService) {
         self.supabaseService = supabaseService
+    }
+    
+    func setProfileService(_ profileService: ProfileService) {
+        self.profileService = profileService
     }
     
     func setErrorTrackingService(_ errorTrackingService: ErrorTrackingService) {
@@ -102,6 +112,9 @@ class AuthenticationService: NSObject {
         deleteToken(key: accessTokenKey)
         deleteToken(key: refreshTokenKey)
         deleteToken(key: userIdKey)
+        
+        // Clear all local profile data to prevent cross-user contamination
+        profileService?.clearAllLocalProfiles()
         
         // Update state
         isAuthenticated = false
@@ -203,50 +216,65 @@ class AuthenticationService: NSObject {
         
         print("Authentication successful for user: \(user.id)")
         
-        // Sync with Supabase if available (non-blocking)
-        syncWithSupabase(user: user)
-    }
-    
-    private func syncWithSupabase(user: AuthenticatedUser) {
-        guard let supabaseService = supabaseService else {
-            print("Supabase service not available - skipping sync")
-            return
-        }
-        
-        // Background sync - don't block existing functionality
+        // Sync with Supabase if available (now blocking - required for profile creation)
         Task {
             do {
-                // Use the actual identity token and nonce for Supabase
-                guard let nonce = user.nonce else {
-                    print("Error: Nonce missing for Supabase sync")
-                    errorTrackingService?.trackError(
-                        AuthenticationError.unknown,
-                        context: ErrorContext(
-                            feature: "AuthenticationService",
-                            action: "syncWithSupabase",
-                            metadata: ["error": "nonce_missing"]
-                        )
-                    )
-                    return
-                }
-                
-                try await supabaseService.signInWithAppleIdentity(
-                    user.appleUserIdentifier,
-                    identityToken: user.accessToken,
-                    nonce: nonce,
-                    email: user.email,
-                    fullName: user.fullName
-                )
-                print("Supabase sync successful for user: \(user.id)")
+                try await syncWithSupabase(user: user)
             } catch {
-                print("Supabase sync failed (non-critical): \(error)")
-                errorTrackingService?.trackError(error, context: ErrorContext(
-                    feature: "AuthenticationService",
-                    action: "supabaseSync",
-                    metadata: ["hasEmail": user.email != nil]
-                ))
-                // Don't affect main authentication flow
+                // If Supabase sync fails, treat as authentication failure
+                await MainActor.run {
+                    self.currentUser = nil
+                    self.isAuthenticated = false
+                    self.authenticationError = .supabaseConnectionFailed
+                }
             }
+        }
+    }
+    
+    private func syncWithSupabase(user: AuthenticatedUser) async throws {
+        guard let supabaseService = supabaseService else {
+            print("Supabase service not available - this will prevent profile creation")
+            throw AuthenticationError.supabaseConnectionFailed
+        }
+        
+        // Use the actual identity token and nonce for Supabase
+        guard let nonce = user.nonce else {
+            print("Error: Nonce missing for Supabase sync")
+            errorTrackingService?.trackError(
+                AuthenticationError.unknown,
+                context: ErrorContext(
+                    feature: "AuthenticationService",
+                    action: "syncWithSupabase",
+                    metadata: ["error": "nonce_missing"]
+                )
+            )
+            throw AuthenticationError.supabaseConnectionFailed
+        }
+        
+        do {
+            try await supabaseService.signInWithAppleIdentity(
+                user.appleUserIdentifier,
+                identityToken: user.accessToken,
+                nonce: nonce,
+                email: user.email,
+                fullName: user.fullName
+            )
+            print("Supabase sync successful for user: \(user.id)")
+        } catch {
+            print("Supabase sync failed: \(error)")
+            
+            // Check if this is an audience mismatch error (configuration issue)
+            let errorString = error.localizedDescription.lowercased()
+            if errorString.contains("unacceptable audience") || errorString.contains("audience") {
+                print("WARNING: Supabase audience configuration mismatch - continuing without Supabase sync")
+                print("This will prevent profile creation until Supabase is properly configured")
+                // For now, don't fail authentication completely for audience issues
+                // This allows the app to function while the configuration is being fixed
+                return
+            }
+            
+            // For other errors, still fail the authentication
+            throw error
         }
     }
     

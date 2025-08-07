@@ -117,6 +117,7 @@ struct TangramGameView: View {
                         ForEach(filteredPuzzles, id: \.id) { puzzle in
                             PuzzleThumbnailView(
                                 puzzle: puzzle,
+                                allPuzzles: filteredPuzzles,  // Pass all puzzles for badge calculation
                                 action: {
                                     viewModel.selectPuzzle(puzzle)
                                 }
@@ -137,7 +138,9 @@ struct TangramGameView: View {
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
+                            .font(.system(size: 16))
                         Text("Back")
+                            .font(.system(size: 16))
                     }
                 }
             }
@@ -198,14 +201,14 @@ struct TangramGameView: View {
                 TangramSpriteView(
                     puzzle: puzzle,
                     placedPieces: $viewModel.placedPieces,
-                    showHints: viewModel.showHints,
                     timerStarted: viewModel.timerStarted,
                     formattedTime: viewModel.formattedTime,
                     progress: viewModel.progress,
                     isPuzzleComplete: viewModel.currentPhase == .puzzleComplete,
+                    showHints: viewModel.showHints,
                     currentHint: viewModel.currentHint,
-                    onPieceCompleted: { pieceType in
-                        viewModel.handlePieceCompletion(pieceType: pieceType)
+                    onPieceCompleted: { pieceType, isFlipped in
+                        viewModel.handlePieceCompletion(pieceType: pieceType, isFlipped: isFlipped)
                     },
                     onPuzzleCompleted: {
                         viewModel.handlePuzzleCompletion()
@@ -229,7 +232,7 @@ struct TangramGameView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .navigationTitle(viewModel.selectedPuzzle?.name ?? "Puzzle")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar {
@@ -239,43 +242,41 @@ struct TangramGameView: View {
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
+                            .font(.system(size: 16))
                         Text("Back")
+                            .font(.system(size: 16))
                     }
                 }
             }
             
-            ToolbarItem(placement: .navigationBarTrailing) {
-                HStack(spacing: 16) {
-                    // Timer
-                    HStack(spacing: 4) {
-                        Image(systemName: "timer")
-                        if viewModel.timerStarted {
-                            Text(viewModel.formattedTime)
-                                .font(.system(.caption, design: .monospaced))
-                        } else {
-                            Button("Start") {
-                                viewModel.startTimer()
-                            }
-                            .font(.caption)
+            ToolbarItem(placement: .principal) {
+                // Timer centered in toolbar
+                HStack(spacing: 6) {
+                    Image(systemName: "timer")
+                        .font(.system(size: 16))
+                    if viewModel.timerStarted {
+                        Text(viewModel.formattedTime)
+                            .font(.system(size: 16, weight: .medium, design: .monospaced))
+                    } else {
+                        Button("Start") {
+                            viewModel.startTimer()
                         }
-                    }
-                    
-                    // Hints
-                    Button(action: {
-                        viewModel.toggleHints()
-                    }) {
-                        Image(systemName: viewModel.showHints ? "lightbulb.fill" : "lightbulb")
-                            .foregroundColor(viewModel.showHints ? .yellow : .primary)
+                        .font(.system(size: 16, weight: .medium))
                     }
                 }
+                .foregroundColor(.primary)
             }
-        }
-        .overlay(alignment: .top) {
-            // Progress bar
-            ProgressView(value: viewModel.progress)
-                .tint(viewModel.currentPhase == .puzzleComplete ? .green : .blue)
-                .padding(.horizontal)
-                .padding(.top, 4)
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
+                // Hints button
+                Button(action: {
+                    viewModel.toggleHints()
+                }) {
+                    Image(systemName: "lightbulb")
+                        .font(.system(size: 18))
+                        .foregroundColor(.primary)
+                }
+            }
         }
     }
     
@@ -431,7 +432,21 @@ struct FilterChip: View {
 
 struct PuzzleThumbnailView: View {
     let puzzle: GamePuzzleData
+    let allPuzzles: [GamePuzzleData]  // For badge calculation
     let action: () -> Void
+    
+    // Calculate badge for this puzzle
+    private func getBadge() -> GamePuzzleData.BadgeType? {
+        // Find newest puzzle (would be based on created_at in production)
+        // For now, use last puzzle in list as "newest"
+        let isNewest = allPuzzles.last?.id == puzzle.id
+        
+        // Mark first puzzle as "Top Pick" for demo
+        // In production, this would use play count from analytics
+        let isTopPick = allPuzzles.first?.id == puzzle.id
+        
+        return puzzle.getBadge(isNewest: isNewest, isTopPick: isTopPick)
+    }
     
     var body: some View {
         Button(action: action) {
@@ -446,6 +461,27 @@ struct PuzzleThumbnailView: View {
                         PuzzleSilhouetteView(puzzle: puzzle)
                             .frame(width: geometry.size.width, height: geometry.size.height)
                     }
+                    .overlay(
+                        // Dynamic badge overlay - top left corner
+                        Group {
+                            if let badge = getBadge() {
+                                VStack {
+                                    HStack {
+                                        Label(badge.rawValue, systemImage: badge.icon)
+                                            .font(.caption2)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 3)
+                                            .background(badge.color)
+                                            .foregroundColor(.white)
+                                            .cornerRadius(4)
+                                            .padding(6)
+                                        Spacer()
+                                    }
+                                    Spacer()
+                                }
+                            }
+                        }
+                    )
                 }
                 .aspectRatio(1, contentMode: .fit)
                 

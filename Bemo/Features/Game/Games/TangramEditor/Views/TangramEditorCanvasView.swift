@@ -13,77 +13,41 @@ struct TangramEditorCanvasView: View {
     @State private var canvasSize: CGSize = .zero
     
     var body: some View {
-        ZStack {
-            // Main Canvas (full screen)
-            GeometryReader { geometry in
-                ZStack {
-                    canvasView
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.white)
-                .onAppear {
-                    canvasSize = geometry.size
-                    viewModel.uiState.currentCanvasSize = geometry.size
-                    initializeEditor()
-                }
-                .onChange(of: geometry.size) { oldSize, newSize in
-                    canvasSize = newSize
-                    viewModel.uiState.currentCanvasSize = newSize
-                }
-            }
+        VStack(spacing: 0) {
+            // Editor toolbar with two rows
+            TangramEditorToolbar(viewModel: viewModel)
             
-            // Selection controls floating near selected pieces
-            if !viewModel.uiState.selectedPieceIds.isEmpty, let firstSelectedId = viewModel.uiState.selectedPieceIds.first,
-               let selectedPiece = viewModel.puzzle.pieces.first(where: { $0.id == firstSelectedId }) {
-                VStack(spacing: 8) {
-                    HStack(spacing: 12) {
-                        Button(action: { viewModel.removeSelectedPieces() }) {
-                            Image(systemName: "trash")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .frame(width: 40, height: 40)
-                                .background(Circle().fill(Color.red))
-                        }
-                        
-                        Button(action: { rotateSelectedPieces(by: 45) }) {
-                            Image(systemName: "rotate.right")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .frame(width: 40, height: 40)
-                                .background(Circle().fill(Color.blue))
-                        }
-                        
-                        Button(action: { rotateSelectedPieces(by: -45) }) {
-                            Image(systemName: "rotate.left")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .frame(width: 40, height: 40)
-                                .background(Circle().fill(Color.blue))
-                        }
-                        
-                        Button(action: { flipSelectedPieces() }) {
-                            Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .frame(width: 40, height: 40)
-                                .background(Circle().fill(Color.purple))
-                        }
+            // State indicator - shows current editor state
+            Text(viewModel.currentStateDescription)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(Color.blue.opacity(0.1)))
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+            
+            // Main Canvas
+            ZStack {
+                GeometryReader { geometry in
+                    ZStack {
+                        canvasView
                     }
-                    .padding(8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 25)
-                            .fill(Color.black.opacity(0.8))
-                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.white)
+                    .onAppear {
+                        canvasSize = geometry.size
+                        viewModel.uiState.currentCanvasSize = geometry.size
+                        initializeEditor()
+                    }
+                    .onChange(of: geometry.size) { oldSize, newSize in
+                        canvasSize = newSize
+                        viewModel.uiState.currentCanvasSize = newSize
+                    }
                 }
-                .position(
-                    x: min(max(100, extractTranslation(from: selectedPiece.transform).x), canvasSize.width - 100),
-                    y: max(50, extractTranslation(from: selectedPiece.transform).y - 100)
-                )
-                .transition(.scale.combined(with: .opacity))
-            }
-            
-            // Canvas point selection UI
-            if case .selectingCanvasConnections = viewModel.editorState, !viewModel.uiState.selectedCanvasPoints.isEmpty {
+                
+                // Canvas point selection UI
+                if case .selectingCanvasConnections = viewModel.editorState, !viewModel.uiState.selectedCanvasPoints.isEmpty {
                 VStack {
                     HStack {
                         Text("\(viewModel.uiState.selectedCanvasPoints.count) point(s) selected")
@@ -152,6 +116,7 @@ struct TangramEditorCanvasView: View {
                 )
             } else {
                 let _ = print("[CANVAS VIEW] NOT showing pending piece - state is: \(viewModel.editorState)")
+            }
             }
         }
         .alert("Placement Error", isPresented: $viewModel.uiState.showErrorAlert) {
@@ -233,8 +198,8 @@ struct TangramEditorCanvasView: View {
                 showConnectionPoints: false,
                 availableConnectionPoints: [],
                 selectedConnectionPoints: [],
-                manipulationMode: viewModel.pieceManipulationModes[piece.id],
-                manipulationConstraints: viewModel.manipulationConstraints[piece.id],
+                manipulationMode: viewModel.uiState.selectedPieceIds.contains(piece.id) ? viewModel.pieceManipulationModes[piece.id] : nil,
+                manipulationConstraints: viewModel.uiState.selectedPieceIds.contains(piece.id) ? viewModel.manipulationConstraints[piece.id] : nil,
                 onRotation: { angle in
                     viewModel.handleRotation(pieceId: piece.id, angle: angle)
                 },
@@ -303,27 +268,79 @@ struct TangramEditorCanvasView: View {
     
     @ViewBuilder
     private func connectionPointView(_ point: TangramEditorViewModel.ConnectionPoint, isSelected: Bool) -> some View {
-        let fillColor = isSelected ? Color.green.opacity(0.8) : Color.blue.opacity(0.6)
-        let strokeColor = isSelected ? Color.green : Color.blue
+        // Determine colors based on selection and matching
+        let colors = getConnectionPointColors(for: point, isSelected: isSelected)
         
         Group {
             switch point.type {
             case .vertex:
                 Circle()
-                    .fill(fillColor)
+                    .fill(colors.fill)
                     .frame(width: 20, height: 20)
                     .overlay(
                         Circle()
-                            .stroke(strokeColor, lineWidth: 2)
+                            .stroke(colors.stroke, lineWidth: 2)
                     )
             case .edge:
                 Rectangle()
-                    .fill(isSelected ? Color.green.opacity(0.8) : Color.orange.opacity(0.6))
+                    .fill(colors.fill)
                     .frame(width: 20, height: 20)
                     .overlay(
                         Rectangle()
-                            .stroke(isSelected ? Color.green : Color.orange, lineWidth: 2)
+                            .stroke(colors.stroke, lineWidth: 2)
                     )
+            }
+        }
+    }
+    
+    private func getConnectionPointColors(for point: TangramEditorViewModel.ConnectionPoint, isSelected: Bool) -> (fill: Color, stroke: Color) {
+        if isSelected {
+            // Selected points are green
+            return (fill: Color.green.opacity(0.8), stroke: Color.green)
+        } else {
+            // Check if we're in pending connection state and this type is needed
+            if case .selectingPendingConnections = viewModel.editorState {
+                // Count how many of this type are already selected on canvas
+                let canvasVertexCount = viewModel.uiState.selectedCanvasPoints.filter { 
+                    if case .vertex = $0.type { return true } else { return false }
+                }.count
+                let canvasEdgeCount = viewModel.uiState.selectedCanvasPoints.filter { 
+                    if case .edge = $0.type { return true } else { return false }
+                }.count
+                
+                // Count how many of this type are selected on pending piece
+                let pendingVertexCount = viewModel.uiState.selectedPendingPoints.filter { 
+                    if case .vertex = $0.type { return true } else { return false }
+                }.count
+                let pendingEdgeCount = viewModel.uiState.selectedPendingPoints.filter { 
+                    if case .edge = $0.type { return true } else { return false }
+                }.count
+                
+                // Determine if this type can still be selected
+                switch point.type {
+                case .vertex:
+                    // Show as available if we need more vertices on pending piece
+                    if pendingVertexCount < canvasVertexCount {
+                        return (fill: Color.blue.opacity(0.3), stroke: Color.blue.opacity(0.5))
+                    } else {
+                        return (fill: Color.gray.opacity(0.2), stroke: Color.gray.opacity(0.3))
+                    }
+                case .edge:
+                    // Show as available if we need more edges on pending piece
+                    if pendingEdgeCount < canvasEdgeCount {
+                        return (fill: Color.orange.opacity(0.3), stroke: Color.orange.opacity(0.5))
+                    } else {
+                        return (fill: Color.gray.opacity(0.2), stroke: Color.gray.opacity(0.3))
+                    }
+                }
+            } else {
+                // Normal state - show type colors
+                switch point.type {
+                case .vertex:
+                    return (fill: Color.blue.opacity(0.6), stroke: Color.blue)
+                case .edge:
+                    return (fill: Color.orange.opacity(0.6), stroke: Color.orange)
+                }
             }
         }
     }
@@ -384,12 +401,12 @@ struct TangramEditorCanvasView: View {
     
     private var canSelectPieces: Bool {
         switch viewModel.editorState {
-        case .idle, .error:
+        case .idle, .error, .selectingNextPiece, .selectingFirstPiece, .pieceSelected:
             return true
-        case .manipulatingFirstPiece, .manipulatingPendingPiece, .selectingCanvasConnections:
+        case .manipulatingFirstPiece, .manipulatingPendingPiece, .selectingCanvasConnections, .selectingPendingConnections:
             return false
         default:
-            return false
+            return true  // Allow selection by default
         }
     }
     
@@ -404,14 +421,6 @@ struct TangramEditorCanvasView: View {
     
     private func handlePieceTap(_ piece: TangramPiece) {
         viewModel.togglePieceSelection(piece.id)
-    }
-    
-    private func rotateSelectedPieces(by angle: Double) {
-        // Implementation for rotating selected pieces
-    }
-    
-    private func flipSelectedPieces() {
-        // Implementation for flipping selected pieces (parallelogram only)
     }
     
     private func extractTranslation(from transform: CGAffineTransform) -> CGPoint {

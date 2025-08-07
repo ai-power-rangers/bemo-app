@@ -37,60 +37,11 @@ struct GamePuzzleData: Codable, Equatable {
         
         /// Check if a placed piece matches this target within tolerances
         func matches(_ placed: PlacedPiece) -> Bool {
-            guard placed.pieceType == pieceType else { return false }
-            
-            // Get transformed vertices for both pieces
-            let targetVertices = getTransformedVertices()
-            let placedVertices = getPlacedPieceVertices(placed)
-            
-            // Check if vertices match within tolerance
-            return verticesMatch(targetVertices, placedVertices, tolerance: TangramGameConstants.positionTolerance)
-        }
-        
-        /// Get vertices transformed to world position
-        private func getTransformedVertices() -> [CGPoint] {
-            let normalizedVertices = TangramGameGeometry.normalizedVertices(for: pieceType)
-            let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
-            return TangramGameGeometry.transformVertices(scaledVertices, with: transform)
-        }
-        
-        /// Get vertices for a placed piece
-        private func getPlacedPieceVertices(_ placed: PlacedPiece) -> [CGPoint] {
-            let normalizedVertices = TangramGameGeometry.normalizedVertices(for: placed.pieceType)
-            let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
-            
-            // Create transform from placed piece position and rotation
-            var pieceTransform = CGAffineTransform.identity
-            pieceTransform = pieceTransform.rotated(by: placed.rotation * .pi / 180)
-            pieceTransform = pieceTransform.translatedBy(x: placed.position.x, y: placed.position.y)
-            
-            return TangramGameGeometry.transformVertices(scaledVertices, with: pieceTransform)
-        }
-        
-        /// Check if two sets of vertices match within tolerance
-        private func verticesMatch(_ vertices1: [CGPoint], _ vertices2: [CGPoint], tolerance: CGFloat) -> Bool {
-            guard vertices1.count == vertices2.count else { return false }
-            
-            for i in 0..<vertices1.count {
-                let distance = hypot(vertices1[i].x - vertices2[i].x, vertices1[i].y - vertices2[i].y)
-                if distance > tolerance { return false }
-            }
-            return true
+            // Use centralized validation logic
+            return TangramPieceValidator.validate(placed: placed, target: self)
         }
     }
     
-    /// Create from raw puzzle data (from database or JSON)
-    /// NOTE: This preserves the full transform matrix for accurate rendering
-    init(fromDatabaseData data: Any) {
-        // For now, create a test puzzle until we implement proper database loading
-        // This will be replaced with actual database parsing
-        let testPuzzle = Self.createTestPuzzle()
-        self.id = testPuzzle.id
-        self.name = testPuzzle.name
-        self.category = testPuzzle.category
-        self.difficulty = testPuzzle.difficulty
-        self.targetPieces = testPuzzle.targetPieces
-    }
     
     /// Create from simplified data (for testing or bundled puzzles)
     init(id: String, name: String, category: String, difficulty: Int, targetPieces: [TargetPiece]) {
@@ -101,33 +52,6 @@ struct GamePuzzleData: Codable, Equatable {
         self.targetPieces = targetPieces
     }
     
-    /// Create a test puzzle with a simple shape
-    static func createTestPuzzle() -> GamePuzzleData {
-        // Create a simple test puzzle with 3 pieces forming a triangle
-        let pieces = [
-            TargetPiece(
-                pieceType: .largeTriangle1,
-                transform: CGAffineTransform(translationX: 100, y: 100)
-            ),
-            TargetPiece(
-                pieceType: .largeTriangle2,
-                transform: CGAffineTransform(translationX: 200, y: 100)
-                    .rotated(by: .pi / 2)
-            ),
-            TargetPiece(
-                pieceType: .square,
-                transform: CGAffineTransform(translationX: 150, y: 150)
-            )
-        ]
-        
-        return GamePuzzleData(
-            id: "test-puzzle",
-            name: "Test Triangle",
-            category: "Test",
-            difficulty: 1,
-            targetPieces: pieces
-        )
-    }
 }
 
 // MARK: - Codable Support for CGAffineTransform

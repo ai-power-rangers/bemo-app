@@ -44,6 +44,25 @@ struct ProfileSetupView: View {
             }
             .navigationTitle("Create Profile")
             .navigationBarTitleDisplayMode(.large)
+            .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    if viewModel.canGoBack {
+                        Button(action: {
+                            viewModel.goBack()
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 16, weight: .medium))
+                                Text("Back")
+                                    .font(.body)
+                            }
+                            .foregroundColor(.blue)
+                        }
+                        .disabled(viewModel.isLoading)
+                    }
+                }
+            }
             .disabled(viewModel.isLoading)
         }
         .alert("Profile Creation Error", isPresented: .constant(viewModel.errorMessage != nil)) {

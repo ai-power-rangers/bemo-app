@@ -45,7 +45,6 @@ extension TangramPiece: Codable {
         case id
         case type
         case transform
-        case isLocked  // Keep for backwards compatibility when decoding
         case zIndex
         case connectionPoints
     }
@@ -56,7 +55,6 @@ extension TangramPiece: Codable {
         try container.encode(id, forKey: .id)
         try container.encode(type, forKey: .type)
         try container.encode(TransformData(transform: transform), forKey: .transform)
-        // Don't encode isLocked anymore
         try container.encode(zIndex, forKey: .zIndex)
         try container.encode(connectionPoints, forKey: .connectionPoints)
     }
@@ -68,8 +66,6 @@ extension TangramPiece: Codable {
         type = try container.decode(PieceType.self, forKey: .type)
         let transformData = try container.decode(TransformData.self, forKey: .transform)
         transform = transformData.toCGAffineTransform()
-        // Try to decode isLocked for backwards compatibility, but ignore it
-        _ = try? container.decode(Bool.self, forKey: .isLocked)
         zIndex = try container.decode(Int.self, forKey: .zIndex)
         connectionPoints = try container.decode([ConnectionData].self, forKey: .connectionPoints)
     }

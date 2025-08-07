@@ -8,7 +8,7 @@
 import SwiftUI
 import Foundation
 
-class TangramEditorGame: Game {
+class TangramEditorGame: DevTool {
     
     // MARK: - Properties
     
@@ -19,7 +19,7 @@ class TangramEditorGame: Game {
     let thumbnailImageName = "tangram_editor_thumb"
     
     private var viewModel: TangramEditorViewModel?
-    private weak var delegate: GameDelegate?
+    private weak var delegate: DevToolDelegate?
     private var dependencyContainer: TangramEditorDependencyContainer?
     private var supabaseService: SupabaseService?
     private var puzzleManagementService: PuzzleManagementService?
@@ -28,17 +28,22 @@ class TangramEditorGame: Game {
     private var cachedPuzzleData: Data?
     private var pendingStateToLoad: Data?
     
+    // DevTool requires parent auth since it's a developer tool
+    var requiresParentAuth: Bool {
+        return true
+    }
+    
     // Use editor configuration with custom bars
-    var gameUIConfig: GameUIConfig {
+    var devToolUIConfig: DevToolUIConfig {
         // Simple configuration - let the views handle their own visibility
         let topBar = viewModel != nil ? AnyView(TangramEditorTopBar(viewModel: viewModel!, delegate: delegate)) : nil
         let bottomBar = viewModel != nil ? AnyView(TangramEditorBottomBar(viewModel: viewModel!)) : nil
         
-        return GameUIConfig(
+        return DevToolUIConfig(
             respectsSafeAreas: true,
-            showHintButton: false,
-            showProgressBar: false,
             showQuitButton: false,  // We provide quit in our custom top bar
+            showProgressBar: false,
+            showSaveButton: false,  // We provide save in our custom top bar
             customTopBar: topBar,
             customBottomBar: bottomBar
         )
@@ -56,9 +61,9 @@ class TangramEditorGame: Game {
         print("[TangramEditorGame] PuzzleManagementService available: \(puzzleManagementService != nil ? "✅" : "❌")")
     }
     
-    // MARK: - Game Protocol
+    // MARK: - DevTool Protocol
     
-    func makeGameView(delegate: GameDelegate) -> AnyView {
+    func makeDevToolView(delegate: DevToolDelegate) -> AnyView {
         self.delegate = delegate
         
         // Create a wrapper view that handles MainActor initialization
@@ -76,7 +81,7 @@ class TangramEditorGame: Game {
     }
     
     @MainActor
-    private func initializeViewModel(delegate: GameDelegate) async {
+    private func initializeViewModel(delegate: DevToolDelegate) async {
         if viewModel == nil {
             // Create dependency container if not already created
             if dependencyContainer == nil {
@@ -105,12 +110,7 @@ class TangramEditorGame: Game {
         }
     }
     
-    func processRecognizedPieces(_ pieces: [RecognizedPiece]) -> PlayerActionOutcome {
-        // Tangram Editor doesn't use CV input - it's a digital creation tool
-        // Return neutral outcome since this is not applicable
-        return .noAction
-    }
-    
+
     func reset() {
         Task { @MainActor in
             viewModel?.reset()

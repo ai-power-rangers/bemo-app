@@ -33,6 +33,7 @@ struct PlacedPiece: Identifiable, Codable {
     var relativeRotation: Double? // Rotation relative to anchor piece
     var isPlaced: Bool = false // True when piece is stationary and placed
     var lastStationaryTime: Date? // When piece stopped moving
+    var isFlipped: Bool = false // Track if piece is flipped (important for parallelogram)
     
     // MARK: - Validation State
     
@@ -128,9 +129,11 @@ extension PlacedPiece {
     }
     
     var distanceFromCenter: Double {
-        // Distance from typical canvas center (300, 300)
-        let centerX = 300.0
-        let centerY = 300.0
+        // Distance from canvas center - assumes a 600x600 canvas
+        // TODO: Pass actual canvas size if needed for more accuracy
+        let canvasSize = CGSize(width: 600, height: 600)
+        let centerX = canvasSize.width / 2
+        let centerY = canvasSize.height / 2
         let dx = position.x - centerX
         let dy = position.y - centerY
         return sqrt(dx * dx + dy * dy)

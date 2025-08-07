@@ -46,7 +46,7 @@ extension TangramEditorViewModel {
         let size = canvasSize ?? uiState.currentCanvasSize
         
         switch editorState {
-        case .manipulatingFirstPiece(let type, let rotation, _):
+        case .manipulatingFirstPiece(let type, let rotation, let isFlipped):
             // Use transform engine to calculate placement transform
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             let tempPiece = TangramPiece(type: type, transform: .identity)
@@ -59,12 +59,20 @@ extension TangramEditorViewModel {
                 canvasSize: size
             )
             
+            // Apply flip if needed (for parallelogram)
+            var finalTransform = result.transform
+            if isFlipped && type == .parallelogram {
+                let flipTransform = CGAffineTransform(scaleX: -1, y: 1)
+                finalTransform = finalTransform.concatenating(flipTransform)
+            }
+            
             // Create piece with the calculated transform
-            var piece = TangramPiece(type: type, transform: result.transform)
+            var piece = TangramPiece(type: type, transform: finalTransform)
             puzzle.pieces.append(piece)
             // Clear pending piece type after successful placement
             uiState.pendingPieceType = nil
             uiState.pendingPieceRotation = 0
+            uiState.pendingPieceIsFlipped = false
             // After placing first piece, transition to selecting next piece
             _ = transitionToState(.selectingNextPiece)
             setupNewState()  // Clear pending state properly
@@ -80,8 +88,29 @@ extension TangramEditorViewModel {
             print("[DEBUG] Selected canvas points: \(uiState.selectedCanvasPoints.count)")
             print("[DEBUG] Selected pending points: \(uiState.selectedPendingPoints.count)")
             
-            // Use the preview piece if available
-            if let preview = uiState.previewPiece {
+            // Use the preview piece if available AND valid
+            guard let preview = uiState.previewPiece else {
+                // No valid preview available - this shouldn't happen with proper UI validation
+                handleError(.placementCalculationFailed("No valid placement found for the selected connections"))
+                return
+            }
+            
+            // Double-check the preview is still valid before placing
+            let validationResult = transformEngine.calculateTransform(
+                for: preview,
+                operation: .place(center: CGPoint.zero, rotation: 0),
+                connection: nil,
+                otherPieces: puzzle.pieces,
+                canvasSize: uiState.currentCanvasSize
+            )
+            
+            if !validationResult.isValid {
+                handleError(.placementCalculationFailed("Placement validation failed. Please try different connection points."))
+                return
+            }
+            
+            // Now proceed with the valid preview
+            if true {  // Keep the same indentation level
                 // DON'T append preview here - coordinator.placeConnectedPiece will create and append the piece
                 // This was causing duplicate pieces bug!
                 // puzzle.pieces.append(preview)  // REMOVED - FIX FOR DUPLICATE PIECES
@@ -91,6 +120,7 @@ extension TangramEditorViewModel {
                     let result = coordinator.placeConnectedPiece(
                         type: type,
                         rotation: uiState.pendingPieceRotation * .pi / 180,
+                        isFlipped: uiState.pendingPieceIsFlipped && type == .parallelogram,
                         canvasConnections: uiState.selectedCanvasPoints,
                         pieceConnections: uiState.selectedPendingPoints,
                         existingPieces: puzzle.pieces, // Pass ALL pieces since we didn't append preview
@@ -214,6 +244,12 @@ extension TangramEditorViewModel {
         switch editorState {
         case .manipulatingFirstPiece(let type, let rotation, let isFlipped):
             _ = transitionToState(.manipulatingFirstPiece(type: type, rotation: rotation, isFlipped: !isFlipped))
+        case .manipulatingPendingPiece(let type, let points, let rotation):
+            // For pending pieces, toggle the flip state
+            uiState.pendingPieceIsFlipped.toggle()
+        case .selectingPendingConnections(let type, let points):
+            // Allow flipping while selecting connections
+            uiState.pendingPieceIsFlipped.toggle()
         default:
             break
         }
@@ -265,6 +301,50 @@ extension TangramEditorViewModel {
         // After removing pieces, go to appropriate selection state
         stateManager.resetState(for: puzzle)
         editorState = stateManager.currentState
+    }
+    
+    func rotateSelectedPieces(by degrees: Double) {
+        guard !uiState.selectedPieceIds.isEmpty else { return }
+        
+        undoManager.saveState(puzzle: puzzle)
+        
+        for pieceId in uiState.selectedPieceIds {
+            guard let index = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else { continue }
+            
+            let piece = puzzle.pieces[index]
+            let currentTransform = piece.transform
+            
+            // Extract current rotation and apply additional rotation
+            let angle = degrees * .pi / 180
+            let rotationTransform = CGAffineTransform(rotationAngle: angle)
+            
+            // Apply rotation to the existing transform
+            puzzle.pieces[index].transform = currentTransform.concatenating(rotationTransform)
+        }
+        
+        validate()
+        notifyPuzzleChanged()
+    }
+    
+    func flipSelectedPieces() {
+        guard !uiState.selectedPieceIds.isEmpty else { return }
+        
+        undoManager.saveState(puzzle: puzzle)
+        
+        for pieceId in uiState.selectedPieceIds {
+            guard let index = puzzle.pieces.firstIndex(where: { $0.id == pieceId }),
+                  puzzle.pieces[index].type == .parallelogram else { continue }
+            
+            let piece = puzzle.pieces[index]
+            let currentTransform = piece.transform
+            
+            // Apply horizontal flip by scaling x by -1
+            let flipTransform = CGAffineTransform(scaleX: -1, y: 1)
+            puzzle.pieces[index].transform = currentTransform.concatenating(flipTransform)
+        }
+        
+        validate()
+        notifyPuzzleChanged()
     }
     
     func updatePieceTransform(id: String, transform: CGAffineTransform) {

@@ -47,15 +47,6 @@ struct GameLobbyView: View {
                 .padding(.horizontal, BemoTheme.Spacing.xlarge)
                 .padding(.top, BemoTheme.Spacing.large)
                 
-                // Section Title
-                Text("Games")
-                    .font(BemoTheme.font(for: .heading3))
-                    .foregroundColor(BemoTheme.Colors.gray1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, BemoTheme.Spacing.xlarge)
-                    .padding(.top, BemoTheme.Spacing.xxlarge)
-                    .padding(.bottom, BemoTheme.Spacing.large)
-                
                 // Games Grid
                 ScrollView {
                     LazyVGrid(
@@ -64,13 +55,17 @@ struct GameLobbyView: View {
                     ) {
                         ForEach(Array(viewModel.availableGames.enumerated()), id: \.element.id) { index, gameItem in
                             GameCardView(
-                                game: GameItem(
-                                    game: gameItem.game,
-                                    colorScheme: (index % 4) + 1,
-                                    isLocked: false  // MVP: All games accessible
-                                ),
+                                game: {
+                                    if let game = gameItem.game {
+                                        return GameItem(game: game, colorScheme: (index % 4) + 1, isLocked: false)
+                                    } else if let devTool = gameItem.devTool {
+                                        return GameItem(devTool: devTool, colorScheme: (index % 4) + 1, isLocked: false)
+                                    } else {
+                                        fatalError("GameItem has neither game nor devTool")
+                                    }
+                                }(),
                                 onTap: {
-                                    viewModel.selectGame(gameItem.game)
+                                    viewModel.selectGameItem(gameItem)
                                 }
                             )
                         }

@@ -19,10 +19,26 @@ class TangramEditorViewModel {
     // MARK: - Core State
     
     var puzzle: TangramPuzzle
+    var originalPuzzleData: Data? = nil  // To track if changes were made
     var savedPuzzles: [TangramPuzzle] = []
     var validationState: ValidationState = .unknown
     var availableConnectionPoints: [ConnectionPoint] = []
     var pieceManipulationModes: [String: ManipulationMode] = [:]  // PieceId -> Mode
+    
+    var hasUnsavedChanges: Bool {
+        // Compare current puzzle with original to detect changes
+        guard let originalData = originalPuzzleData else {
+            // If no original data, check if puzzle has any pieces
+            return !puzzle.pieces.isEmpty
+        }
+        
+        // Encode current puzzle and compare
+        if let currentData = try? JSONEncoder().encode(puzzle) {
+            return currentData != originalData
+        }
+        
+        return true // Assume changes if we can't encode
+    }
     
     // MARK: - UI State
     
@@ -41,7 +57,7 @@ class TangramEditorViewModel {
     var showLibraryNavigationAlert: Bool = false
     
     // Delegate
-    weak var delegate: GameDelegate?
+    weak var delegate: DevToolDelegate?
     var onPuzzleChanged: ((TangramPuzzle) -> Void)?
     
     // MARK: - Services (Dependency Injection)

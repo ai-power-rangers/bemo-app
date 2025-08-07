@@ -20,14 +20,19 @@ enum TangramGameConstants {
     /// Scale factor to convert from normalized space (0-2) to visual space (pixels)
     static let visualScale: CGFloat = 50.0
     
-    /// Tolerance for position matching during validation (in pixels)
-    static let positionTolerance: CGFloat = 15.0
+    // MARK: - Validation
     
-    /// Tolerance for rotation matching during validation (in degrees)
-    static let rotationTolerance: CGFloat = 10.0
+    enum Validation {
+        /// Distance tolerance for piece center position matching (in pixels)
+        static let positionTolerance: CGFloat = 35.0  // Increased for better touch interaction with triangles
+        
+        /// Rotation tolerance for piece angle matching (in degrees)
+        static let rotationTolerance: CGFloat = 4.0  // Very tight tolerance for precise placement
+        
+        /// Legacy vertex matching tolerance (in pixels) - used for vertex-by-vertex comparison
+        static let vertexTolerance: CGFloat = 20.0  // Tightened from 30
+    }
     
-    /// Snap distance for piece placement (in pixels)
-    static let snapDistance: CGFloat = 40.0
     
     // MARK: - Colors
     

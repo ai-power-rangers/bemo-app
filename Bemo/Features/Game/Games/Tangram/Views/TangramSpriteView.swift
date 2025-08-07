@@ -15,13 +15,13 @@ import SpriteKit
 struct TangramSpriteView: View {
     let puzzle: GamePuzzleData
     @Binding var placedPieces: [PlacedPiece]
-    let showHints: Bool
     let timerStarted: Bool
     let formattedTime: String
     let progress: Double
     let isPuzzleComplete: Bool
+    let showHints: Bool
     let currentHint: TangramHintEngine.HintData?
-    let onPieceCompleted: (String) -> Void
+    let onPieceCompleted: (String, Bool) -> Void  // pieceType and isFlipped
     let onPuzzleCompleted: () -> Void
     let onBackPressed: () -> Void
     let onNextPressed: () -> Void
@@ -53,11 +53,6 @@ struct TangramSpriteView: View {
                 tangramScene.loadPuzzle(newPuzzle)
             }
         }
-        .onChange(of: showHints) { _ in
-            if let tangramScene = scene as? TangramPuzzleScene {
-                tangramScene.updateHints(showHints)
-            }
-        }
         .onChange(of: formattedTime) { _ in
             if let tangramScene = scene as? TangramPuzzleScene {
                 tangramScene.updateTimer(formattedTime, started: timerStarted)
@@ -73,10 +68,23 @@ struct TangramSpriteView: View {
                 tangramScene.updateCompletionState(isPuzzleComplete)
             }
         }
-        .onChange(of: currentHint) { _ in
-            if let tangramScene = scene as? TangramPuzzleScene,
-               let hint = currentHint {
-                tangramScene.showStructuredHint(hint)
+        .onChange(of: currentHint) { oldValue, newValue in
+            print("DEBUG: onChange triggered - old: \(oldValue != nil), new: \(newValue != nil)")
+            if let hint = newValue {
+                print("DEBUG: New hint details - type: \(hint.hintType), piece: \(hint.targetPiece.rawValue)")
+            }
+            
+            if let tangramScene = scene as? TangramPuzzleScene {
+                print("DEBUG: Scene cast successful")
+                if let hint = newValue {
+                    print("DEBUG: Calling showStructuredHint on scene")
+                    tangramScene.showStructuredHint(hint)
+                } else {
+                    print("DEBUG: Hint is nil, clearing any existing hints")
+                    // Could add a clearHints method if needed
+                }
+            } else {
+                print("DEBUG: Failed to cast scene to TangramPuzzleScene")
             }
         }
     }

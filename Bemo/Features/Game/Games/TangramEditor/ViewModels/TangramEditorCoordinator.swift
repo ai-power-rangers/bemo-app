@@ -27,6 +27,7 @@ class TangramEditorCoordinator {
     func placeConnectedPiece(
         type: PieceType,
         rotation: Double,
+        isFlipped: Bool = false,
         canvasConnections: [PiecePlacementService.ConnectionPoint],
         pieceConnections: [PiecePlacementService.ConnectionPoint],
         existingPieces: [TangramPiece],
@@ -78,15 +79,18 @@ class TangramEditorCoordinator {
         
         print("DEBUG: Created \(connections.count) connections with proper type matching")
         
-        // Calculate piece placement
-        guard let newPiece = placementService.placeConnectedPiece(
+        // Calculate piece placement (flip is now handled inside placeConnectedPiece)
+        guard var newPiece = placementService.placeConnectedPiece(
             type: type,
             rotation: rotation,
+            isFlipped: isFlipped,
             connections: connections,
             existingPieces: existingPieces
         ) else {
             return .failure(.placementCalculationFailed)
         }
+        
+        // Flip is now handled inside placeConnectedPiece, no need to apply here
         
         // Validate placement doesn't overlap using centralized coordinate system
         let newVertices = TangramCoordinateSystem.getWorldVertices(for: newPiece)

@@ -24,6 +24,10 @@ extension TangramEditorViewModel {
         puzzle.solutionChecksum = generateChecksum()
         let updatedPuzzle = try await persistenceService.savePuzzle(puzzle)
         puzzle = updatedPuzzle
+        
+        // Update original data after successful save
+        originalPuzzleData = try? JSONEncoder().encode(puzzle)
+        
         await loadSavedPuzzles()
         
         // Update the PuzzleManagementService cache efficiently
@@ -56,6 +60,8 @@ extension TangramEditorViewModel {
     
     func loadPuzzle(from loadedPuzzle: TangramPuzzle) {
         puzzle = loadedPuzzle
+        // Save original state for change detection
+        originalPuzzleData = try? JSONEncoder().encode(puzzle)
         // Set state based on whether puzzle has pieces
         stateManager.resetState(for: puzzle)
         editorState = stateManager.currentState
@@ -67,6 +73,8 @@ extension TangramEditorViewModel {
     func createNewPuzzle() {
         reset()
         puzzle = TangramPuzzle(name: "New Puzzle", category: .custom, difficulty: .medium)
+        // Save original state (empty puzzle)
+        originalPuzzleData = try? JSONEncoder().encode(puzzle)
         // New puzzle should start in selectingFirstPiece state
         stateManager.setInitialState(for: puzzle)
         editorState = stateManager.currentState
@@ -116,6 +124,11 @@ extension TangramEditorViewModel {
     }
     
     // MARK: - Navigation
+    
+    func requestQuit() {
+        // Exit the editor and return to the game lobby
+        delegate?.devToolDidRequestQuit()
+    }
     
     func navigateToLibrary(saveChanges: Bool = false) {
         if saveChanges && !puzzle.pieces.isEmpty {

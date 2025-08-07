@@ -42,7 +42,7 @@ struct PieceView: View {
                     }
                 }
                 .modifier(ManipulationGestureModifier(
-                    manipulationMode: manipulationMode,
+                    manipulationMode: isSelected ? manipulationMode : nil,  // Only enable gestures when selected
                     currentRotation: $currentRotation,
                     currentSlideDistance: $currentSlideDistance,
                     isManipulating: $isManipulating,
@@ -62,8 +62,8 @@ struct PieceView: View {
                 }
             }
             
-            // Manipulation mode indicators
-            if let mode = manipulationMode, !isGhost {
+            // Manipulation mode indicators - only show when selected
+            if let mode = manipulationMode, !isGhost, isSelected {
                 manipulationIndicatorOverlay(for: mode)
             }
             
@@ -77,23 +77,20 @@ struct PieceView: View {
     private func manipulationIndicatorOverlay(for mode: ManipulationMode) -> some View {
         switch mode {
         case .fixed:
-            // Fixed piece indicator (subtle)
-            Circle()
-                .fill(Color.gray.opacity(0.3))
-                .frame(width: 8, height: 8)
-                .position(getPieceCenter())
+            // No visual indicator for fixed pieces
+            EmptyView()
             
         case .rotatable(let pivot, let snapAngles):
-            // Rotation arc and snap indicators
+            // Rotation arc and snap indicators - only show when selected and manipulating
             ZStack {
-                // Pivot point
+                // Pivot point - always show when selected
                 Circle()
                     .fill(Color.blue.opacity(0.8))
                     .frame(width: 12, height: 12)
                     .position(pivot)
                 
-                // Rotation arc with limits
-                if isManipulating {
+                // Rotation arc with limits - only show during manipulation
+                if isSelected && isManipulating {
                     if let limits = manipulationConstraints?.rotationLimits {
                         // Show constrained arc
                         Path { path in
@@ -142,19 +139,21 @@ struct PieceView: View {
             }
             
         case .slidable(let edge, let baseRange, let snapPositions):
-            // Slide track and snap points
+            // Slide track and snap points - only show when selected
             ZStack {
                 let range = manipulationConstraints?.slideLimits ?? baseRange
                 
-                // Full theoretical track (semi-transparent)
-                Path { path in
-                    path.move(to: edge.start)
-                    path.addLine(to: edge.end)
-                }
-                .stroke(Color.orange.opacity(0.2), style: StrokeStyle(lineWidth: 3, dash: [5, 5]))
-                
-                // Valid slide range (solid)
-                if let limits = manipulationConstraints?.slideLimits {
+                // Only show sliding indicators when selected
+                if isSelected {
+                    // Full theoretical track (semi-transparent)
+                    Path { path in
+                        path.move(to: edge.start)
+                        path.addLine(to: edge.end)
+                    }
+                    .stroke(Color.orange.opacity(0.2), style: StrokeStyle(lineWidth: 3, dash: [5, 5]))
+                    
+                    // Valid slide range (solid)
+                    if let limits = manipulationConstraints?.slideLimits {
                     Path { path in
                         let startPoint = CGPoint(
                             x: edge.start.x + edge.vector.dx * CGFloat(limits.lowerBound),
@@ -187,18 +186,19 @@ struct PieceView: View {
                         ))
                 }
                 
-                // Snap points within valid range
-                ForEach(snapPositions, id: \.self) { position in
-                    let isWithinLimits = manipulationConstraints?.slideLimits != nil ?
-                        range.contains(position) : true
-                    
-                    if isWithinLimits {
-                        Circle()
-                            .fill(isNearPosition(position, range: range) ? Color.green : Color.gray.opacity(0.5))
-                            .frame(width: 10, height: 10)
-                            .position(snapPointPosition(position: position, edge: edge, range: range))
+                    // Snap points within valid range
+                    ForEach(snapPositions, id: \.self) { position in
+                        let isWithinLimits = manipulationConstraints?.slideLimits != nil ?
+                            range.contains(position) : true
+                        
+                        if isWithinLimits {
+                            Circle()
+                                .fill(isNearPosition(position, range: range) ? Color.green : Color.gray.opacity(0.5))
+                                .frame(width: 10, height: 10)
+                                .position(snapPointPosition(position: position, edge: edge, range: range))
+                        }
                     }
-                }
+                } // End of isSelected check
             }
             
         case .free:

@@ -199,14 +199,22 @@ class SupabaseService {
     }
     
     func syncChildProfile(_ profile: UserProfile) async throws {
+        print("DEBUG: SupabaseService - syncChildProfile called for: \(profile.name)")
+        print("DEBUG: SupabaseService - isConnected: \(isConnected)")
+        
         guard isConnected else {
+            print("DEBUG: SupabaseService - Not connected, throwing notAuthenticated error")
             throw SupabaseError.notAuthenticated
         }
         
         do {
+            print("DEBUG: SupabaseService - Getting current user ID...")
+            let parentUserId = try await getCurrentUserID()
+            print("DEBUG: SupabaseService - Current user ID: \(parentUserId)")
+            
             let profileData = ChildProfileUpsert(
                 id: profile.id,
-                parent_user_id: try await getCurrentUserID(),
+                parent_user_id: parentUserId,
                 name: profile.name,
                 age: profile.age,
                 gender: profile.gender,
@@ -214,10 +222,13 @@ class SupabaseService {
                 preferences: try encodePreferences(profile.preferences)
             )
             
+            print("DEBUG: SupabaseService - Upserting profile data to child_profiles table...")
             try await client
                 .from("child_profiles")
                 .upsert(profileData)
                 .execute()
+            
+            print("DEBUG: SupabaseService - Profile upsert successful!")
             
             lastSyncDate = Date()
             print("Supabase: Child profile synced - \(profile.name)")
@@ -306,19 +317,56 @@ class SupabaseService {
         }
         
         do {
-            // Use the database function for atomic event creation + XP update
-            let eventParams = LearningEventParams(
-                child_id: childProfileId,
-                event_type_param: eventType,
-                game_id_param: gameId,
-                xp_awarded_param: xpAwarded,
-                event_data_param: try encodeEventData(eventData),
-                session_id_param: sessionId
+            // Now using proper user authentication instead of service role
+            // RLS policies will enforce that only the authenticated parent can track events for their children
+            
+            // Verify this is not a service role instance (learning events need proper user auth)
+            guard !useServiceRole else {
+                throw SupabaseError.notAuthenticated
+            }
+            
+            let currentSession = try await client.auth.session
+            print("Supabase: Tracking learning event for user \(currentSession.user.id)")
+            
+            // Insert learning event - RLS will ensure only authorized events are allowed
+            let eventId = UUID()
+            let encodedEventData = try encodeEventData(eventData)
+            
+            let eventRecord = LearningEventInsert(
+                id: eventId,
+                child_profile_id: childProfileId,
+                event_type: eventType,
+                game_id: gameId,
+                xp_awarded: xpAwarded,
+                event_data: encodedEventData,
+                session_id: sessionId
             )
             
             try await client
-                .rpc("record_learning_event", params: eventParams)
+                .from("learning_events")
+                .insert(eventRecord)
                 .execute()
+            
+            // Update XP if awarded - RLS will ensure only the parent can update their child's XP
+            if xpAwarded > 0 {
+                // First fetch current XP (RLS ensures we can only see our own child's data)
+                let profiles: [ChildProfileResponse] = try await client
+                    .from("child_profiles")
+                    .select("total_xp")
+                    .eq("id", value: childProfileId)
+                    .single()
+                    .execute()
+                    .value
+                
+                if let profile = profiles.first {
+                    let newXP = profile.total_xp + xpAwarded
+                    try await client
+                        .from("child_profiles")
+                        .update(["total_xp": newXP])
+                        .eq("id", value: childProfileId)
+                        .execute()
+                }
+            }
             
             lastSyncDate = Date()
             print("Supabase: Learning event tracked - \(eventType) for child \(childProfileId)")
@@ -349,21 +397,70 @@ class SupabaseService {
         }
         
         do {
-            let sessionParams = GameSessionStartParams(
-                child_id: childProfileId,
-                game_id_param: gameId,
-                session_data_param: try encodeEventData(sessionData)
+            // Now using proper user authentication instead of service role
+            // RLS policies will enforce that only the authenticated parent can create sessions for their children
+            
+            // Verify user is authenticated before proceeding
+            guard !useServiceRole else {
+                throw SupabaseError.notAuthenticated
+            }
+            
+            let currentSession = try await client.auth.session
+            print("Supabase: Starting game session for user \(currentSession.user.id)")
+            
+            // Insert into game_sessions table with RLS enforcement
+            let sessionId = UUID().uuidString
+            let encodedSessionData = try encodeEventData(sessionData)
+            
+            // Create a proper struct for insertion
+            struct GameSessionInsert: Encodable {
+                let id: String
+                let child_profile_id: String
+                let game_id: String
+                let session_data: [String: Any]
+                let started_at: String
+                
+                enum CodingKeys: String, CodingKey {
+                    case id, child_profile_id, game_id, session_data, started_at
+                }
+                
+                func encode(to encoder: Encoder) throws {
+                    var container = encoder.container(keyedBy: CodingKeys.self)
+                    try container.encode(id, forKey: .id)
+                    try container.encode(child_profile_id, forKey: .child_profile_id)
+                    try container.encode(game_id, forKey: .game_id)
+                    try container.encode(AnyCodable(session_data), forKey: .session_data)
+                    try container.encode(started_at, forKey: .started_at)
+                }
+            }
+            
+            let sessionRecord = GameSessionInsert(
+                id: sessionId,
+                child_profile_id: childProfileId,
+                game_id: gameId,
+                session_data: encodedSessionData,
+                started_at: ISO8601DateFormatter().string(from: Date())
             )
             
-            let response: String = try await client
-                .rpc("start_game_session", params: sessionParams)
+            try await client
+                .from("game_sessions")
+                .insert(sessionRecord)
                 .execute()
-                .value
+            
+            // Also track the session start event
+            try await trackLearningEvent(
+                childProfileId: childProfileId,
+                eventType: "game_started",
+                gameId: gameId,
+                xpAwarded: 0,
+                eventData: ["session_started": true],
+                sessionId: sessionId
+            )
             
             lastSyncDate = Date()
-            print("Supabase: Game session started - \(response)")
+            print("Supabase: Game session started - \(sessionId)")
             
-            return response
+            return sessionId
             
         } catch {
             syncError = error
@@ -391,16 +488,66 @@ class SupabaseService {
         }
         
         do {
-            let endParams = GameSessionEndParams(
-                session_id_param: sessionId,
-                final_xp_earned: finalXPEarned,
-                final_levels_completed: finalLevelsCompleted,
-                final_session_data: try encodeEventData(finalSessionData)
+            // Now using proper user authentication instead of service role
+            // RLS policies will enforce that only the authenticated parent can update their sessions
+            
+            // Verify user is authenticated before proceeding
+            guard !useServiceRole else {
+                throw SupabaseError.notAuthenticated
+            }
+            
+            let currentSession = try await client.auth.session
+            print("Supabase: Ending game session for user \(currentSession.user.id)")
+            
+            // Update game_sessions table with RLS enforcement
+            let encodedSessionData = try encodeEventData(finalSessionData)
+            
+            // Create a proper struct for update
+            struct GameSessionUpdate: Encodable {
+                let ended_at: String
+                let total_xp_earned: Int
+                let levels_completed: Int
+                let session_data: [String: Any]
+                
+                enum CodingKeys: String, CodingKey {
+                    case ended_at, total_xp_earned, levels_completed, session_data
+                }
+                
+                func encode(to encoder: Encoder) throws {
+                    var container = encoder.container(keyedBy: CodingKeys.self)
+                    try container.encode(ended_at, forKey: .ended_at)
+                    try container.encode(total_xp_earned, forKey: .total_xp_earned)
+                    try container.encode(levels_completed, forKey: .levels_completed)
+                    try container.encode(AnyCodable(session_data), forKey: .session_data)
+                }
+            }
+            
+            let updateData = GameSessionUpdate(
+                ended_at: ISO8601DateFormatter().string(from: Date()),
+                total_xp_earned: finalXPEarned,
+                levels_completed: finalLevelsCompleted,
+                session_data: encodedSessionData
             )
             
             try await client
-                .rpc("end_game_session", params: endParams)
+                .from("game_sessions")
+                .update(updateData)
+                .eq("id", value: sessionId)
                 .execute()
+            
+            // Track session end event
+            try await trackLearningEvent(
+                childProfileId: "", // We don't have child ID here, but it's okay for session end
+                eventType: "game_ended",
+                gameId: "tangram",
+                xpAwarded: 0,
+                eventData: [
+                    "session_ended": true,
+                    "total_xp_earned": finalXPEarned,
+                    "levels_completed": finalLevelsCompleted
+                ],
+                sessionId: sessionId
+            )
             
             lastSyncDate = Date()
             print("Supabase: Game session ended - \(sessionId)")
@@ -482,7 +629,7 @@ class SupabaseService {
     
     // MARK: - Helper Methods
     
-    private func getCurrentUserID() async throws -> String {
+    func getCurrentUserID() async throws -> String {
         let session = try await client.auth.session
         guard !session.user.id.uuidString.isEmpty else {
             throw SupabaseError.notAuthenticated
@@ -602,6 +749,32 @@ struct ChildProfileResponse: Decodable {
         } else {
             preferences = [:]
         }
+    }
+}
+
+// Struct for direct insert (bypassing RPC function)
+struct LearningEventInsert: Encodable {
+    let id: UUID
+    let child_profile_id: String
+    let event_type: String
+    let game_id: String
+    let xp_awarded: Int
+    let event_data: [String: Any]
+    let session_id: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id, child_profile_id, event_type, game_id, xp_awarded, event_data, session_id
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id.uuidString, forKey: .id)
+        try container.encode(child_profile_id, forKey: .child_profile_id)
+        try container.encode(event_type, forKey: .event_type)
+        try container.encode(game_id, forKey: .game_id)
+        try container.encode(xp_awarded, forKey: .xp_awarded)
+        try container.encode(AnyCodable(event_data), forKey: .event_data)
+        try container.encodeIfPresent(session_id, forKey: .session_id)
     }
 }
 

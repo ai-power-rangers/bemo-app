@@ -40,47 +40,8 @@ struct PuzzleLibraryView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            VStack(spacing: 12) {
-                HStack {
-                    // Back button (left)
-                    Button(action: { 
-                        viewModel.delegate?.gameDidRequestQuit() 
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left")
-                            Text("Back")
-                        }
-                        .font(.body)
-                        .foregroundColor(.blue)
-                    }
-                    .frame(width: 100, alignment: .leading)
-                    
-                    Spacer()
-                    
-                    // Title (centered)
-                    Text("Tangram Library")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                    
-                    Spacer()
-                    
-                    // Create button (right)
-                    Button(action: { viewModel.createNewPuzzle() }) {
-                        Image(systemName: "plus")
-                            .font(.title2)
-                            .fontWeight(.medium)
-                            .foregroundColor(.blue)
-                    }
-                    .frame(width: 100, alignment: .trailing)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color(.systemBackground))
-                
-                // Search and Filter Bar
-                HStack(spacing: 12) {
+            // Search and Filter Bar
+            HStack(spacing: 12) {
                     // Search field
                     HStack {
                         Image(systemName: "magnifyingglass")
@@ -112,7 +73,7 @@ struct PuzzleLibraryView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-            }
+                .padding(.vertical, 8)
             
             Divider()
             
@@ -121,42 +82,25 @@ struct PuzzleLibraryView: View {
                 emptyStateView
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        // All Puzzles (all are official)
-                        if !filteredPuzzles.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Label("All Puzzles", systemImage: "checkmark.seal.fill")
-                                        .font(.headline)
-                                        .foregroundColor(.blue)
-                                    Spacer()
-                                    Text("\(filteredPuzzles.count)")
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.horizontal)
-                                
-                                LazyVGrid(columns: columns, spacing: 16) {
-                                    ForEach(filteredPuzzles) { puzzle in
-                                        PuzzleCardView(
-                                            puzzle: puzzle,
-                                            onTap: { viewModel.loadPuzzle(from: puzzle) },
-                                            onDelete: {
-                                                puzzleToDelete = puzzle
-                                                showingDeleteAlert = true
-                                            },
-                                            onDuplicate: {
-                                                Task {
-                                                    await viewModel.duplicatePuzzle(puzzle)
-                                                }
-                                            }
-                                        )
+                    LazyVGrid(columns: columns, spacing: 16) {
+                        ForEach(filteredPuzzles) { puzzle in
+                            PuzzleCardView(
+                                puzzle: puzzle,
+                                allPuzzles: filteredPuzzles,  // Pass all puzzles for badge calculation
+                                onTap: { viewModel.loadPuzzle(from: puzzle) },
+                                onDelete: {
+                                    puzzleToDelete = puzzle
+                                    showingDeleteAlert = true
+                                },
+                                onDuplicate: {
+                                    Task {
+                                        await viewModel.duplicatePuzzle(puzzle)
                                     }
                                 }
-                                .padding(.horizontal)
-                            }
+                            )
                         }
                     }
-                    .padding(.vertical)
+                    .padding()
                 }
             }
         }
@@ -207,6 +151,7 @@ struct PuzzleLibraryView: View {
 
 struct PuzzleCardView: View {
     let puzzle: TangramPuzzle
+    let allPuzzles: [TangramPuzzle]  // Needed for badge calculation
     let onTap: () -> Void
     let onDelete: (() -> Void)?  // Optional for official puzzles
     let onDuplicate: () -> Void
@@ -241,22 +186,23 @@ struct PuzzleCardView: View {
                     .stroke(Color(.systemGray4), lineWidth: 1)
             )
             .overlay(
-                // Official badge for bundled puzzles
+                // Dynamic badge based on puzzle properties - top left corner
                 Group {
-                    // All puzzles are official
-                    VStack {
-                        HStack {
+                    if let badge = puzzle.getBadge(allPuzzles: allPuzzles) {
+                        VStack {
+                            HStack {
+                                Label(badge.rawValue, systemImage: badge.icon)
+                                    .font(.caption2)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(badge.color)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(4)
+                                    .padding(8)
+                                Spacer()
+                            }
                             Spacer()
-                            Label("Official", systemImage: "checkmark.seal.fill")
-                                .font(.caption2)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.blue)
-                                .foregroundColor(.white)
-                                .cornerRadius(4)
-                                .padding(8)
                         }
-                        Spacer()
                     }
                 }
             )

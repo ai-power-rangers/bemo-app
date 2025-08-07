@@ -19,7 +19,9 @@ class DependencyContainer {
     let profileService: ProfileService
     let analyticsService: AnalyticsService
     let supabaseService: SupabaseService
+    let puzzleSupabaseService: SupabaseService  // Service role version for dev tools
     let puzzleManagementService: PuzzleManagementService
+    let developerService: DeveloperService
     
     init() {
         // Initialize error tracking first so it's available for other services
@@ -30,9 +32,16 @@ class DependencyContainer {
         self.profileService = ProfileService()
         self.cvService = CVService()
         self.analyticsService = AnalyticsService()
-        // Use service role for Supabase to ensure puzzle loading always works
-        self.supabaseService = SupabaseService(errorTracking: errorTrackingService, useServiceRole: true)
-        self.puzzleManagementService = PuzzleManagementService(supabaseService: supabaseService, errorTracking: errorTrackingService)
+        // Use regular authentication for user data - this ensures proper RLS enforcement
+        self.supabaseService = SupabaseService(authService: authenticationService, errorTracking: errorTrackingService, useServiceRole: false)
+        
+        // Create a separate service role Supabase instance for puzzle management and dev tools
+        // This allows operations to work without user authentication constraints
+        self.puzzleSupabaseService = SupabaseService(errorTracking: errorTrackingService, useServiceRole: true)
+        self.puzzleManagementService = PuzzleManagementService(supabaseService: puzzleSupabaseService, errorTracking: errorTrackingService)
+        
+        // Initialize developer service for determining dev tool access
+        self.developerService = DeveloperService(authenticationService: authenticationService)
         
         // Initialize services that need setup
         setupServices()
@@ -45,6 +54,11 @@ class DependencyContainer {
         // Setup Supabase integration with existing services
         authenticationService.setSupabaseService(supabaseService)
         profileService.setSupabaseService(supabaseService)
+        apiService.setSupabaseService(supabaseService)
+        
+        // Setup cross-service dependencies
+        profileService.setAuthenticationService(authenticationService)
+        authenticationService.setProfileService(profileService)
         
         // Setup error tracking integration
         authenticationService.setErrorTrackingService(errorTrackingService)

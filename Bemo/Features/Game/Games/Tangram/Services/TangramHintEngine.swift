@@ -263,13 +263,20 @@ class TangramHintEngine {
             current.position.y - target.position.y
         )
         
-        // Check rotation difference
-        let targetRotation = atan2(target.transform.b, target.transform.a) * 180 / .pi
-        let currentRotation = current.rotation
-        var rotationDiff = abs(targetRotation - currentRotation)
+        // Check rotation using proper validator
+        let targetRotationRad = atan2(target.transform.b, target.transform.a)
+        let currentRotationRad = current.rotation * .pi / 180
         
-        // Normalize rotation difference
-        while rotationDiff > 180 { rotationDiff = 360 - rotationDiff }
+        // Get flip state from placed piece
+        let isFlipped = current.isFlipped
+        
+        let rotationCorrect = TangramRotationValidator.isRotationValid(
+            currentRotation: currentRotationRad,
+            targetRotation: targetRotationRad,
+            pieceType: current.pieceType,
+            isFlipped: isFlipped,
+            toleranceDegrees: rotationTolerance
+        )
         
         // Check if flip is needed (for parallelogram)
         let needsFlip = current.pieceType == .parallelogram && isFlipNeeded(current, target)
@@ -277,8 +284,15 @@ class TangramHintEngine {
         // Determine hint type based on what's wrong
         if needsFlip {
             return .flip
-        } else if rotationDiff > rotationTolerance && positionDiff < positionTolerance {
-            return .rotation(degrees: targetRotation)
+        } else if !rotationCorrect && positionDiff < positionTolerance {
+            // Find the nearest valid rotation for the hint
+            let nearestRotation = TangramRotationValidator.nearestValidRotation(
+                currentRotation: currentRotationRad,
+                targetRotation: targetRotationRad,
+                pieceType: current.pieceType,
+                isFlipped: isFlipped
+            )
+            return .rotation(degrees: nearestRotation * 180 / .pi)
         } else if positionDiff >= positionTolerance {
             return .position(from: current.position, to: target.position)
         } else {
@@ -287,13 +301,15 @@ class TangramHintEngine {
     }
     
     private func isFlipNeeded(_ placed: PlacedPiece, _ target: GamePuzzleData.TargetPiece) -> Bool {
+        // Only relevant for parallelogram
+        guard placed.pieceType == .parallelogram else { return false }
+        
         // Check if transform has negative determinant (indicates flip)
         let targetDeterminant = target.transform.a * target.transform.d - target.transform.b * target.transform.c
         let targetIsFlipped = targetDeterminant < 0
         
-        // For now, assume placed pieces track their flip state
-        // This might need adjustment based on how PlacedPiece stores flip info
-        return false // Placeholder - need to check placed piece flip state
+        // Compare placed piece flip state with target
+        return placed.isFlipped != targetIsFlipped
     }
     
     private func createAnimationSteps(

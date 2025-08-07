@@ -242,6 +242,11 @@ class PieceTransformEngine {
             return (piece.transform, nil)
         }
         
+        // CRITICAL: Use the passed-in pivot, not the calculated connectionPoint
+        // The pivot from the ManipulationMode is already correctly calculated
+        // to be the vertex on the stationary piece
+        // (connectionPoint is for validation/fallback only)
+        
         // Get the connection point in the rotating piece's local coordinates
         let rotatingVertexIndex = getRotatingPieceVertexIndex(for: piece, connection: conn)
         let localVertex = TangramGeometry.vertices(for: piece.type)[rotatingVertexIndex]
@@ -266,14 +271,20 @@ class PieceTransformEngine {
         // Calculate the transform that:
         // 1. Rotates the piece by the snapped angle
         // 2. Keeps the connection point at the pivot
-        var finalTransform = CGAffineTransform.identity
         
-        // Apply rotation around the piece's connection point
-        finalTransform = finalTransform.rotated(by: snappedRadians)
+        // CRITICAL: The pivot is in world space, visualVertex is in local space
+        // We need to calculate where to position the piece so that after rotation,
+        // its connection vertex ends up exactly at the pivot point
         
-        // Position the piece so its connection point is at the pivot
-        // After rotation, the local vertex is transformed
-        let rotatedVertex = visualVertex.applying(CGAffineTransform(rotationAngle: snappedRadians))
+        // Step 1: Create the rotation transform
+        let rotationTransform = CGAffineTransform(rotationAngle: snappedRadians)
+        
+        // Step 2: Apply rotation to the visual vertex (still in local space)
+        let rotatedVertex = visualVertex.applying(rotationTransform)
+        
+        // Step 3: Calculate the translation needed to position the rotated vertex at the pivot
+        // The final transform combines rotation and translation
+        var finalTransform = rotationTransform
         finalTransform.tx = pivot.x - rotatedVertex.x
         finalTransform.ty = pivot.y - rotatedVertex.y
         
@@ -589,7 +600,20 @@ class PieceTransformEngine {
         
         // Check 1: Overlap with other pieces
         for other in otherPieces where other.id != piece.id {
-            if Self.hasAreaOverlap(testPiece, other) {
+            // Skip overlap check if this piece is connected to the other piece
+            var isConnected = false
+            if let conn = connection {
+                switch conn.type {
+                case .vertexToVertex(let pieceAId, _, let pieceBId, _),
+                     .vertexToEdge(let pieceAId, _, let pieceBId, _),
+                     .edgeToEdge(let pieceAId, _, let pieceBId, _):
+                    isConnected = (piece.id == pieceAId && other.id == pieceBId) || 
+                                  (piece.id == pieceBId && other.id == pieceAId)
+                }
+            }
+            
+            // Only check overlap if pieces are not connected
+            if !isConnected && Self.hasAreaOverlap(testPiece, other) {
                 violations.append(ValidationViolation(
                     type: .overlap(with: other.id),
                     message: "Piece would overlap with another piece"
@@ -631,47 +655,62 @@ class PieceTransformEngine {
         let verticesA = TangramCoordinateSystem.getWorldVertices(for: pieceA)
         let verticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
         
-        // Use Separating Axis Theorem (SAT) with tolerance for touching pieces
+        // Use Separating Axis Theorem (SAT)
         let axes = getAxes(vertices: verticesA) + getAxes(vertices: verticesB)
         
-        // Small tolerance to allow pieces that are just touching (e.g., vertex-to-vertex)
-        let tolerance: CGFloat = 0.1
+        // Tolerance for floating point comparisons
+        let tolerance: CGFloat = 1.0
         
         for axis in axes {
             let projectionA = projectVertices(verticesA, onto: axis)
             let projectionB = projectVertices(verticesB, onto: axis)
             
-            // Check if projections are separated with tolerance
-            // This allows pieces to touch but not overlap
-            if projectionA.max < projectionB.min - tolerance || projectionB.max < projectionA.min - tolerance {
+            // Check if projections are separated
+            // Use a small negative tolerance to allow touching but not overlapping
+            // A gap > -tolerance means pieces are separated or just touching
+            let gap = max(projectionA.min - projectionB.max, projectionB.min - projectionA.max)
+            
+            if gap > -tolerance {
                 // Found a separating axis - no overlap
                 return false
             }
         }
         
-        // No separating axis found - check if pieces are just touching or actually overlapping
-        // If we reach here, projections overlap on all axes
-        // But we need to distinguish between touching (valid) and overlapping (invalid)
+        // No separating axis found - pieces definitely overlap
+        // This means they have area overlap, not just touching
+        return true
+    }
+    
+    private static func areEdgesCollinearAndTouching(a1: CGPoint, a2: CGPoint, b1: CGPoint, b2: CGPoint, tolerance: CGFloat) -> Bool {
+        // Check if two edges are collinear and touching/overlapping
         
-        // Check if any vertices are shared (touching is OK)
-        let touchTolerance: CGFloat = 1.0
-        var touchingVertices = 0
-        for vA in verticesA {
-            for vB in verticesB {
-                let distance = sqrt(pow(vA.x - vB.x, 2) + pow(vA.y - vB.y, 2))
-                if distance < touchTolerance {
-                    touchingVertices += 1
-                }
-            }
+        // First check if they're collinear (on the same line)
+        let crossProduct1 = (a2.x - a1.x) * (b1.y - a1.y) - (a2.y - a1.y) * (b1.x - a1.x)
+        let crossProduct2 = (a2.x - a1.x) * (b2.y - a1.y) - (a2.y - a1.y) * (b2.x - a1.x)
+        
+        if abs(crossProduct1) > tolerance || abs(crossProduct2) > tolerance {
+            return false // Not collinear
         }
         
-        // If pieces are only touching at vertices (1-2 vertices), they're not overlapping
-        // More than 2 shared vertices means actual overlap
-        if touchingVertices > 0 && touchingVertices <= 2 {
-            return false // Just touching, not overlapping
+        // Check if the edges overlap/touch along their length
+        // Project points onto the line and check if ranges overlap
+        let dx = a2.x - a1.x
+        let dy = a2.y - a1.y
+        let lengthSquared = dx * dx + dy * dy
+        
+        if lengthSquared < tolerance * tolerance {
+            return false // Edge too short
         }
         
-        return true // Actual overlap
+        // Project b1 and b2 onto the line from a1 to a2
+        let t1 = ((b1.x - a1.x) * dx + (b1.y - a1.y) * dy) / lengthSquared
+        let t2 = ((b2.x - a1.x) * dx + (b2.y - a1.y) * dy) / lengthSquared
+        
+        let minT = min(t1, t2)
+        let maxT = max(t1, t2)
+        
+        // Check if the projections overlap with the segment [0, 1]
+        return maxT >= -tolerance/sqrt(lengthSquared) && minT <= 1 + tolerance/sqrt(lengthSquared)
     }
     
     private static func getAxes(vertices: [CGPoint]) -> [CGVector] {

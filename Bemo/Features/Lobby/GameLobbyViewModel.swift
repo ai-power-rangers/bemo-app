@@ -42,7 +42,9 @@ class GameLobbyViewModel {
     private let profileService: ProfileService
     private let supabaseService: SupabaseService?
     private let puzzleManagementService: PuzzleManagementService?
+    private let developerService: DeveloperService
     private let onGameSelected: (Game) -> Void
+    private let onDevToolSelected: (DevTool) -> Void
     private let onParentDashboardRequested: () -> Void
     private let onProfileSetupRequested: () -> Void
     
@@ -57,24 +59,59 @@ class GameLobbyViewModel {
     
     struct GameItem: Identifiable {
         let id = UUID()
-        let game: Game
+        let game: Game?  // For regular games
+        let devTool: DevTool?  // For developer tools
         let iconName: String
         let color: Color
         let badge: String?
+        
+        // Convenience properties
+        var title: String {
+            return game?.title ?? devTool?.title ?? "Unknown"
+        }
+        
+        var description: String {
+            return game?.description ?? devTool?.description ?? ""
+        }
+        
+        var isDevTool: Bool {
+            return devTool != nil
+        }
+        
+        // Convenience initializers
+        init(game: Game, iconName: String, color: Color, badge: String? = nil) {
+            self.game = game
+            self.devTool = nil
+            self.iconName = iconName
+            self.color = color
+            self.badge = badge
+        }
+        
+        init(devTool: DevTool, iconName: String, color: Color, badge: String? = nil) {
+            self.game = nil
+            self.devTool = devTool
+            self.iconName = iconName
+            self.color = color
+            self.badge = badge
+        }
     }
     
     init(
         profileService: ProfileService,
         supabaseService: SupabaseService? = nil,
         puzzleManagementService: PuzzleManagementService? = nil,
+        developerService: DeveloperService,
         onGameSelected: @escaping (Game) -> Void,
+        onDevToolSelected: @escaping (DevTool) -> Void,
         onParentDashboardRequested: @escaping () -> Void,
         onProfileSetupRequested: @escaping () -> Void
     ) {
         self.profileService = profileService
         self.supabaseService = supabaseService
         self.puzzleManagementService = puzzleManagementService
+        self.developerService = developerService
         self.onGameSelected = onGameSelected
+        self.onDevToolSelected = onDevToolSelected
         self.onParentDashboardRequested = onParentDashboardRequested
         self.onProfileSetupRequested = onProfileSetupRequested
         
@@ -102,28 +139,38 @@ class GameLobbyViewModel {
     
     private func loadGames() {
         // Load available games
-        // In a real app, this would come from a configuration or backend
         let tangramGame = TangramGame(
             supabaseService: supabaseService,
             puzzleManagementService: puzzleManagementService
         )
-        let tangramEditorGame = TangramEditorGame(puzzleManagementService: puzzleManagementService)  // Editor uses service role auth internally
         
+        // Start with regular games
         availableGames = [
             GameItem(
                 game: tangramGame,
                 iconName: "square.on.square",
                 color: .blue,
                 badge: nil
-            ),
-            GameItem(
-                game: tangramEditorGame,
-                iconName: "pencil.and.ruler.fill",
-                color: .orange,
-                badge: "Editor"
             )
-            // Add more games here as they're implemented
         ]
+        
+        // Add developer tools only if user is a developer
+        if developerService.isDeveloper {
+            let tangramEditorTool = TangramEditorGame(puzzleManagementService: puzzleManagementService)
+            
+            availableGames.append(
+                GameItem(
+                    devTool: tangramEditorTool,
+                    iconName: "pencil.and.ruler.fill",
+                    color: .orange,
+                    badge: "Dev Tool"
+                )
+            )
+            
+            print("🛠️ Developer tools loaded for developer user")
+        } else {
+            print("👤 Regular user - dev tools hidden")
+        }
     }
     
     private func updateActiveProfile(_ profile: UserProfile?) {
@@ -157,32 +204,52 @@ class GameLobbyViewModel {
         return true
     }
     
-    func selectGame(_ game: Game) {
-        // Ensure we have a profile before selecting a game
-        guard let currentUserProfile = profileService.currentProfile else {
-            print("Cannot select game: No active profile")
-            return
-        }
-        
-        let profile = Profile(
-            id: currentUserProfile.id,
-            name: currentUserProfile.name,
-            avatar: nil,  // TODO: Add avatar support
-            level: calculateLevel(from: currentUserProfile.totalXP),
-            xp: currentUserProfile.totalXP
-        )
-        
-        // Simple direct call to analytics
-        if let analyticsService = getAnalyticsService() {
-            analyticsService.trackGameSelected(
-                gameId: game.id,
-                gameTitle: game.title,
-                userId: profile.id
+    func selectGameItem(_ gameItem: GameItem) {
+        if gameItem.isDevTool {
+            // Handle dev tool selection
+            guard let devTool = gameItem.devTool else {
+                print("Error: GameItem marked as dev tool but devTool is nil")
+                return
+            }
+            
+            // Dev tools don't require a child profile
+            print("🛠️ Developer tool selected: \(devTool.title)")
+            
+            // Navigate to dev tool
+            onDevToolSelected(devTool)
+        } else {
+            // Handle regular game selection
+            guard let game = gameItem.game else {
+                print("Error: GameItem marked as game but game is nil")
+                return
+            }
+            
+            // Ensure we have a profile before selecting a game
+            guard let currentUserProfile = profileService.currentProfile else {
+                print("Cannot select game: No active profile")
+                return
+            }
+            
+            let profile = Profile(
+                id: currentUserProfile.id,
+                name: currentUserProfile.name,
+                avatar: nil,  // TODO: Add avatar support
+                level: calculateLevel(from: currentUserProfile.totalXP),
+                xp: currentUserProfile.totalXP
             )
+            
+            // Track analytics for regular games
+            if let analyticsService = getAnalyticsService() {
+                analyticsService.trackGameSelected(
+                    gameId: game.id,
+                    gameTitle: game.title,
+                    userId: profile.id
+                )
+            }
+            
+            // Navigate to game
+            onGameSelected(game)
         }
-        
-        // Navigate to game
-        onGameSelected(game)
     }
     
     func openParentDashboard() {
