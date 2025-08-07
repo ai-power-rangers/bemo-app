@@ -141,13 +141,25 @@ class PieceManipulationService {
                 )
                 
             case .vertexToEdge(let pieceAId, let vertex, let pieceBId, let edge):
-                // Get the piece B (the edge owner) to determine the slide track
-                guard let pieceB = allPieces.first(where: { $0.id == pieceBId }) else {
+                // IMPORTANT: For vertex-to-edge, the vertex piece can both:
+                // 1. Slide along the edge
+                // 2. Rotate while keeping the vertex on the edge
+                
+                // Determine if this piece is the vertex piece or edge piece
+                let isPieceWithVertex = piece.id == pieceAId
+                
+                if !isPieceWithVertex {
+                    // This is the edge piece, it should be fixed
                     return .fixed
                 }
                 
-                let worldVerticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
-                let edgesB = TangramGeometry.edges(for: pieceB.type)
+                // Get the edge piece (piece B)
+                guard let edgePiece = allPieces.first(where: { $0.id == pieceBId }) else {
+                    return .fixed
+                }
+                
+                let worldVerticesB = TangramCoordinateSystem.getWorldVertices(for: edgePiece)
+                let edgesB = TangramGeometry.edges(for: edgePiece.type)
                 
                 guard edge < edgesB.count else {
                     return .fixed
@@ -157,38 +169,20 @@ class PieceManipulationService {
                 let edgeStart = worldVerticesB[edgeDef.startVertex]
                 let edgeEnd = worldVerticesB[edgeDef.endVertex]
                 
-                // Calculate edge vector and length
-                let dx = edgeEnd.x - edgeStart.x
-                let dy = edgeEnd.y - edgeStart.y
-                let edgeLength = sqrt(dx * dx + dy * dy)
-                let normalizedVector = CGVector(dx: dx / edgeLength, dy: dy / edgeLength)
+                // Get current vertex position on the edge for rotation pivot
+                let worldVerticesA = TangramCoordinateSystem.getWorldVertices(for: piece)
+                guard vertex < worldVerticesA.count else {
+                    return .fixed
+                }
+                let currentVertexPos = worldVerticesA[vertex]
                 
-                // Calculate dynamic slide limits if we have obstacle checking
-                let baseRange = 0...Double(edgeLength)
-                let otherPieces = allPieces.filter { $0.id != piece.id && $0.id != pieceBId }
+                // For vertex-to-edge: Allow rotation with the vertex as pivot
+                // The vertex must stay on the edge during rotation
+                let snapAngles: [Double] = [-180.0, -135.0, -90.0, -45.0, 0.0, 45.0, 90.0, 135.0, 180.0]
                 
-                // For initial implementation, use full edge range
-                // Dynamic limits will be calculated in Phase 3
-                let slideRange = baseRange
-                // Snap at exact 0%, 25%, 50%, 75%, 100% along the edge
-                let edgeLengthDouble = Double(edgeLength)
-                let snapPositions: [Double] = [
-                    0.0,                        // 0% - Start of edge
-                    edgeLengthDouble * 0.25,    // 25%
-                    edgeLengthDouble * 0.5,     // 50% - Middle
-                    edgeLengthDouble * 0.75,    // 75%
-                    edgeLengthDouble            // 100% - End of edge
-                ]
-                
-                return .slidable(
-                    edge: ManipulationMode.Edge(
-                        start: edgeStart,
-                        end: edgeEnd,
-                        vector: normalizedVector
-                    ),
-                    range: slideRange,
-                    snapPositions: snapPositions
-                )
+                // Use the current vertex position as the rotation pivot
+                // This vertex is constrained to stay on the edge
+                return .rotatable(pivot: currentVertexPos, snapAngles: snapAngles)
             }
         }
         

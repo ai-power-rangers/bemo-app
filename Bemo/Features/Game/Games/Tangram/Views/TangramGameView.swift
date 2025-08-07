@@ -44,45 +44,43 @@ struct TangramGameView: View {
     // MARK: - Puzzle Selection View
     
     private var puzzleSelectionView: some View {
-        VStack(spacing: 0) {
-            // Use proper safe area inset
-            Color.clear
-                .frame(height: 0)
-                .background(Color(UIColor.systemBackground))
-                .safeAreaInset(edge: .top) {
-                    // Header with back button
-                    HStack {
-                        Button(action: {
-                            viewModel.requestQuit()
-                        }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "chevron.left")
-                                    .font(.system(size: 20, weight: .medium))
-                                Text("Back")
-                                    .font(.system(size: 17, weight: .medium))
-                            }
-                        }
-                        .foregroundColor(.primary)
-                        
-                        Spacer()
-                        
-                        Text("Choose a Puzzle")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        
-                        Spacer()
-                        
-                        // Invisible spacer for balance
+        ZStack {
+            Color(UIColor.secondarySystemBackground)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // Header with back button - properly positioned below safe area
+                HStack {
+                    Button(action: {
+                        viewModel.requestQuit()
+                    }) {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.left")
+                                .font(.system(size: 20, weight: .medium))
                             Text("Back")
+                                .font(.system(size: 17, weight: .medium))
                         }
-                        .opacity(0)
                     }
-                    .padding(.horizontal)
-                    .padding(.vertical, 12)
-                    .background(Color(UIColor.systemBackground))
+                    .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Text("Choose a Puzzle")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                    
+                    Spacer()
+                    
+                    // Invisible spacer for balance
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
+                    }
+                    .opacity(0)
                 }
+                .padding(.horizontal)
+                .padding(.vertical, 12)
+                .background(Color(UIColor.systemBackground))
             
             // Filter chips
             ScrollView(.horizontal, showsIndicators: false) {
@@ -152,9 +150,10 @@ struct TangramGameView: View {
                     }
                     .padding()
                 }
+                }
             }
+            .safeAreaPadding(.top)  // This adds padding for the safe area
         }
-        .background(Color(UIColor.secondarySystemBackground))
     }
     
     private var availableCategories: [String] {

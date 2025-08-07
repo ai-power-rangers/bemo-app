@@ -36,14 +36,16 @@ struct TangramSpriteView: View {
     }()
     
     var body: some View {
-        // Full-screen SpriteKit scene
-        SpriteView(
-            scene: scene,
-            options: [.allowsTransparency]
-        )
-        .ignoresSafeArea()
-        .onAppear {
-            configureScene(size: UIScreen.main.bounds.size)
+        GeometryReader { geometry in
+            // Full-screen SpriteKit scene
+            SpriteView(
+                scene: scene,
+                options: [.allowsTransparency]
+            )
+            .ignoresSafeArea()
+            .onAppear {
+                configureScene(size: geometry.size, safeAreaTop: geometry.safeAreaInsets.top)
+            }
         }
         .onChange(of: puzzle) { newPuzzle in
             if let tangramScene = scene as? TangramPuzzleScene {
@@ -72,12 +74,13 @@ struct TangramSpriteView: View {
         }
     }
     
-    private func configureScene(size: CGSize) {
+    private func configureScene(size: CGSize, safeAreaTop: CGFloat) {
         // Configure scene properties
         guard let tangramScene = scene as? TangramPuzzleScene else { return }
         
         tangramScene.size = size
         tangramScene.scaleMode = .resizeFill
+        tangramScene.safeAreaTop = safeAreaTop  // Pass safe area to scene
         tangramScene.puzzle = puzzle
         tangramScene.onPieceCompleted = onPieceCompleted
         tangramScene.onPuzzleCompleted = onPuzzleCompleted

@@ -23,6 +23,7 @@ class TangramPuzzleScene: SKScene {
     var onNextPressed: (() -> Void)?
     var onStartTimer: (() -> Void)?
     var onToggleHints: (() -> Void)?
+    var safeAreaTop: CGFloat = 0
     
     // Node layers
     private var backgroundLayer = SKNode()
@@ -115,13 +116,9 @@ class TangramPuzzleScene: SKScene {
         // Calculate the original bounds of the puzzle
         puzzleBounds = calculatePuzzleBounds(for: puzzle.targetPieces)
         
-        // Calculate scale to fit the puzzle in the top area
-        let targetAreaSize = CGSize(width: size.width * 0.8, height: size.height * 0.35)
-        puzzleScale = min(
-            targetAreaSize.width / puzzleBounds.width,
-            targetAreaSize.height / puzzleBounds.height,
-            0.5  // Don't make it too big
-        )
+        // Use the same scale as the movable pieces (no additional scaling)
+        // The pieces already use TangramGameConstants.visualScale
+        puzzleScale = 1.0
         
         // Create target silhouettes with proper scaling and positioning
         for target in puzzle.targetPieces {
@@ -129,8 +126,9 @@ class TangramPuzzleScene: SKScene {
         }
         
         // Position the puzzle layer to center the target at the top of screen
-        let centerX = size.width / 2
-        let centerY = size.height * 0.75  // Top area
+        // Offset to center the puzzle bounds and account for safe area
+        let centerX = size.width / 2 - puzzleBounds.midX
+        let centerY = (size.height - safeAreaTop) * 0.75 + puzzleBounds.midY  // Top area below safe area
         puzzleLayer.position = CGPoint(x: centerX, y: centerY)
         
         // Create movable pieces at the bottom
@@ -143,20 +141,20 @@ class TangramPuzzleScene: SKScene {
         let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
         let transformedVertices = TangramGameGeometry.transformVertices(scaledVertices, with: target.transform)
         
-        // Create shape from transformed vertices, adjusted for display
+        // Create shape from transformed vertices
+        // Just flip Y for SpriteKit coordinate system
         let path = UIBezierPath()
         if let firstVertex = transformedVertices.first {
-            // Center the puzzle and apply display scale
             let adjustedFirst = CGPoint(
-                x: (firstVertex.x - puzzleBounds.midX) * scale,
-                y: -(firstVertex.y - puzzleBounds.midY) * scale  // Flip Y for SpriteKit
+                x: firstVertex.x,
+                y: -firstVertex.y  // Flip Y for SpriteKit
             )
             path.move(to: adjustedFirst)
             
             for vertex in transformedVertices.dropFirst() {
                 let adjustedVertex = CGPoint(
-                    x: (vertex.x - puzzleBounds.midX) * scale,
-                    y: -(vertex.y - puzzleBounds.midY) * scale  // Flip Y for SpriteKit
+                    x: vertex.x,
+                    y: -vertex.y  // Flip Y for SpriteKit
                 )
                 path.addLine(to: adjustedVertex)
             }
@@ -230,7 +228,10 @@ class TangramPuzzleScene: SKScene {
                     onToggleHints?()
                     return
                 } else if parent.name == "closeRotationDial" || node.name == "closeRotationDial" {
-                    hideRotationDial()
+                    hideRotationDial(cancel: true)
+                    return
+                } else if parent.name == "saveRotationDial" || node.name == "saveRotationDial" {
+                    hideRotationDial(cancel: false)
                     return
                 }
             }
@@ -306,6 +307,11 @@ class TangramPuzzleScene: SKScene {
         guard let touch = touches.first else { return }
         let location = touch.location(in: self)
         
+        // If we're showing the rotation dial, don't process normal touch ended
+        if isShowingRotationDial {
+            return
+        }
+        
         // Check if this was a tap (not a drag)
         if let pendingPiece = pendingRotationPiece {
             let dragDistance = hypot(location.x - tapStartLocation.x, location.y - tapStartLocation.y)
@@ -336,8 +342,8 @@ class TangramPuzzleScene: SKScene {
                 
                 // Calculate the expected position for this piece
                 let targetWorldPos = CGPoint(
-                    x: (targetData.transform.tx - puzzleBounds.midX) * puzzleScale + puzzleLayer.position.x,
-                    y: -(targetData.transform.ty - puzzleBounds.midY) * puzzleScale + puzzleLayer.position.y
+                    x: targetData.transform.tx + puzzleLayer.position.x,
+                    y: -targetData.transform.ty + puzzleLayer.position.y
                 )
                 
                 let distance = hypot(selected.position.x - targetWorldPos.x,
@@ -376,8 +382,8 @@ class TangramPuzzleScene: SKScene {
         if let targetData = matchingTarget {
             // Calculate the expected position for this piece
             let targetWorldPos = CGPoint(
-                x: (targetData.transform.tx - puzzleBounds.midX) * puzzleScale + puzzleLayer.position.x,
-                y: -(targetData.transform.ty - puzzleBounds.midY) * puzzleScale + puzzleLayer.position.y
+                x: targetData.transform.tx + puzzleLayer.position.x,
+                y: -targetData.transform.ty + puzzleLayer.position.y
             )
             
             let distance = hypot(piece.position.x - targetWorldPos.x,
@@ -545,7 +551,8 @@ class TangramPuzzleScene: SKScene {
         buttonContainer.addChild(label)
         
         buttonContainer.name = "backButton"
-        buttonContainer.position = CGPoint(x: 70, y: size.height - 60)
+        // Position below safe area
+        buttonContainer.position = CGPoint(x: 70, y: size.height - safeAreaTop - 40)
         
         self.backButton = buttonContainer
         uiLayer.addChild(buttonContainer)
@@ -581,7 +588,8 @@ class TangramPuzzleScene: SKScene {
             self.startTimerButton = timerContainer
         }
         
-        timerContainer.position = CGPoint(x: 200, y: size.height - 60)
+        // Position below safe area
+        timerContainer.position = CGPoint(x: 200, y: size.height - safeAreaTop - 40)
         uiLayer.addChild(timerContainer)
     }
     
@@ -593,7 +601,8 @@ class TangramPuzzleScene: SKScene {
         let progressBg = SKShapeNode(rectOf: CGSize(width: barWidth, height: barHeight), cornerRadius: 4)
         progressBg.fillColor = SKColor.systemGray5
         progressBg.strokeColor = SKColor.clear
-        progressBg.position = CGPoint(x: size.width - 100, y: size.height - 60)
+        // Position below safe area
+        progressBg.position = CGPoint(x: size.width - 100, y: size.height - safeAreaTop - 40)
         
         // Progress fill
         let fillWidth = barWidth * CGFloat(progress)
@@ -626,7 +635,8 @@ class TangramPuzzleScene: SKScene {
         buttonContainer.addChild(icon)
         
         buttonContainer.name = "hintsButton"
-        buttonContainer.position = CGPoint(x: size.width - 50, y: size.height - 120)
+        // Position below other UI elements
+        buttonContainer.position = CGPoint(x: size.width - 50, y: size.height - safeAreaTop - 100)
         
         self.hintsButton = buttonContainer
         uiLayer.addChild(buttonContainer)
@@ -717,7 +727,8 @@ class TangramPuzzleScene: SKScene {
         buttonContainer.addChild(arrow)
         
         buttonContainer.name = "nextButton"
-        buttonContainer.position = CGPoint(x: 70, y: size.height - 60)
+        // Position below safe area
+        buttonContainer.position = CGPoint(x: 70, y: size.height - safeAreaTop - 40)
         
         self.nextButton = buttonContainer
         uiLayer.addChild(buttonContainer)
@@ -778,6 +789,10 @@ class TangramPuzzleScene: SKScene {
         // Remove any existing dial
         hideRotationDial()
         
+        // Keep the piece selected while rotating
+        selectedPiece = piece
+        piece.isSelected = true
+        
         // Create new rotation dial
         rotationDial = RotationDialNode()
         rotationDial?.position = piece.position
@@ -790,7 +805,20 @@ class TangramPuzzleScene: SKScene {
         }
     }
     
-    private func hideRotationDial() {
+    private func hideRotationDial(cancel: Bool = false) {
+        if cancel, let dial = rotationDial {
+            // Restore original rotation if canceling
+            dial.restoreOriginalRotation()
+        }
+        
+        // Deselect the piece
+        if let selected = selectedPiece {
+            selected.isSelected = false
+            let scaleDown = SKAction.scale(to: 1.0, duration: 0.1)
+            selected.run(scaleDown)
+            selectedPiece = nil
+        }
+        
         rotationDial?.removeFromParent()
         rotationDial = nil
         isShowingRotationDial = false
@@ -805,10 +833,12 @@ class RotationDialNode: SKNode {
     private var angleLabel: SKLabelNode!
     private var targetPiece: PuzzlePieceNode?
     private var initialRotation: CGFloat = 0
+    private var originalRotation: CGFloat = 0
     
     func showForPiece(_ piece: PuzzlePieceNode) {
         targetPiece = piece
         initialRotation = piece.zRotation
+        originalRotation = piece.zRotation  // Store original for cancel
         
         // Create dial circle
         dial = SKShapeNode(circleOfRadius: 80)
@@ -863,7 +893,7 @@ class RotationDialNode: SKNode {
         angleLabel.position = CGPoint(x: 0, y: -110)
         addChild(angleLabel)
         
-        // Add close button
+        // Add close button (cancel)
         let closeButton = SKShapeNode(circleOfRadius: 15)
         closeButton.fillColor = .systemRed
         closeButton.strokeColor = .white
@@ -875,9 +905,45 @@ class RotationDialNode: SKNode {
         xLabel.fontSize = 16
         xLabel.fontColor = .white
         xLabel.position = CGPoint(x: 0, y: -5)
+        xLabel.name = "closeRotationDial"
         closeButton.addChild(xLabel)
         
         addChild(closeButton)
+        
+        // Add save button (confirm)
+        let saveButton = SKShapeNode(circleOfRadius: 15)
+        saveButton.fillColor = .systemGreen
+        saveButton.strokeColor = .white
+        saveButton.lineWidth = 2
+        saveButton.position = CGPoint(x: -60, y: 60)
+        saveButton.name = "saveRotationDial"
+        
+        let checkLabel = SKLabelNode(text: "✓")
+        checkLabel.fontSize = 16
+        checkLabel.fontColor = .white
+        checkLabel.position = CGPoint(x: 0, y: -5)
+        checkLabel.name = "saveRotationDial"
+        saveButton.addChild(checkLabel)
+        
+        addChild(saveButton)
+        
+        // Add center button (also saves)
+        let centerButton = SKShapeNode(circleOfRadius: 25)
+        centerButton.fillColor = .systemBlue.withAlphaComponent(0.3)
+        centerButton.strokeColor = .systemBlue
+        centerButton.lineWidth = 2
+        centerButton.position = CGPoint.zero
+        centerButton.name = "saveRotationDial"
+        centerButton.zPosition = 5
+        
+        let saveIcon = SKLabelNode(text: "✓")
+        saveIcon.fontSize = 20
+        saveIcon.fontColor = .systemBlue
+        saveIcon.position = CGPoint(x: 0, y: -7)
+        saveIcon.name = "saveRotationDial"
+        centerButton.addChild(saveIcon)
+        
+        addChild(centerButton)
     }
     
     func updateRotation(to angle: CGFloat) {
@@ -897,6 +963,13 @@ class RotationDialNode: SKNode {
         while degrees < 0 { degrees += 360 }
         while degrees >= 360 { degrees -= 360 }
         angleLabel.text = "\(degrees)°"
+    }
+    
+    func restoreOriginalRotation() {
+        // Restore the piece to its original rotation if canceling
+        if let piece = targetPiece {
+            piece.zRotation = originalRotation
+        }
     }
 }
 

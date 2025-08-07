@@ -366,9 +366,12 @@ extension TangramEditorViewModel {
                 switch connection.type {
                 case .vertexToVertex(let pieceAId, let vertexA, _, let vertexB):
                     pieceVertexIndex = (pieceAId == pieceId) ? vertexA : vertexB
-                case .vertexToEdge(let pieceAId, let vertex, _, _):
+                case .vertexToEdge(let pieceAId, let vertex, let pieceBId, let edge):
                     if pieceAId == pieceId {
                         pieceVertexIndex = vertex
+                        // For vertex-to-edge, we need special handling
+                        // The vertex can slide along the edge during rotation
+                        // This requires calculating where on the edge the vertex projects to
                     } else {
                         return // This piece is the edge, not the vertex
                     }
@@ -394,19 +397,83 @@ extension TangramEditorViewModel {
             // Calculate the new total rotation (initial + delta)
             let totalRotation = initialRotation + deltaRadians
             
-            // CORRECT APPROACH: Create transform that rotates piece and positions it
-            // so the vertex stays at the pivot
+            // CORRECT APPROACH: Rotate around the pivot point, not the origin
+            // The connected vertex must stay exactly at the pivot point
             
-            // First, create the rotation transform
-            let rotationTransform = CGAffineTransform(rotationAngle: totalRotation)
+            // First apply the initial transform to get current vertex position
+            let currentVertex = visualVertex.applying(initialTransform)
             
-            // Apply rotation to find where the vertex ends up
-            let rotatedVertex = visualVertex.applying(rotationTransform)
+            // Calculate the offset from the pivot to maintain connection
+            let offsetX = pivot.x - currentVertex.x
+            let offsetY = pivot.y - currentVertex.y
             
-            // Create final transform: rotation + translation to keep vertex at pivot
-            var correctedTransform = rotationTransform
-            correctedTransform.tx = pivot.x - rotatedVertex.x
-            correctedTransform.ty = pivot.y - rotatedVertex.y
+            // Special handling for vertex-to-edge connections
+            var correctedTransform: CGAffineTransform
+            
+            if let connection = relevantConnection,
+               case .vertexToEdge(_, _, let pieceBId, let edgeIndex) = connection.type {
+                // For vertex-to-edge: the vertex can slide along the edge during rotation
+                // Calculate the rotated position, then project it onto the edge
+                
+                // First, create the standard rotation transform
+                var rotTransform = CGAffineTransform.identity
+                rotTransform = rotTransform.translatedBy(x: pivot.x, y: pivot.y)
+                rotTransform = rotTransform.rotated(by: totalRotation)
+                rotTransform = rotTransform.translatedBy(x: -visualVertex.x, y: -visualVertex.y)
+                
+                // Apply this transform to find where the vertex would be
+                let rotatedVertex = visualVertex.applying(rotTransform)
+                
+                // Get the edge piece and its edge
+                if let edgePiece = puzzle.pieces.first(where: { $0.id == pieceBId }) {
+                    let edgeVertices = TangramCoordinateSystem.getWorldVertices(for: edgePiece)
+                    let edges = TangramGeometry.edges(for: edgePiece.type)
+                    
+                    if edgeIndex < edges.count {
+                        let edgeDef = edges[edgeIndex]
+                        let edgeStart = edgeVertices[edgeDef.startVertex]
+                        let edgeEnd = edgeVertices[edgeDef.endVertex]
+                        
+                        // Project the rotated vertex onto the edge
+                        let edgeVector = CGVector(dx: edgeEnd.x - edgeStart.x, dy: edgeEnd.y - edgeStart.y)
+                        let edgeLength = sqrt(edgeVector.dx * edgeVector.dx + edgeVector.dy * edgeVector.dy)
+                        
+                        if edgeLength > 0.001 {
+                            // Calculate projection
+                            let toVertex = CGVector(dx: rotatedVertex.x - edgeStart.x, dy: rotatedVertex.y - edgeStart.y)
+                            let t = max(0, min(1, (toVertex.dx * edgeVector.dx + toVertex.dy * edgeVector.dy) / (edgeLength * edgeLength)))
+                            
+                            // Find the closest point on the edge
+                            let projectedPoint = CGPoint(
+                                x: edgeStart.x + t * edgeVector.dx,
+                                y: edgeStart.y + t * edgeVector.dy
+                            )
+                            
+                            // Adjust the transform to place vertex at the projected point
+                            correctedTransform = CGAffineTransform.identity
+                            correctedTransform = correctedTransform.translatedBy(x: projectedPoint.x, y: projectedPoint.y)
+                            correctedTransform = correctedTransform.rotated(by: totalRotation)
+                            correctedTransform = correctedTransform.translatedBy(x: -visualVertex.x, y: -visualVertex.y)
+                        } else {
+                            correctedTransform = rotTransform
+                        }
+                    } else {
+                        correctedTransform = rotTransform
+                    }
+                } else {
+                    correctedTransform = rotTransform
+                }
+            } else {
+                // Standard vertex-to-vertex rotation
+                // Create transform that:
+                // 1. Translates piece so connected vertex is at origin
+                // 2. Rotates by the total angle
+                // 3. Translates back so vertex is at pivot
+                correctedTransform = CGAffineTransform.identity
+                correctedTransform = correctedTransform.translatedBy(x: pivot.x, y: pivot.y)
+                correctedTransform = correctedTransform.rotated(by: totalRotation)
+                correctedTransform = correctedTransform.translatedBy(x: -visualVertex.x, y: -visualVertex.y)
+            }
             
             // CRITICAL: Use comprehensive validation
             // Create a test piece with the same ID for connection validation
