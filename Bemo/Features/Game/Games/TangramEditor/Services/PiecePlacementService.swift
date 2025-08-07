@@ -5,24 +5,21 @@
 //  Service for managing tangram piece placement logic
 //
 
+// TODO: REFACTOR TO USE PieceTransformEngine
+// This service currently has its own placement logic which can diverge from PieceTransformEngine.
+// To ensure consistency between preview and actual placement, this should delegate to
+// PieceTransformEngine.calculateTransform() for all transform calculations.
+// This refactor will eliminate duplicate logic and ensure preview always matches placement.
+
 import Foundation
 import CoreGraphics
 
 class PiecePlacementService {
     
-    private let geometryService: GeometryService
     private let connectionService: ConnectionService
-    private let validationService: ValidationService
-    private let constraintManager: ConstraintManager
     
-    init(geometryService: GeometryService = GeometryService(),
-         connectionService: ConnectionService = ConnectionService(),
-         validationService: ValidationService = ValidationService(),
-         constraintManager: ConstraintManager = ConstraintManager()) {
-        self.geometryService = geometryService
+    init(connectionService: ConnectionService = ConnectionService()) {
         self.connectionService = connectionService
-        self.validationService = validationService
-        self.constraintManager = constraintManager
     }
     
     // MARK: - Piece Placement
@@ -53,6 +50,7 @@ class PiecePlacementService {
     func placeConnectedPiece(
         type: PieceType,
         rotation: Double,
+        isFlipped: Bool = false,
         connections: [(canvasPoint: ConnectionPoint, piecePoint: ConnectionPoint)],
         existingPieces: [TangramPiece]
     ) -> TangramPiece? {
@@ -65,12 +63,19 @@ class PiecePlacementService {
         // Recalculate local positions from the piece geometry
         var localPiecePositions: [CGPoint] = []
         for conn in connections {
-            let localPos = TangramCoordinateSystem.getLocalConnectionPoint(
+            var localPos = TangramCoordinateSystem.getLocalConnectionPoint(
                 for: type,
                 connectionType: conn.piecePoint.type
             )
+            
+            // Apply flip if needed (for parallelogram) BEFORE using the position
+            if isFlipped && type == .parallelogram {
+                // Flip horizontally around the origin
+                localPos.x = -localPos.x
+            }
+            
             localPiecePositions.append(localPos)
-            print("DEBUG PPS: Calculated local position for \(conn.piecePoint.type): \(localPos)")
+            print("DEBUG PPS: Calculated local position for \(conn.piecePoint.type): \(localPos) (flipped: \(isFlipped))")
         }
         
         // Start with base rotation
@@ -90,10 +95,13 @@ class PiecePlacementService {
                case .edge(let pieceEdgeIndex) = connections[0].piecePoint.type {
                 
                 print("DEBUG PPS: Single edge-to-edge connection, calculating auto-rotation")
+                print("DEBUG PPS: Canvas edge index: \(canvasEdgeIndex), Piece edge index: \(pieceEdgeIndex)")
                 
                 // Find the canvas piece that owns this edge
                 if let canvasPieceId = connections[0].canvasPoint.pieceId.split(separator: "_").first,
                    let canvasPiece = existingPieces.first(where: { $0.id == String(canvasPieceId) }) {
+                    
+                    print("DEBUG PPS: Canvas piece type: \(canvasPiece.type), New piece type: \(type)")
                     
                     // Get edge directions in world space
                     let canvasVertices = TangramCoordinateSystem.getWorldVertices(for: canvasPiece)
@@ -103,7 +111,9 @@ class PiecePlacementService {
                         let canvasEdge = canvasEdges[canvasEdgeIndex]
                         let canvasStart = canvasVertices[canvasEdge.startVertex]
                         let canvasEnd = canvasVertices[canvasEdge.endVertex]
+                        let canvasEdgeLength = hypot(canvasEnd.x - canvasStart.x, canvasEnd.y - canvasStart.y)
                         let canvasEdgeAngle = atan2(canvasEnd.y - canvasStart.y, canvasEnd.x - canvasStart.x)
+                        print("DEBUG PPS: Canvas edge \(canvasEdgeIndex) length: \(canvasEdgeLength)")
                         
                         // Get piece edge direction in local space
                         let pieceVertices = TangramGeometry.vertices(for: type)
@@ -113,11 +123,17 @@ class PiecePlacementService {
                             let pieceEdge = pieceEdges[pieceEdgeIndex]
                             let pieceStart = pieceVertices[pieceEdge.startVertex]
                             let pieceEnd = pieceVertices[pieceEdge.endVertex]
+                            let pieceEdgeLength = hypot(pieceEnd.x - pieceStart.x, pieceEnd.y - pieceStart.y)
                             let pieceEdgeAngle = atan2(pieceEnd.y - pieceStart.y, pieceEnd.x - pieceStart.x)
+                            print("DEBUG PPS: Piece edge \(pieceEdgeIndex) length: \(pieceEdgeLength)")
+                            print("DEBUG PPS: Edge lengths differ by: \(abs(canvasEdgeLength - pieceEdgeLength * TangramConstants.visualScale))")
                             
                             // Calculate rotation to make edges anti-parallel (facing opposite)
                             finalRotation = canvasEdgeAngle - pieceEdgeAngle + .pi
                             
+                            // Edge-to-edge connections are allowed even with different lengths
+                            // The shorter edge will slide along the longer edge
+                            print("DEBUG PPS: Edge-to-edge connection allowed (sliding supported)")
                             print("DEBUG PPS: Auto-rotation calculated: \(finalRotation * 180 / .pi)°")
                         }
                     }
@@ -129,13 +145,76 @@ class PiecePlacementService {
             let rotatedPiecePos = localPiecePos.applying(transform)
             print("DEBUG PPS: Rotated piece position: \(rotatedPiecePos)")
             
-            // Calculate translation
-            let dx = canvasPos.x - rotatedPiecePos.x
-            let dy = canvasPos.y - rotatedPiecePos.y
+            // For edge-to-edge connections, we need special alignment
+            if case .edge(let canvasEdgeIndex) = connections[0].canvasPoint.type,
+               case .edge(let pieceEdgeIndex) = connections[0].piecePoint.type {
+                
+                // Find the canvas piece that owns this edge
+                if let canvasPieceId = connections[0].canvasPoint.pieceId.split(separator: "_").first,
+                   let canvasPiece = existingPieces.first(where: { $0.id == String(canvasPieceId) }) {
+                    
+                    // Get the actual edge endpoints, not just midpoint
+                    let canvasVertices = TangramCoordinateSystem.getWorldVertices(for: canvasPiece)
+                    let canvasEdges = TangramGeometry.edges(for: canvasPiece.type)
+                    
+                    if canvasEdgeIndex < canvasEdges.count {
+                        let canvasEdge = canvasEdges[canvasEdgeIndex]
+                        let canvasEdgeStart = canvasVertices[canvasEdge.startVertex]
+                        let canvasEdgeEnd = canvasVertices[canvasEdge.endVertex]
+                        
+                        // Get the piece edge endpoints in local space
+                        let pieceVertices = TangramGeometry.vertices(for: type)
+                        let pieceEdges = TangramGeometry.edges(for: type)
+                        
+                        if pieceEdgeIndex < pieceEdges.count {
+                            let pieceEdge = pieceEdges[pieceEdgeIndex]
+                            let pieceStart = pieceVertices[pieceEdge.startVertex]
+                            let pieceEnd = pieceVertices[pieceEdge.endVertex]
+                            
+                            // Apply scale and rotation to piece edge
+                            let scaledPieceStart = CGPoint(
+                                x: pieceStart.x * TangramConstants.visualScale,
+                                y: pieceStart.y * TangramConstants.visualScale
+                            ).applying(transform)
+                            let scaledPieceEnd = CGPoint(
+                                x: pieceEnd.x * TangramConstants.visualScale,
+                                y: pieceEnd.y * TangramConstants.visualScale
+                            ).applying(transform)
+                            
+                            // Calculate piece edge midpoint after rotation
+                            let pieceMidpoint = CGPoint(
+                                x: (scaledPieceStart.x + scaledPieceEnd.x) / 2,
+                                y: (scaledPieceStart.y + scaledPieceEnd.y) / 2
+                            )
+                            
+                            // Calculate canvas edge midpoint
+                            let canvasMidpoint = CGPoint(
+                                x: (canvasEdgeStart.x + canvasEdgeEnd.x) / 2,
+                                y: (canvasEdgeStart.y + canvasEdgeEnd.y) / 2
+                            )
+                            
+                            // Align midpoints
+                            let dx = canvasMidpoint.x - pieceMidpoint.x
+                            let dy = canvasMidpoint.y - pieceMidpoint.y
+                            
+                            transform.tx = dx
+                            transform.ty = dy
+                            
+                            print("DEBUG PPS: Edge-to-edge alignment - Canvas midpoint: \(canvasMidpoint), Piece midpoint: \(pieceMidpoint)")
+                            print("DEBUG PPS: Final translation: dx=\(dx), dy=\(dy)")
+                        }
+                    }
+                }
+            } else {
+                // For vertex connections, use the original simple alignment
+                let dx = canvasPos.x - rotatedPiecePos.x
+                let dy = canvasPos.y - rotatedPiecePos.y
+                
+                // Set translation directly in world space
+                transform.tx = dx
+                transform.ty = dy
+            }
             
-            // Set translation directly in world space
-            transform.tx = dx
-            transform.ty = dy
             print("DEBUG PPS: Final transform: \(transform)")
             
         } else if connections.count >= 2 {
@@ -250,13 +329,77 @@ class PiecePlacementService {
             
             print("DEBUG PPS: Rotated piece position: \(rotatedPiecePos)")
             
-            // Calculate translation to align the first point perfectly
-            let dx = canvasPos.x - rotatedPiecePos.x
-            let dy = canvasPos.y - rotatedPiecePos.y
+            // For multi-point connections, check if the primary connection is edge-to-edge
+            if case .edge(let canvasEdgeIndex) = sortedConnections[0].canvasPoint.type,
+               case .edge(let pieceEdgeIndex) = sortedConnections[0].piecePoint.type {
+                
+                // Find the canvas piece that owns this edge
+                if let canvasPieceId = sortedConnections[0].canvasPoint.pieceId.split(separator: "_").first,
+                   let canvasPiece = existingPieces.first(where: { $0.id == String(canvasPieceId) }) {
+                    
+                    // Get the actual edge endpoints for proper alignment
+                    let canvasVertices = TangramCoordinateSystem.getWorldVertices(for: canvasPiece)
+                    let canvasEdges = TangramGeometry.edges(for: canvasPiece.type)
+                    
+                    if canvasEdgeIndex < canvasEdges.count {
+                        let canvasEdge = canvasEdges[canvasEdgeIndex]
+                        let canvasEdgeStart = canvasVertices[canvasEdge.startVertex]
+                        let canvasEdgeEnd = canvasVertices[canvasEdge.endVertex]
+                        
+                        // Get the piece edge endpoints in local space
+                        let pieceVertices = TangramGeometry.vertices(for: type)
+                        let pieceEdges = TangramGeometry.edges(for: type)
+                        
+                        if pieceEdgeIndex < pieceEdges.count {
+                            let pieceEdge = pieceEdges[pieceEdgeIndex]
+                            let pieceStart = pieceVertices[pieceEdge.startVertex]
+                            let pieceEnd = pieceVertices[pieceEdge.endVertex]
+                            
+                            // Apply scale and rotation to piece edge
+                            let scaledPieceStart = CGPoint(
+                                x: pieceStart.x * TangramConstants.visualScale,
+                                y: pieceStart.y * TangramConstants.visualScale
+                            ).applying(transform)
+                            let scaledPieceEnd = CGPoint(
+                                x: pieceEnd.x * TangramConstants.visualScale,
+                                y: pieceEnd.y * TangramConstants.visualScale
+                            ).applying(transform)
+                            
+                            // Calculate piece edge midpoint after rotation
+                            let pieceMidpoint = CGPoint(
+                                x: (scaledPieceStart.x + scaledPieceEnd.x) / 2,
+                                y: (scaledPieceStart.y + scaledPieceEnd.y) / 2
+                            )
+                            
+                            // Calculate canvas edge midpoint
+                            let canvasMidpoint = CGPoint(
+                                x: (canvasEdgeStart.x + canvasEdgeEnd.x) / 2,
+                                y: (canvasEdgeStart.y + canvasEdgeEnd.y) / 2
+                            )
+                            
+                            // Align midpoints
+                            let dx = canvasMidpoint.x - pieceMidpoint.x
+                            let dy = canvasMidpoint.y - pieceMidpoint.y
+                            
+                            transform.tx = dx
+                            transform.ty = dy
+                            
+                            print("DEBUG PPS: Multi-point edge-to-edge alignment")
+                            print("DEBUG PPS: Canvas midpoint: \(canvasMidpoint), Piece midpoint: \(pieceMidpoint)")
+                            print("DEBUG PPS: Final translation: dx=\(dx), dy=\(dy)")
+                        }
+                    }
+                }
+            } else {
+                // For vertex connections, use simple alignment
+                let dx = canvasPos.x - rotatedPiecePos.x
+                let dy = canvasPos.y - rotatedPiecePos.y
+                
+                // Set translation directly in world space
+                transform.tx = dx
+                transform.ty = dy
+            }
             
-            // Set translation directly in world space
-            transform.tx = dx
-            transform.ty = dy
             print("DEBUG PPS: Final transform: \(transform)")
         } else {
             print("DEBUG PPS: ERROR - No connections provided")
@@ -290,6 +433,13 @@ class PiecePlacementService {
         if !TangramCoordinateSystem.isValidTransform(transform) {
             print("DEBUG PPS: ERROR - Transform is invalid: \(transform)")
             return nil
+        }
+        
+        // Apply flip to the final transform if needed
+        if isFlipped && type == .parallelogram {
+            let flipTransform = CGAffineTransform(scaleX: -1, y: 1)
+            transform = transform.concatenating(flipTransform)
+            print("DEBUG PPS: Applied flip to transform")
         }
         
         print("DEBUG PPS: Creating piece with final transform: \(transform)")

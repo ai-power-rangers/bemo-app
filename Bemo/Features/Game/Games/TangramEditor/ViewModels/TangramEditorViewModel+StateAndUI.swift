@@ -102,17 +102,14 @@ extension TangramEditorViewModel {
     // MARK: - Selection Management
     
     func selectPiece(id: String) {
-        // Check if piece is locked before allowing selection
-        guard let piece = puzzle.pieces.first(where: { $0.id == id }) else { return }
+        // Check if piece exists
+        guard puzzle.pieces.first(where: { $0.id == id }) != nil else { return }
         
-        if piece.isLocked {
-            // Transition to locked piece state
-            _ = transitionToState(.pieceSelected(id: id, isLocked: true))
-        } else {
-            if uiState.editMode == .select {
-                uiState.selectedPieceIds.insert(id)
-                _ = transitionToState(.pieceSelected(id: id, isLocked: false))
-            }
+        // Transition to piece selected state
+        _ = transitionToState(.pieceSelected(id: id))
+        
+        if uiState.editMode == .select {
+            uiState.selectedPieceIds.insert(id)
         }
     }
     
@@ -254,16 +251,125 @@ extension TangramEditorViewModel {
                     connections.append((canvasPoint: canvasEdge, piecePoint: pieceEdge))
                 }
                 
-                // Calculate placement
+                // Calculate placement - add debug for parallelogram issues
+                print("[DEBUG] Attempting placement for \(type)")
+                print("[DEBUG] Connections: \(connections.count)")
+                for (i, conn) in connections.enumerated() {
+                    print("[DEBUG] Connection \(i): canvas \(conn.canvasPoint.type) at \(conn.canvasPoint.position) -> piece \(conn.piecePoint.type) at \(conn.piecePoint.position)")
+                }
+                
                 if let placedPiece = placementService.placeConnectedPiece(
                     type: type,
                     rotation: uiState.pendingPieceRotation * .pi / 180,
+                    isFlipped: uiState.pendingPieceIsFlipped && type == .parallelogram,
                     connections: connections,
                     existingPieces: puzzle.pieces
                 ) {
-                    uiState.previewPiece = placedPiece
-                    uiState.previewTransform = placedPiece.transform
+                    print("[DEBUG] Initial placement successful, validating...")
+                    print("[DEBUG] Piece type: \(type), Rotation: \(uiState.pendingPieceRotation)°, Flipped: \(uiState.pendingPieceIsFlipped)")
+                    print("[DEBUG] Connection details:")
+                    for conn in connections {
+                        print("[DEBUG]   Canvas: \(conn.canvasPoint.type) on \(conn.canvasPoint.pieceId)")
+                        print("[DEBUG]   Piece: \(conn.piecePoint.type)")
+                    }
+                    
+                    // Create a Connection object for validation based on the connection points
+                    // This tells the validator that these pieces are supposed to be connected
+                    var validationConnection: Connection? = nil
+                    if let firstConnection = connections.first,
+                       let canvasPieceId = firstConnection.canvasPoint.pieceId.split(separator: "_").first {
+                        let canvasPieceIdStr = String(canvasPieceId)
+                        
+                        // Determine connection type based on the points
+                        if case .vertex(let canvasVertexIndex) = firstConnection.canvasPoint.type,
+                           case .vertex(let pieceVertexIndex) = firstConnection.piecePoint.type {
+                            validationConnection = Connection(
+                                type: .vertexToVertex(
+                                    pieceAId: canvasPieceIdStr,
+                                    vertexA: canvasVertexIndex,
+                                    pieceBId: placedPiece.id,
+                                    vertexB: pieceVertexIndex
+                                ),
+                                constraint: Constraint(type: .fixed, affectedPieceId: placedPiece.id)
+                            )
+                        } else if case .edge(let canvasEdgeIndex) = firstConnection.canvasPoint.type,
+                                  case .edge(let pieceEdgeIndex) = firstConnection.piecePoint.type {
+                            let connectionType = ConnectionType.edgeToEdge(
+                                pieceAId: canvasPieceIdStr,
+                                edgeA: canvasEdgeIndex,
+                                pieceBId: placedPiece.id,
+                                edgeB: pieceEdgeIndex
+                            )
+                            // Create connection service temporarily for constraint calculation
+                            let connectionService = ConnectionService()
+                            validationConnection = connectionService.createConnection(
+                                type: connectionType,
+                                pieces: puzzle.pieces + [placedPiece]
+                            )
+                        } else if case .vertex(let vertexIndex) = firstConnection.canvasPoint.type,
+                                  case .edge(let edgeIndex) = firstConnection.piecePoint.type {
+                            let connectionType = ConnectionType.vertexToEdge(
+                                pieceAId: canvasPieceIdStr,
+                                vertex: vertexIndex,
+                                pieceBId: placedPiece.id,
+                                edge: edgeIndex
+                            )
+                            // Create connection service temporarily for constraint calculation
+                            let connectionService = ConnectionService()
+                            validationConnection = connectionService.createConnection(
+                                type: connectionType,
+                                pieces: puzzle.pieces + [placedPiece]
+                            )
+                        } else if case .edge(let edgeIndex) = firstConnection.canvasPoint.type,
+                                  case .vertex(let vertexIndex) = firstConnection.piecePoint.type {
+                            let connectionType = ConnectionType.vertexToEdge(
+                                pieceAId: placedPiece.id,
+                                vertex: vertexIndex,
+                                pieceBId: canvasPieceIdStr,
+                                edge: edgeIndex
+                            )
+                            // Create connection service temporarily for constraint calculation
+                            let connectionService = ConnectionService()
+                            validationConnection = connectionService.createConnection(
+                                type: connectionType,
+                                pieces: puzzle.pieces + [placedPiece]
+                            )
+                        }
+                    }
+                    
+                    // Use transform engine for validation WITH connection info
+                    let result = transformEngine.calculateTransform(
+                        for: placedPiece,
+                        operation: .place(center: CGPoint.zero, rotation: 0), // Already positioned
+                        connection: validationConnection,
+                        otherPieces: puzzle.pieces,
+                        canvasSize: uiState.currentCanvasSize
+                    )
+                    
+                    if result.isValid {
+                        print("[DEBUG] Validation successful!")
+                        uiState.previewPiece = placedPiece
+                        uiState.previewTransform = placedPiece.transform
+                    } else {
+                        print("[DEBUG] Validation FAILED: \(result.violations)")
+                        // Try to find a valid placement nearby
+                        if let validPlacement = findValidPlacement(
+                            for: placedPiece,
+                            connections: connections,
+                            existingPieces: puzzle.pieces
+                        ) {
+                            print("[DEBUG] Found valid alternative placement")
+                            uiState.previewPiece = validPlacement
+                            uiState.previewTransform = validPlacement.transform
+                        } else {
+                            // Only clear preview if we can't find ANY valid placement
+                            print("[DEBUG] No valid placement found")
+                            uiState.previewPiece = nil
+                            uiState.previewTransform = nil
+                        }
+                    }
                 } else {
+                    print("[DEBUG] Initial placement FAILED!")
                     uiState.previewPiece = nil
                     uiState.previewTransform = nil
                 }
@@ -290,6 +396,48 @@ extension TangramEditorViewModel {
     
     func notifyPuzzleChanged() {
         onPuzzleChanged?(puzzle)
+    }
+    
+    // MARK: - Placement Helpers
+    
+    /// Try to find a valid placement for a piece with given connections
+    private func findValidPlacement(
+        for piece: TangramPiece,
+        connections: [(canvasPoint: ConnectionPoint, piecePoint: ConnectionPoint)],
+        existingPieces: [TangramPiece]
+    ) -> TangramPiece? {
+        // Try different rotation angles to find a valid placement
+        let rotationAngles = [0, 45, 90, 135, 180, -135, -90, -45].map { Double($0) }
+        
+        for angle in rotationAngles {
+            // Try placing with this rotation
+            if let placedPiece = placementService.placeConnectedPiece(
+                type: piece.type,
+                rotation: angle * .pi / 180,
+                isFlipped: uiState.pendingPieceIsFlipped && piece.type == .parallelogram,
+                connections: connections,
+                existingPieces: existingPieces
+            ) {
+                // Validate this placement
+                let result = transformEngine.calculateTransform(
+                    for: placedPiece,
+                    operation: .place(center: CGPoint.zero, rotation: 0),
+                    connection: nil,
+                    otherPieces: existingPieces,
+                    canvasSize: uiState.currentCanvasSize
+                )
+                
+                if result.isValid {
+                    // Found a valid placement!
+                    // Update the pending piece rotation to match
+                    uiState.pendingPieceRotation = angle
+                    return placedPiece
+                }
+            }
+        }
+        
+        // No valid placement found
+        return nil
     }
     
     // MARK: - State Management Helpers
@@ -327,8 +475,11 @@ extension TangramEditorViewModel {
             uiState.previewTransform = nil
             uiState.selectedCanvasPoints.removeAll()
             uiState.selectedPendingPoints.removeAll()
+            uiState.selectedPieceIds.removeAll()  // Clear selected pieces when adding new piece
             availableConnectionPoints.removeAll()
         case .selectingCanvasConnections:
+            // Clear piece selection when starting to connect new pieces
+            uiState.selectedPieceIds.removeAll()
             updateAvailableConnectionPoints()
         default:
             break

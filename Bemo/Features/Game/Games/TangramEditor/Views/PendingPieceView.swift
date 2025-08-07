@@ -57,7 +57,7 @@ struct PendingPieceView: View {
             }
             .frame(width: 250, height: 250)  // Increased to prevent cutoff
             
-            // Connection status text
+            // Connection status text - positioned closer to the piece
             if !isFirstPiece {
                 connectionStatusText
                     .font(.caption)
@@ -66,6 +66,7 @@ struct PendingPieceView: View {
                     .padding(.vertical, 6)
                     .background(Color(.systemBackground).opacity(0.9))
                     .cornerRadius(8)
+                    .padding(.top, -20)  // Move closer to the piece
             }
         }
         .offset(dragOffset)
@@ -88,45 +89,71 @@ struct PendingPieceView: View {
             if viewModel.uiState.selectedCanvasPoints.isEmpty {
                 Text("Select connection points on canvas")
                     .foregroundColor(.orange)
-            } else if viewModel.uiState.selectedPendingPoints.count == viewModel.uiState.selectedCanvasPoints.count {
-                // Check if types match properly
+            } else if !viewModel.uiState.hasValidConnectionPointMatching {
+                // Points selected but not matching properly
                 let canvasVertexCount = viewModel.uiState.selectedCanvasPoints.filter { 
                     if case .vertex = $0.type { return true } else { return false }
                 }.count
                 let canvasEdgeCount = viewModel.uiState.selectedCanvasPoints.filter { 
                     if case .edge = $0.type { return true } else { return false }
                 }.count
-                let pendingVertexCount = viewModel.uiState.selectedPendingPoints.filter { 
-                    if case .vertex = $0.type { return true } else { return false }
-                }.count
-                let pendingEdgeCount = viewModel.uiState.selectedPendingPoints.filter { 
-                    if case .edge = $0.type { return true } else { return false }
-                }.count
                 
-                if canvasVertexCount == pendingVertexCount && canvasEdgeCount == pendingEdgeCount {
-                    Text("Ready to place!")
-                        .foregroundColor(.green)
+                if viewModel.uiState.selectedPendingPoints.count < viewModel.uiState.selectedCanvasPoints.count {
+                    Text("Match \(viewModel.uiState.selectedCanvasPoints.count) point\(viewModel.uiState.selectedCanvasPoints.count == 1 ? "" : "s") on this piece")
+                        .foregroundColor(.blue)
                 } else {
                     Text("Type mismatch! Need \(canvasVertexCount) vertex + \(canvasEdgeCount) edge")
                         .foregroundColor(.red)
                 }
+            } else if !viewModel.uiState.hasValidPreview {
+                // Points match but no valid placement found
+                Text("No valid placement - try rotating")
+                    .foregroundColor(.orange)
             } else {
-                Text("Match \(viewModel.uiState.selectedCanvasPoints.count) point\(viewModel.uiState.selectedCanvasPoints.count == 1 ? "" : "s") on this piece")
-                    .foregroundColor(.blue)
+                // Everything is valid and ready
+                Text("Ready to place!")
+                    .foregroundColor(.green)
             }
         }
     }
     
     private func isPointCompatible(_ point: TangramEditorViewModel.ConnectionPoint) -> Bool {
-        for canvasPoint in viewModel.uiState.selectedCanvasPoints {
-            switch (point.type, canvasPoint.type) {
-            case (.vertex, .vertex), (.edge, .edge):
-                return true
-            default:
-                continue
+        // If no canvas points selected, all points are potentially compatible
+        if viewModel.uiState.selectedCanvasPoints.isEmpty {
+            return true
+        }
+        
+        // Check if this point type matches any unmatched canvas point type
+        let selectedPendingTypes = viewModel.uiState.selectedPendingPoints.map { pendingPoint in
+            switch pendingPoint.type {
+            case .vertex: return "vertex"
+            case .edge: return "edge"
             }
         }
-        return false
+        
+        let canvasVertices = viewModel.uiState.selectedCanvasPoints.filter { 
+            if case .vertex = $0.type { return true } else { return false }
+        }
+        let canvasEdges = viewModel.uiState.selectedCanvasPoints.filter { 
+            if case .edge = $0.type { return true } else { return false }
+        }
+        
+        let selectedVertices = viewModel.uiState.selectedPendingPoints.filter { 
+            if case .vertex = $0.type { return true } else { return false }
+        }
+        let selectedEdges = viewModel.uiState.selectedPendingPoints.filter { 
+            if case .edge = $0.type { return true } else { return false }
+        }
+        
+        // Check if we still need this type of point
+        switch point.type {
+        case .vertex:
+            // Compatible if we need more vertices
+            return selectedVertices.count < canvasVertices.count
+        case .edge:
+            // Compatible if we need more edges
+            return selectedEdges.count < canvasEdges.count
+        }
     }
     
     private var pieceColor: Color {
@@ -215,20 +242,34 @@ struct PendingConnectionPoint: View {
     }
     
     private var fillColor: Color {
-        if !isCompatible { return .gray }
-        if isSelected { return .green }
+        if isSelected { 
+            return .green.opacity(0.8)
+        }
+        if !isCompatible { 
+            return .gray.opacity(0.2)
+        }
+        // Match the canvas point colors - indicating what type this can connect to
         switch point.type {
-        case .vertex: return .blue
-        case .edge: return .orange
+        case .vertex: 
+            return .blue.opacity(0.6)
+        case .edge: 
+            return .orange.opacity(0.6)
         }
     }
     
     private var strokeColor: Color {
-        if !isCompatible { return .gray }
-        if isSelected { return .green }
+        if isSelected { 
+            return .green
+        }
+        if !isCompatible { 
+            return .gray.opacity(0.3)
+        }
+        // Match the canvas point colors
         switch point.type {
-        case .vertex: return .blue
-        case .edge: return .orange
+        case .vertex: 
+            return .blue
+        case .edge: 
+            return .orange
         }
     }
 }

@@ -23,6 +23,7 @@ class AppCoordinator {
         case addChildProfile(AuthenticatedUser)
         case lobby
         case game(Game)
+        case devTool(DevTool)
         case parentDashboard
     }
     
@@ -34,6 +35,10 @@ class AppCoordinator {
     }
     
     func start() {
+        // Preload puzzles in background for fast access
+        Task {
+            await dependencyContainer.puzzleManagementService.preloadAllPuzzles()
+        }
         checkAuthenticationAndNavigate()
     }
     
@@ -149,6 +154,9 @@ class AppCoordinator {
                 apiService: self.dependencyContainer.apiService,
                 onProfileSetupComplete: { [weak self] in
                     self?.currentState = .lobby
+                },
+                onBackRequested: { [weak self] in
+                    self?.currentState = .onboarding
                 }
             ))
             
@@ -159,6 +167,9 @@ class AppCoordinator {
                 apiService: self.dependencyContainer.apiService,
                 onProfileSetupComplete: { [weak self] in
                     self?.currentState = .lobby
+                },
+                onBackRequested: { [weak self] in
+                    self?.currentState = .lobby
                 }
             ))
             
@@ -166,8 +177,13 @@ class AppCoordinator {
             GameLobbyView(viewModel: GameLobbyViewModel(
                 profileService: self.dependencyContainer.profileService,
                 supabaseService: self.dependencyContainer.supabaseService,
+                puzzleManagementService: self.dependencyContainer.puzzleManagementService,
+                developerService: self.dependencyContainer.developerService,
                 onGameSelected: { [weak self] selectedGame in
                     self?.currentState = .game(selectedGame)
+                },
+                onDevToolSelected: { [weak self] selectedDevTool in
+                    self?.currentState = .devTool(selectedDevTool)
                 },
                 onParentDashboardRequested: { [weak self] in
                     self?.currentState = .parentDashboard
@@ -180,17 +196,37 @@ class AppCoordinator {
             ))
             
         case .game(let game):
-            GameHostView(viewModel: GameHostViewModel(
-                game: game,
-                cvService: self.dependencyContainer.cvService,
-                profileService: self.dependencyContainer.profileService,
-                supabaseService: self.dependencyContainer.supabaseService,
-                errorTrackingService: self.dependencyContainer.errorTrackingService,
-                currentChildProfileId: self.dependencyContainer.profileService.activeProfile!.id,
-                onQuit: { [weak self] in
-                    self?.currentState = .lobby
+            GameHostView(viewModel: {
+                // Configure TangramGame with child profile ID before creating view model
+                if let tangramGame = game as? TangramGame,
+                   let childProfileId = self.dependencyContainer.profileService.activeProfile?.id {
+                    tangramGame.setChildProfileId(childProfileId)
                 }
-            ))
+                
+                return GameHostViewModel(
+                    game: game,
+                    cvService: self.dependencyContainer.cvService,
+                    profileService: self.dependencyContainer.profileService,
+                    supabaseService: self.dependencyContainer.supabaseService,
+                    errorTrackingService: self.dependencyContainer.errorTrackingService,
+                    currentChildProfileId: self.dependencyContainer.profileService.activeProfile!.id,
+                    onQuit: { [weak self] in
+                        self?.currentState = .lobby
+                    }
+                )
+            }())
+            
+        case .devTool(let devTool):
+            DevToolHostView(viewModel: {
+                return DevToolHostViewModel(
+                    devTool: devTool,
+                    supabaseService: self.dependencyContainer.puzzleSupabaseService, // Use service role version
+                    errorTrackingService: self.dependencyContainer.errorTrackingService,
+                    onQuit: { [weak self] in
+                        self?.currentState = .lobby
+                    }
+                )
+            }())
             
         case .parentDashboard:
             ParentDashboardView(viewModel: ParentDashboardViewModel(

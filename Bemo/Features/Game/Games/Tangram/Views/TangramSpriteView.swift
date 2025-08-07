@@ -15,78 +15,110 @@ import SpriteKit
 struct TangramSpriteView: View {
     let puzzle: GamePuzzleData
     @Binding var placedPieces: [PlacedPiece]
+    let timerStarted: Bool
+    let formattedTime: String
+    let progress: Double
+    let isPuzzleComplete: Bool
     let showHints: Bool
-    let onPieceCompleted: (String) -> Void
+    let currentHint: TangramHintEngine.HintData?
+    let onPieceCompleted: (String, Bool) -> Void  // pieceType and isFlipped
     let onPuzzleCompleted: () -> Void
+    let onBackPressed: () -> Void
+    let onNextPressed: () -> Void
+    let onStartTimer: () -> Void
+    let onToggleHints: () -> Void
     
     // Scene is created once and reused
     @State private var scene: SKScene = {
         let scene = TangramPuzzleScene()
-        scene.size = CGSize(width: 600, height: 600)
-        scene.scaleMode = .aspectFit
+        scene.size = CGSize(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
+        scene.scaleMode = .resizeFill
         return scene
     }()
     
     var body: some View {
         GeometryReader { geometry in
-            ZStack {
-                // SpriteKit Scene
-                SpriteView(
-                    scene: scene,
-                    options: [.allowsTransparency]
-                )
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .cornerRadius(20)
-                .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
-                .onAppear {
-                    configureScene(size: geometry.size)
-                }
-                .onChange(of: geometry.size) { newSize in
-                    scene.size = newSize
-                }
-                .onChange(of: puzzle) { newPuzzle in
-                    if let tangramScene = scene as? TangramPuzzleScene {
-                        tangramScene.loadPuzzle(newPuzzle)
-                    }
-                }
-                
-                // Hint overlay in SwiftUI
-                if showHints {
-                    hintsOverlay
-                        .allowsHitTesting(false)
-                        .transition(.opacity)
-                        .animation(.easeInOut, value: showHints)
-                }
+            // Full-screen SpriteKit scene
+            SpriteView(
+                scene: scene,
+                options: [.allowsTransparency]
+            )
+            .ignoresSafeArea()
+            .onAppear {
+                configureScene(size: geometry.size, safeAreaTop: geometry.safeAreaInsets.top)
             }
         }
-        .aspectRatio(1, contentMode: .fit)
+        .onChange(of: puzzle) { newPuzzle in
+            if let tangramScene = scene as? TangramPuzzleScene {
+                tangramScene.loadPuzzle(newPuzzle)
+            }
+        }
+        .onChange(of: formattedTime) { _ in
+            if let tangramScene = scene as? TangramPuzzleScene {
+                tangramScene.updateTimer(formattedTime, started: timerStarted)
+            }
+        }
+        .onChange(of: progress) { _ in
+            if let tangramScene = scene as? TangramPuzzleScene {
+                tangramScene.updateProgress(progress)
+            }
+        }
+        .onChange(of: isPuzzleComplete) { _ in
+            if let tangramScene = scene as? TangramPuzzleScene {
+                tangramScene.updateCompletionState(isPuzzleComplete)
+            }
+        }
+        .onChange(of: currentHint) { oldValue, newValue in
+            print("DEBUG: onChange triggered - old: \(oldValue != nil), new: \(newValue != nil)")
+            if let hint = newValue {
+                print("DEBUG: New hint details - type: \(hint.hintType), piece: \(hint.targetPiece.rawValue)")
+            }
+            
+            if let tangramScene = scene as? TangramPuzzleScene {
+                print("DEBUG: Scene cast successful")
+                if let hint = newValue {
+                    print("DEBUG: Calling showStructuredHint on scene")
+                    tangramScene.showStructuredHint(hint)
+                } else {
+                    print("DEBUG: Hint is nil, clearing any existing hints")
+                    // Could add a clearHints method if needed
+                }
+            } else {
+                print("DEBUG: Failed to cast scene to TangramPuzzleScene")
+            }
+        }
     }
     
-    private func configureScene(size: CGSize) {
+    private func configureScene(size: CGSize, safeAreaTop: CGFloat) {
         // Configure scene properties
         guard let tangramScene = scene as? TangramPuzzleScene else { return }
         
         tangramScene.size = size
-        tangramScene.scaleMode = .aspectFit
+        tangramScene.scaleMode = .resizeFill
+        tangramScene.safeAreaTop = safeAreaTop  // Pass safe area to scene
         tangramScene.puzzle = puzzle
         tangramScene.onPieceCompleted = onPieceCompleted
         tangramScene.onPuzzleCompleted = onPuzzleCompleted
+        tangramScene.onBackPressed = onBackPressed
+        tangramScene.onNextPressed = onNextPressed
+        tangramScene.onStartTimer = onStartTimer
+        tangramScene.onToggleHints = onToggleHints
         
-        // Load the puzzle
+        // Load the puzzle (no UI elements needed - handled by SwiftUI)
         tangramScene.loadPuzzle(puzzle)
     }
     
     @ViewBuilder
     private var hintsOverlay: some View {
         ZStack {
-            ForEach(puzzle.targetPieces, id: \.pieceType) { target in
-                let isPlaced = placedPieces.contains { $0.pieceType.rawValue == target.pieceType }
+            ForEach(0..<puzzle.targetPieces.count, id: \.self) { index in
+                let target = puzzle.targetPieces[index]
+                let isPlaced = placedPieces.contains { $0.pieceType == target.pieceType }
                 
                 if !isPlaced {
                     HintOutlineShape(
                         pieceType: target.pieceType,
-                        position: target.position,
-                        rotation: target.rotation
+                        transform: target.transform
                     )
                     .stroke(
                         pieceTypeColor(target.pieceType),
@@ -102,71 +134,43 @@ struct TangramSpriteView: View {
         }
     }
     
-    private func pieceTypeColor(_ pieceType: String) -> Color {
+    private func pieceTypeColor(_ pieceType: TangramPieceType) -> Color {
         // Map piece types to colors
         switch pieceType {
-        case "largeTriangle1", "largeTriangle2":
+        case .largeTriangle1, .largeTriangle2:
             return .blue
-        case "mediumTriangle":
+        case .mediumTriangle:
             return .green
-        case "smallTriangle1", "smallTriangle2":
+        case .smallTriangle1, .smallTriangle2:
             return .orange
-        case "square":
+        case .square:
             return .yellow
-        case "parallelogram":
+        case .parallelogram:
             return .purple
-        default:
-            return .gray
         }
     }
 }
 
 // Simple shape for hint outlines
 struct HintOutlineShape: Shape {
-    let pieceType: String
-    let position: CGPoint
-    let rotation: Double
+    let pieceType: TangramPieceType
+    let transform: CGAffineTransform
     
     func path(in rect: CGRect) -> Path {
         var path = Path()
         
-        // Simplified shape outlines
-        let center = CGPoint(
-            x: rect.width * position.x / 600,
-            y: rect.height * position.y / 600
-        )
+        // Get the actual vertices for this piece type
+        let normalizedVertices = TangramGameGeometry.normalizedVertices(for: pieceType)
+        let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
+        let transformedVertices = TangramGameGeometry.transformVertices(scaledVertices, with: transform)
         
-        switch pieceType {
-        case "smallTriangle1", "smallTriangle2":
-            path.move(to: center)
-            path.addLine(to: CGPoint(x: center.x + 30, y: center.y))
-            path.addLine(to: CGPoint(x: center.x, y: center.y + 30))
+        // Draw the shape using transformed vertices
+        if let firstVertex = transformedVertices.first {
+            path.move(to: firstVertex)
+            for vertex in transformedVertices.dropFirst() {
+                path.addLine(to: vertex)
+            }
             path.closeSubpath()
-            
-        case "mediumTriangle":
-            path.move(to: center)
-            path.addLine(to: CGPoint(x: center.x + 45, y: center.y))
-            path.addLine(to: CGPoint(x: center.x, y: center.y + 45))
-            path.closeSubpath()
-            
-        case "largeTriangle1", "largeTriangle2":
-            path.move(to: center)
-            path.addLine(to: CGPoint(x: center.x + 60, y: center.y))
-            path.addLine(to: CGPoint(x: center.x, y: center.y + 60))
-            path.closeSubpath()
-            
-        case "square":
-            path.addRect(CGRect(x: center.x - 25, y: center.y - 25, width: 50, height: 50))
-            
-        case "parallelogram":
-            path.move(to: CGPoint(x: center.x - 25, y: center.y))
-            path.addLine(to: CGPoint(x: center.x + 25, y: center.y))
-            path.addLine(to: CGPoint(x: center.x + 10, y: center.y + 30))
-            path.addLine(to: CGPoint(x: center.x - 40, y: center.y + 30))
-            path.closeSubpath()
-            
-        default:
-            path.addEllipse(in: CGRect(x: center.x - 25, y: center.y - 25, width: 50, height: 50))
         }
         
         return path

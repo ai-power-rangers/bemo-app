@@ -23,6 +23,9 @@ class ProfileService {
     // Optional Supabase integration - will be injected after initialization
     private weak var supabaseService: SupabaseService?
     
+    // Optional authentication service - will be injected after initialization
+    private weak var authenticationService: AuthenticationService?
+    
     // Optional error tracking - will be injected after initialization
     private weak var errorTrackingService: ErrorTrackingService?
     
@@ -52,6 +55,10 @@ class ProfileService {
         self.supabaseService = supabaseService
     }
     
+    func setAuthenticationService(_ authenticationService: AuthenticationService) {
+        self.authenticationService = authenticationService
+    }
+    
     func setErrorTrackingService(_ errorTrackingService: ErrorTrackingService) {
         self.errorTrackingService = errorTrackingService
     }
@@ -66,16 +73,24 @@ class ProfileService {
         Task {
             do {
                 let remoteProfiles = try await supabaseService.fetchChildProfiles()
+                // Get the current Supabase user ID for proper filtering
+                let currentSupabaseUserId = await getCurrentSupabaseUserId()
+                
                 await MainActor.run {
-                    // Merge remote profiles with local profiles, keeping local as source of truth
-                    // This preserves existing functionality while adding backend sync
-                    for remoteProfile in remoteProfiles {
+                    // Filter profiles to only include those belonging to the current authenticated user
+                    let userRemoteProfiles = remoteProfiles.filter { profile in
+                        guard let userId = currentSupabaseUserId else { return false }
+                        return profile.belongsTo(authenticatedUserId: userId)
+                    }
+                    
+                    // Merge filtered remote profiles with local profiles, keeping local as source of truth
+                    for remoteProfile in userRemoteProfiles {
                         if !childProfiles.contains(where: { $0.id == remoteProfile.id }) {
                             childProfiles.append(remoteProfile)
                         }
                     }
                     saveChildProfiles()
-                    print("Profile sync from Supabase completed")
+                    print("Profile sync from Supabase completed - synced \(userRemoteProfiles.count) profiles for user \(currentSupabaseUserId ?? "unknown")")
                 }
             } catch {
                 print("Profile sync from Supabase failed (non-critical): \(error)")
@@ -102,6 +117,16 @@ class ProfileService {
         userDefaults.removeObject(forKey: activeProfileKey)
         
         print("Active profile cleared")
+    }
+    
+    func clearAllLocalProfiles() {
+        // Clear all local profile data - useful for logout or data corruption recovery
+        activeProfile = nil
+        childProfiles.removeAll()
+        userDefaults.removeObject(forKey: activeProfileKey)
+        userDefaults.removeObject(forKey: childProfilesKey)
+        
+        print("All local profile data cleared")
     }
     
     func addChildProfile(_ profile: UserProfile) {
@@ -281,6 +306,27 @@ class ProfileService {
             totalXP: 0,
             preferences: UserPreferences()
         )
+    }
+    
+    // MARK: - Authentication Helper
+    
+    private func getCurrentAuthenticatedUserId() -> String? {
+        // Get the current Supabase user ID (not Apple user ID) from the Supabase session
+        // This is critical because child profiles use parent_user_id = Supabase UUID
+        // For now, return Apple user ID but we need to fix the sync to be async
+        return authenticationService?.currentUser?.id
+    }
+    
+    private func getCurrentSupabaseUserId() async -> String? {
+        // Get the current Supabase user ID asynchronously
+        guard let supabaseService = supabaseService else { return nil }
+        
+        do {
+            return try await supabaseService.getCurrentUserID()
+        } catch {
+            print("Failed to get current Supabase user ID: \(error)")
+            return nil
+        }
     }
     
     // MARK: - Private Supabase Sync Methods

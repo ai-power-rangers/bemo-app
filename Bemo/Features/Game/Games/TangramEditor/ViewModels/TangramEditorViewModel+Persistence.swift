@@ -17,11 +17,29 @@ extension TangramEditorViewModel {
     // MARK: - Persistence
     
     func save() async throws {
+        // Check if this is a new puzzle (doesn't exist in database yet)
+        let isNewPuzzle = puzzle.createdDate == puzzle.modifiedDate
+        
         puzzle.modifiedDate = Date()
         puzzle.solutionChecksum = generateChecksum()
         let updatedPuzzle = try await persistenceService.savePuzzle(puzzle)
         puzzle = updatedPuzzle
+        
+        // Update original data after successful save
+        originalPuzzleData = try? JSONEncoder().encode(puzzle)
+        
         await loadSavedPuzzles()
+        
+        // Update the PuzzleManagementService cache efficiently
+        if let puzzleManagement = puzzleManagementService {
+            if isNewPuzzle {
+                print("[TangramEditor] Adding new puzzle to cache: \(puzzle.id)")
+                await puzzleManagement.addNewPuzzle(puzzle.id)
+            } else {
+                print("[TangramEditor] Updating existing puzzle in cache: \(puzzle.id)")
+                await puzzleManagement.updateSinglePuzzle(puzzle.id)
+            }
+        }
     }
     
     func loadSavedPuzzles() async {
@@ -42,6 +60,8 @@ extension TangramEditorViewModel {
     
     func loadPuzzle(from loadedPuzzle: TangramPuzzle) {
         puzzle = loadedPuzzle
+        // Save original state for change detection
+        originalPuzzleData = try? JSONEncoder().encode(puzzle)
         // Set state based on whether puzzle has pieces
         stateManager.resetState(for: puzzle)
         editorState = stateManager.currentState
@@ -53,6 +73,8 @@ extension TangramEditorViewModel {
     func createNewPuzzle() {
         reset()
         puzzle = TangramPuzzle(name: "New Puzzle", category: .custom, difficulty: .medium)
+        // Save original state (empty puzzle)
+        originalPuzzleData = try? JSONEncoder().encode(puzzle)
         // New puzzle should start in selectingFirstPiece state
         stateManager.setInitialState(for: puzzle)
         editorState = stateManager.currentState
@@ -63,6 +85,12 @@ extension TangramEditorViewModel {
         do {
             try await persistenceService.deletePuzzle(id: puzzleToDelete.id)
             await loadSavedPuzzles()
+            
+            // Remove from PuzzleManagementService cache efficiently
+            if let puzzleManagement = puzzleManagementService {
+                print("[TangramEditor] Removing puzzle from cache: \(puzzleToDelete.id)")
+                await puzzleManagement.removePuzzle(puzzleToDelete.id)
+            }
         } catch {
             print("Failed to delete puzzle: \(error)")
         }
@@ -82,14 +110,25 @@ extension TangramEditorViewModel {
         newPuzzle.tags = puzzleToDuplicate.tags
         
         do {
-            _ = try await persistenceService.savePuzzle(newPuzzle)
+            let savedPuzzle = try await persistenceService.savePuzzle(newPuzzle)
             await loadSavedPuzzles()
+            
+            // Add new puzzle to PuzzleManagementService cache efficiently
+            if let puzzleManagement = puzzleManagementService {
+                print("[TangramEditor] Adding duplicated puzzle to cache: \(savedPuzzle.id)")
+                await puzzleManagement.addNewPuzzle(savedPuzzle.id)
+            }
         } catch {
             print("Failed to duplicate puzzle: \(error)")
         }
     }
     
     // MARK: - Navigation
+    
+    func requestQuit() {
+        // Exit the editor and return to the game lobby
+        delegate?.devToolDidRequestQuit()
+    }
     
     func navigateToLibrary(saveChanges: Bool = false) {
         if saveChanges && !puzzle.pieces.isEmpty {

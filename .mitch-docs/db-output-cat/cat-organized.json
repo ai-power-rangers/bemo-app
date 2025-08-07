@@ -1,0 +1,320 @@
+[
+  {
+    "idx": 0,
+    "id": "f6c9719e-1d4a-4a1d-9b9e-96c64aabcc34",
+    "puzzle_id": "puzzle_26D26F42-0D65-4D85-9405-15E9CFBA3098",
+    "name": "Cat",
+    "category": "Animals",
+    "difficulty": 4,
+    "is_official": true,
+    "order_index": 0,
+    "tags": [],
+    "metadata": "{}",
+    "solution_checksum": "-7165733867776960617",
+    "thumbnail_path": null,
+    "created_at": "2025-08-07 06:11:44.444489+00",
+    "updated_at": "2025-08-07 06:11:44.444489+00",
+    "published_at": "2025-08-07 06:11:44+00",
+    "puzzle_data": {
+      "id": "puzzle_26D26F42-0D65-4D85-9405-15E9CFBA3098",
+      "name": "Cat",
+      "tags": [],
+      "category": "Animals",
+      "difficulty": 4,
+      "createdDate": 776239593.122156,
+      "modifiedDate": 776239903.743689,
+      "pieces": [
+        {
+          "id": "8AFBCDB8-0B0C-4AFB-8B74-2E3C3C15017B",
+          "type": "square",
+          "zIndex": 0,
+          "transform": {
+            "a": 0.7071067811865476,
+            "b": 0.7071067811865475,
+            "c": -0.7071067811865475,
+            "d": 0.7071067811865476,
+            "tx": 133.11165235168156,
+            "ty": 206.30032474434222
+          },
+          "connectionPoints": []
+        },
+        {
+          "id": "F01D6FB4-A8EA-4D81-8E4C-D183FDE1BAED",
+          "type": "smallTriangle2",
+          "zIndex": 0,
+          "transform": {
+            "a": 0.7071067811865474,
+            "b": -0.7071067811865477,
+            "c": 0.7071067811865477,
+            "d": 0.7071067811865474,
+            "tx": 133.11165235168156,
+            "ty": 206.30032474434222
+          },
+          "connectionPoints": []
+        },
+        {
+          "id": "23A645A1-7641-4DA6-AD51-1251DE1E4BC7",
+          "type": "smallTriangle1",
+          "zIndex": 0,
+          "transform": {
+            "a": -0.7071067811865475,
+            "b": 0.7071067811865476,
+            "c": -0.7071067811865476,
+            "d": -0.7071067811865475,
+            "tx": 133.11165235168156,
+            "ty": 206.30032474434222
+          },
+          "connectionPoints": []
+        },
+        {
+          "id": "EC7E58A5-C281-4338-8F84-4F34EE0B4A68",
+          "type": "largeTriangle2",
+          "zIndex": 0,
+          "transform": {
+            "a": -0.7071067811865475,
+            "b": 0.7071067811865476,
+            "c": -0.7071067811865476,
+            "d": -0.7071067811865475,
+            "tx": 203.8223304703363,
+            "ty": 347.72168098165173
+          },
+          "connectionPoints": []
+        },
+        {
+          "id": "AC207BB5-2D74-45EB-83BA-08E9F31796AD",
+          "type": "mediumTriangle",
+          "zIndex": 0,
+          "transform": {
+            "a": 0.7071067811865476,
+            "b": -0.7071067811865475,
+            "c": 0.7071067811865475,
+            "d": 0.7071067811865476,
+            "tx": 83.11165235168156,
+            "ty": 347.72168098165173
+          },
+          "connectionPoints": []
+        },
+        {
+          "id": "FE7BC996-3F23-4A01-A81D-A97959979BAF",
+          "type": "largeTriangle1",
+          "zIndex": 0,
+          "transform": {
+            "a": -1,
+            "b": 0.00000000000000012246467991473532,
+            "c": -0.00000000000000012246467991473532,
+            "d": -1,
+            "tx": 203.8223304703363,
+            "ty": 447.72168098165173
+          },
+          "connectionPoints": []
+        },
+        {
+          "id": "9B3CE9CD-123E-4B11-9A4E-14EFCEC92C05",
+          "type": "parallelogram",
+          "zIndex": 0,
+          "transform": {
+            "a": 1,
+            "b": 0,
+            "c": 0,
+            "d": 1,
+            "tx": 239.1776695296637,
+            "ty": 412.36634192232435
+          },
+          "connectionPoints": []
+        }
+      ],
+      "connections": [
+        {
+          "id": "3A09150F-B6D5-4E90-9E36-0162996B1D63",
+          "createdAt": 776239842.459539,
+          "type": {
+            "vertexToVertex": {
+              "vertexA": 0,
+              "vertexB": 0,
+              "pieceAId": "8AFBCDB8-0B0C-4AFB-8B74-2E3C3C15017B",
+              "pieceBId": "F01D6FB4-A8EA-4D81-8E4C-D183FDE1BAED"
+            }
+          },
+          "constraint": {
+            "type": {
+              "rotation": {
+                "range": [0, 360],
+                "around": [196.5, 285.3113276073392]
+              }
+            },
+            "affectedPieceId": "F01D6FB4-A8EA-4D81-8E4C-D183FDE1BAED"
+          }
+        },
+        {
+          "id": "5243CB10-B890-4897-BA85-1206AF9F2B06",
+          "createdAt": 776239842.459747,
+          "type": {
+            "edgeToEdge": {
+              "edgeA": 0,
+              "edgeB": 2,
+              "pieceAId": "8AFBCDB8-0B0C-4AFB-8B74-2E3C3C15017B",
+              "pieceBId": "F01D6FB4-A8EA-4D81-8E4C-D183FDE1BAED"
+            }
+          },
+          "constraint": {
+            "type": {
+              "translation": {
+                "along": [-0.7071067811865476, -0.7071067811865476],
+                "range": [0, 0]
+              }
+            },
+            "affectedPieceId": "8AFBCDB8-0B0C-4AFB-8B74-2E3C3C15017B"
+          }
+        },
+        {
+          "id": "96764622-687D-4962-9145-776CA52CA3CC",
+          "createdAt": 776239853.617114,
+          "type": {
+            "vertexToVertex": {
+              "vertexA": 0,
+              "vertexB": 0,
+              "pieceAId": "F01D6FB4-A8EA-4D81-8E4C-D183FDE1BAED",
+              "pieceBId": "23A645A1-7641-4DA6-AD51-1251DE1E4BC7"
+            }
+          },
+          "constraint": {
+            "type": {
+              "rotation": {
+                "range": [0, 360],
+                "around": [196.5, 294.98899713700285]
+              }
+            },
+            "affectedPieceId": "23A645A1-7641-4DA6-AD51-1251DE1E4BC7"
+          }
+        },
+        {
+          "id": "E7A69E81-91E8-49AB-A5A6-BA7D6E6F12B6",
+          "createdAt": 776239853.617205,
+          "type": {
+            "edgeToEdge": {
+              "edgeA": 3,
+              "edgeB": 0,
+              "pieceAId": "8AFBCDB8-0B0C-4AFB-8B74-2E3C3C15017B",
+              "pieceBId": "23A645A1-7641-4DA6-AD51-1251DE1E4BC7"
+            }
+          },
+          "constraint": {
+            "type": {
+              "translation": {
+                "along": [-0.7071067811865476, 0.7071067811865476],
+                "range": [0, 0]
+              }
+            },
+            "affectedPieceId": "8AFBCDB8-0B0C-4AFB-8B74-2E3C3C15017B"
+          }
+        },
+        {
+          "id": "D4359C2D-6E58-40EA-B65E-8E79BBD6533C",
+          "createdAt": 776239860.773225,
+          "type": {
+            "vertexToVertex": {
+              "vertexA": 2,
+              "vertexB": 2,
+              "pieceAId": "8AFBCDB8-0B0C-4AFB-8B74-2E3C3C15017B",
+              "pieceBId": "EC7E58A5-C281-4338-8F84-4F34EE0B4A68"
+            }
+          },
+          "constraint": {
+            "type": {
+              "rotation": {
+                "range": [0, 360],
+                "around": [196.5, 362.3663419223244]
+              }
+            },
+            "affectedPieceId": "EC7E58A5-C281-4338-8F84-4F34EE0B4A68"
+          }
+        },
+        {
+          "id": "D915639C-7625-43AF-A0E9-B405177B088C",
+          "createdAt": 776239870.011775,
+          "type": {
+            "edgeToEdge": {
+              "edgeA": 1,
+              "edgeB": 1,
+              "pieceAId": "EC7E58A5-C281-4338-8F84-4F34EE0B4A68",
+              "pieceBId": "AC207BB5-2D74-45EB-83BA-08E9F31796AD"
+            }
+          },
+          "constraint": {
+            "type": {
+              "translation": {
+                "along": [-0.0000000000000002009718347115232, -1],
+                "range": [0, 41.42135623730951]
+              }
+            },
+            "affectedPieceId": "AC207BB5-2D74-45EB-83BA-08E9F31796AD"
+          }
+        },
+        {
+          "id": "3DA86245-F7C7-4E5D-9282-A8C855CE295A",
+          "createdAt": 776239883.693611,
+          "type": {
+            "vertexToVertex": {
+              "vertexA": 0,
+              "vertexB": 2,
+              "pieceAId": "EC7E58A5-C281-4338-8F84-4F34EE0B4A68",
+              "pieceBId": "FE7BC996-3F23-4A01-A81D-A97959979BAF"
+            }
+          },
+          "constraint": {
+            "type": {
+              "rotation": {
+                "range": [0, 360],
+                "around": [256.8553390593274, 362.3663419223244]
+              }
+            },
+            "affectedPieceId": "FE7BC996-3F23-4A01-A81D-A97959979BAF"
+          }
+        },
+        {
+          "id": "9464EDE0-EEC6-4CAC-9A3E-D24275BA55B0",
+          "createdAt": 776239883.693673,
+          "type": {
+            "edgeToEdge": {
+              "edgeA": 0,
+              "edgeB": 1,
+              "pieceAId": "EC7E58A5-C281-4338-8F84-4F34EE0B4A68",
+              "pieceBId": "FE7BC996-3F23-4A01-A81D-A97959979BAF"
+            }
+          },
+          "constraint": {
+            "type": {
+              "translation": {
+                "along": [0.7071067811865475, -0.7071067811865475],
+                "range": [0, 41.42135623730951]
+              }
+            },
+            "affectedPieceId": "EC7E58A5-C281-4338-8F84-4F34EE0B4A68"
+          }
+        },
+        {
+          "id": "F67C80A5-0613-4410-9E18-FFBDD8F3A431",
+          "createdAt": 776239889.173771,
+          "type": {
+            "vertexToVertex": {
+              "vertexA": 0,
+              "vertexB": 3,
+              "pieceAId": "FE7BC996-3F23-4A01-A81D-A97959979BAF",
+              "pieceBId": "9B3CE9CD-123E-4B11-9A4E-14EFCEC92C05"
+            }
+          },
+          "constraint": {
+            "type": {
+              "rotation": {
+                "range": [0, 360],
+                "around": [256.8553390593274, 447.7216809816518]
+              }
+            },
+            "affectedPieceId": "9B3CE9CD-123E-4B11-9A4E-14EFCEC92C05"
+          }
+        }
+      ],
+      "thumbnailData": "[BASE64_IMAGE_DATA_TRUNCATED_FOR_READABILITY]"
+    }
+  }
+]

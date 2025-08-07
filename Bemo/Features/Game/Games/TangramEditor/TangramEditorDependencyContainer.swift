@@ -17,8 +17,13 @@ class TangramEditorDependencyContainer {
     // MARK: - External Dependencies
     
     private let supabaseService: SupabaseService?
+    private let puzzleManagementService: PuzzleManagementService?
     
     // MARK: - Services (Lazy for efficiency)
+    
+    lazy var transformEngine: PieceTransformEngine = {
+        return PieceTransformEngine()
+    }()
     
     lazy var coordinator: TangramEditorCoordinator = {
         return TangramEditorCoordinator()
@@ -36,14 +41,6 @@ class TangramEditorDependencyContainer {
         return UndoRedoManager()
     }()
     
-    lazy var validationService: ValidationService = {
-        return ValidationService()
-    }()
-    
-    lazy var lockingService: PieceLockingService = {
-        return PieceLockingService()
-    }()
-    
     lazy var manipulationService: PieceManipulationService = {
         return PieceManipulationService()
     }()
@@ -58,9 +55,11 @@ class TangramEditorDependencyContainer {
     
     // MARK: - Initialization
     
-    init(supabaseService: SupabaseService? = nil) {
+    init(supabaseService: SupabaseService? = nil, puzzleManagementService: PuzzleManagementService? = nil) {
         self.supabaseService = supabaseService
+        self.puzzleManagementService = puzzleManagementService
         print("[TangramEditorDependencyContainer] Initialized with SupabaseService: \(supabaseService != nil ? "✅" : "❌ nil")")
+        print("[TangramEditorDependencyContainer] Initialized with PuzzleManagementService: \(puzzleManagementService != nil ? "✅" : "❌ nil")")
         // Services are lazy-loaded, so nothing else to initialize here
         // This ensures services are only created when actually needed
     }
@@ -71,15 +70,15 @@ class TangramEditorDependencyContainer {
     func makeViewModel(puzzle: TangramPuzzle? = nil) -> TangramEditorViewModel {
         return TangramEditorViewModel(
             puzzle: puzzle,
+            transformEngine: transformEngine,
             coordinator: coordinator,
             placementService: placementService,
             persistenceService: persistenceService,
             undoManager: undoManager,
-            validationService: validationService,
-            lockingService: lockingService,
             manipulationService: manipulationService,
             stateManager: stateManager,
-            toastService: toastService
+            toastService: toastService,
+            puzzleManagementService: puzzleManagementService
         )
     }
 }
