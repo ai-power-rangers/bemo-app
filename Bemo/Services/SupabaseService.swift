@@ -16,8 +16,9 @@ import Observation
 @Observable
 class SupabaseService {
     private let client: SupabaseClient
-    private let authService: AuthenticationService
+    private let authService: AuthenticationService?
     private let errorTracking: ErrorTrackingService?
+    private let useServiceRole: Bool
     
     // Observable state
     private(set) var isConnected = false
@@ -27,34 +28,49 @@ class SupabaseService {
     // Connection state
     private(set) var authStateChangeTask: Task<Void, Never>?
     
-    init(authService: AuthenticationService, errorTracking: ErrorTrackingService? = nil) {
+    init(authService: AuthenticationService? = nil, errorTracking: ErrorTrackingService? = nil, useServiceRole: Bool = false) {
         self.authService = authService
         self.errorTracking = errorTracking
+        self.useServiceRole = useServiceRole
         
         // Initialize Supabase client with configuration from AppConfiguration
         let config = AppConfiguration.shared
         
+        // Use service role key if requested and available (for editor/developer tools)
+        let supabaseKey: String
+        if useServiceRole, let serviceKey = config.supabaseServiceRoleKey {
+            supabaseKey = serviceKey
+            print("[SupabaseService] Using service role key for authentication (bypasses RLS)")
+        } else {
+            supabaseKey = config.supabaseAnonKey
+            print("[SupabaseService] Using anonymous key for authentication")
+        }
+        
         print("[SupabaseService] Initializing with URL: '\(config.supabaseURL)'")
-        print("[SupabaseService] Anon key present: \(!config.supabaseAnonKey.isEmpty)")
         
         guard let supabaseURL = URL(string: config.supabaseURL),
-              !config.supabaseAnonKey.isEmpty else {
+              !supabaseKey.isEmpty else {
             print("[SupabaseService] Failed to create URL from: '\(config.supabaseURL)'")
             fatalError("Supabase configuration missing. Please configure SUPABASE_URL and SUPABASE_ANON_KEY in .xcconfig files")
         }
         
         self.client = SupabaseClient(
             supabaseURL: supabaseURL,
-            supabaseKey: config.supabaseAnonKey,
+            supabaseKey: supabaseKey,
             options: SupabaseClientOptions(
                 auth: .init(
                     flowType: .pkce,
-                    autoRefreshToken: true
+                    autoRefreshToken: !useServiceRole  // Don't auto-refresh for service role
                 )
             )
         )
         
-        setupAuthenticationSync()
+        // Service role doesn't need auth sync
+        if useServiceRole {
+            isConnected = true  // Service role is always "connected"
+        } else if authService != nil {
+            setupAuthenticationSync()
+        }
     }
     
     deinit {
@@ -685,7 +701,7 @@ extension SupabaseService {
     
     /// Fetch all official tangram puzzles from Supabase
     func fetchOfficialTangramPuzzles() async throws -> [TangramPuzzleDTO] {
-        guard isConnected else {
+        guard isConnected || useServiceRole else {
             throw SupabaseError.notAuthenticated
         }
         
@@ -716,7 +732,7 @@ extension SupabaseService {
     
     /// Save a tangram puzzle to Supabase (developer use only)
     func saveTangramPuzzle(_ puzzle: TangramPuzzleDTO) async throws {
-        guard isConnected else {
+        guard isConnected || useServiceRole else {
             throw SupabaseError.notAuthenticated
         }
         
@@ -742,7 +758,7 @@ extension SupabaseService {
     
     /// Upload thumbnail for a tangram puzzle
     func uploadTangramThumbnail(puzzleId: String, thumbnailData: Data) async throws -> String {
-        guard isConnected else {
+        guard isConnected || useServiceRole else {
             throw SupabaseError.notAuthenticated
         }
         
@@ -800,7 +816,7 @@ extension SupabaseService {
     
     /// Get tangram puzzles by category
     func fetchTangramPuzzlesByCategory(_ category: String) async throws -> [TangramPuzzleDTO] {
-        guard isConnected else {
+        guard isConnected || useServiceRole else {
             throw SupabaseError.notAuthenticated
         }
         
@@ -823,6 +839,32 @@ extension SupabaseService {
                 feature: "Supabase",
                 action: "fetchTangramPuzzlesByCategory",
                 metadata: ["category": category]
+            ))
+            throw error
+        }
+    }
+    
+    /// Delete a tangram puzzle from Supabase
+    func deleteTangramPuzzle(puzzleId: String) async throws {
+        guard isConnected || useServiceRole else {
+            throw SupabaseError.notAuthenticated
+        }
+        
+        do {
+            try await client
+                .from("tangram_puzzles")
+                .delete()
+                .eq("puzzle_id", value: puzzleId)
+                .execute()
+            
+            print("Supabase: Deleted tangram puzzle - \(puzzleId)")
+            
+        } catch {
+            print("Supabase: Failed to delete tangram puzzle - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "deleteTangramPuzzle",
+                metadata: ["puzzle_id": puzzleId]
             ))
             throw error
         }

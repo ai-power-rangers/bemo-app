@@ -21,7 +21,7 @@ class TangramEditorGame: Game {
     private var viewModel: TangramEditorViewModel?
     private weak var delegate: GameDelegate?
     private var dependencyContainer: TangramEditorDependencyContainer?
-    private let supabaseService: SupabaseService?
+    private var supabaseService: SupabaseService?
     
     // State management
     private var cachedPuzzleData: Data?
@@ -45,8 +45,10 @@ class TangramEditorGame: Game {
     
     // MARK: - Initialization
     
-    init(supabaseService: SupabaseService? = nil) {
-        self.supabaseService = supabaseService
+    init() {
+        // Create a service-role authenticated SupabaseService for the editor
+        // This allows saving puzzles without user authentication
+        self.supabaseService = SupabaseService(useServiceRole: true)
     }
     
     // MARK: - Game Protocol

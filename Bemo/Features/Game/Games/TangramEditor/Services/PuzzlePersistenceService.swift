@@ -102,6 +102,7 @@ class PuzzlePersistenceService {
     }
     
     func deletePuzzle(id: String) async throws {
+        // Delete from local storage first
         let fileURL = puzzlesDirectory.appendingPathComponent("puzzle_\(id).json")
         try FileManager.default.removeItem(at: fileURL)
         
@@ -109,6 +110,17 @@ class PuzzlePersistenceService {
         try? FileManager.default.removeItem(at: thumbURL)
         
         try await removeFromIndex(id: id)
+        
+        // Also delete from Supabase if available
+        if let supabase = supabaseService {
+            do {
+                try await supabase.deleteTangramPuzzle(puzzleId: id)
+                print("Puzzle deleted from Supabase: \(id)")
+            } catch {
+                // Log but don't fail - local delete succeeded
+                print("Failed to delete puzzle from cloud: \(error)")
+            }
+        }
     }
     
     func listPuzzles() async throws -> [PuzzleMetadata] {

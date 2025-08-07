@@ -101,7 +101,7 @@ class GameLobbyViewModel {
         // Load available games
         // In a real app, this would come from a configuration or backend
         let tangramGame = TangramGame(supabaseService: supabaseService)
-        let tangramEditorGame = TangramEditorGame(supabaseService: supabaseService)
+        let tangramEditorGame = TangramEditorGame()  // Editor uses service role auth internally
         
         availableGames = [
             GameItem(

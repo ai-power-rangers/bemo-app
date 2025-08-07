@@ -61,6 +61,16 @@ class AppConfiguration {
         return key.replacingOccurrences(of: "\"", with: "")
     }
     
+    var supabaseServiceRoleKey: String? {
+        guard let key = Bundle.main.object(forInfoDictionaryKey: "SupabaseServiceRoleKey") as? String,
+              !key.isEmpty else {
+            // Service role key is optional - only used in developer mode
+            return nil
+        }
+        // Remove quotes that might come from xcconfig
+        return key.replacingOccurrences(of: "\"", with: "")
+    }
+    
     // MARK: - Sentry Configuration
     
     var sentryDSN: String {
