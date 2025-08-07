@@ -26,6 +26,7 @@ class PuzzleSelectionViewModel {
     
     private let libraryService: PuzzleLibraryService
     private let onPuzzleSelected: (TangramPuzzle) -> Void
+    private let onBackToLobby: (() -> Void)?
     
     // MARK: - Computed Properties
     
@@ -57,10 +58,12 @@ class PuzzleSelectionViewModel {
     
     init(
         libraryService: PuzzleLibraryService,
-        onPuzzleSelected: @escaping (TangramPuzzle) -> Void
+        onPuzzleSelected: @escaping (TangramPuzzle) -> Void,
+        onBackToLobby: (() -> Void)? = nil
     ) {
         self.libraryService = libraryService
         self.onPuzzleSelected = onPuzzleSelected
+        self.onBackToLobby = onBackToLobby
     }
     
     // MARK: - Actions
@@ -77,6 +80,10 @@ class PuzzleSelectionViewModel {
     
     func toggleViewMode() {
         isGridView.toggle()
+    }
+    
+    func backToLobby() {
+        onBackToLobby?()
     }
     
     func thumbnailImage(for puzzle: TangramPuzzle) -> Image? {

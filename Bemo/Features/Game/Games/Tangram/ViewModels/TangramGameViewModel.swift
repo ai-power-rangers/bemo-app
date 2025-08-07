@@ -52,6 +52,9 @@ class TangramGameViewModel {
             libraryService: puzzleLibraryService,
             onPuzzleSelected: { [weak self] puzzle in
                 self?.selectPuzzle(puzzle)
+            },
+            onBackToLobby: { [weak self] in
+                self?.requestQuit()
             }
         )
     }

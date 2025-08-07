@@ -49,6 +49,18 @@ struct PuzzleLibraryView: View {
             // Header
             VStack(spacing: 12) {
                 HStack {
+                    // Back to Lobby button
+                    Button(action: { 
+                        viewModel.delegate?.gameDidRequestQuit() 
+                    }) {
+                        Label("Back to Lobby", systemImage: "chevron.left")
+                            .font(.body)
+                            .fontWeight(.medium)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    
+                    Spacer()
+                    
                     Text("Tangram Puzzles")
                         .font(.largeTitle)
                         .fontWeight(.bold)
@@ -60,7 +72,7 @@ struct PuzzleLibraryView: View {
                         Label("Create New", systemImage: "plus.circle.fill")
                             .font(.headline)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
                 }
                 
                 // Search and Filter Bar

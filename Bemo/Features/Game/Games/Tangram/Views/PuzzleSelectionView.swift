@@ -47,6 +47,16 @@ struct PuzzleSelectionView: View {
     private var headerView: some View {
         VStack(spacing: 12) {
             HStack {
+                Button(action: viewModel.backToLobby) {
+                    Label("Back to Lobby", systemImage: "chevron.left")
+                        .font(.body)
+                        .fontWeight(.medium)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+                
+                Spacer()
+                
                 Text("Select a Puzzle")
                     .font(.largeTitle)
                     .fontWeight(.bold)
@@ -57,6 +67,7 @@ struct PuzzleSelectionView: View {
                     Image(systemName: viewModel.isGridView ? "list.bullet" : "square.grid.2x2")
                         .font(.title2)
                 }
+                .buttonStyle(.bordered)
             }
             
             // Search bar
