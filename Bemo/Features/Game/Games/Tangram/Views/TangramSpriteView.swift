@@ -16,50 +16,60 @@ struct TangramSpriteView: View {
     let puzzle: GamePuzzleData
     @Binding var placedPieces: [PlacedPiece]
     let showHints: Bool
+    let timerStarted: Bool
+    let formattedTime: String
+    let progress: Double
+    let isPuzzleComplete: Bool
     let onPieceCompleted: (String) -> Void
     let onPuzzleCompleted: () -> Void
+    let onBackPressed: () -> Void
+    let onNextPressed: () -> Void
+    let onStartTimer: () -> Void
+    let onToggleHints: () -> Void
     
     // Scene is created once and reused
     @State private var scene: SKScene = {
         let scene = TangramPuzzleScene()
-        scene.size = CGSize(width: 600, height: 600)
-        scene.scaleMode = .aspectFit
+        scene.size = CGSize(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
+        scene.scaleMode = .resizeFill
         return scene
     }()
     
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // SpriteKit Scene
-                SpriteView(
-                    scene: scene,
-                    options: [.allowsTransparency]
-                )
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .cornerRadius(20)
-                .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
-                .onAppear {
-                    configureScene(size: geometry.size)
-                }
-                .onChange(of: geometry.size) { newSize in
-                    scene.size = newSize
-                }
-                .onChange(of: puzzle) { newPuzzle in
-                    if let tangramScene = scene as? TangramPuzzleScene {
-                        tangramScene.loadPuzzle(newPuzzle)
-                    }
-                }
-                
-                // Hint overlay in SwiftUI
-                if showHints {
-                    hintsOverlay
-                        .allowsHitTesting(false)
-                        .transition(.opacity)
-                        .animation(.easeInOut, value: showHints)
-                }
+        // Full-screen SpriteKit scene
+        SpriteView(
+            scene: scene,
+            options: [.allowsTransparency]
+        )
+        .ignoresSafeArea()
+        .onAppear {
+            configureScene(size: UIScreen.main.bounds.size)
+        }
+        .onChange(of: puzzle) { newPuzzle in
+            if let tangramScene = scene as? TangramPuzzleScene {
+                tangramScene.loadPuzzle(newPuzzle)
             }
         }
-        .aspectRatio(1, contentMode: .fit)
+        .onChange(of: showHints) { _ in
+            if let tangramScene = scene as? TangramPuzzleScene {
+                tangramScene.updateHints(showHints)
+            }
+        }
+        .onChange(of: formattedTime) { _ in
+            if let tangramScene = scene as? TangramPuzzleScene {
+                tangramScene.updateTimer(formattedTime, started: timerStarted)
+            }
+        }
+        .onChange(of: progress) { _ in
+            if let tangramScene = scene as? TangramPuzzleScene {
+                tangramScene.updateProgress(progress)
+            }
+        }
+        .onChange(of: isPuzzleComplete) { _ in
+            if let tangramScene = scene as? TangramPuzzleScene {
+                tangramScene.updateCompletionState(isPuzzleComplete)
+            }
+        }
     }
     
     private func configureScene(size: CGSize) {
@@ -67,13 +77,23 @@ struct TangramSpriteView: View {
         guard let tangramScene = scene as? TangramPuzzleScene else { return }
         
         tangramScene.size = size
-        tangramScene.scaleMode = .aspectFit
+        tangramScene.scaleMode = .resizeFill
         tangramScene.puzzle = puzzle
         tangramScene.onPieceCompleted = onPieceCompleted
         tangramScene.onPuzzleCompleted = onPuzzleCompleted
+        tangramScene.onBackPressed = onBackPressed
+        tangramScene.onNextPressed = onNextPressed
+        tangramScene.onStartTimer = onStartTimer
+        tangramScene.onToggleHints = onToggleHints
         
-        // Load the puzzle
+        // Load the puzzle and set initial UI state
         tangramScene.loadPuzzle(puzzle)
+        tangramScene.setupUIElements(
+            timerText: formattedTime,
+            timerStarted: timerStarted,
+            progress: progress,
+            showHints: showHints
+        )
     }
     
     @ViewBuilder

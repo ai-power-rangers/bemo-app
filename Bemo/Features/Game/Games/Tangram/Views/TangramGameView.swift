@@ -16,6 +16,9 @@ struct TangramGameView: View {
     @State private var viewModel: TangramGameViewModel
     @State private var mockPieces: [RecognizedPiece] = []
     @State private var showCVMock = false
+    @State private var searchText = ""
+    @State private var selectedCategory: String? = nil
+    @State private var selectedDifficulty: Int? = nil
     
     init(viewModel: TangramGameViewModel) {
         self._viewModel = State(initialValue: viewModel)
@@ -25,50 +28,7 @@ struct TangramGameView: View {
         Group {
             switch viewModel.currentPhase {
             case .selectingPuzzle:
-                VStack {
-                    Text("Tangram Puzzles")
-                        .font(.largeTitle)
-                        .padding()
-                    
-                    if viewModel.availablePuzzles.isEmpty {
-                        Text("Loading puzzles from database...")
-                            .foregroundColor(.secondary)
-                            .padding()
-                        
-                        ProgressView()
-                            .padding()
-                    } else {
-                        Text("Available Puzzles:")
-                            .font(.headline)
-                            .padding()
-                        
-                        VStack(spacing: 20) {
-                            ForEach(viewModel.availablePuzzles, id: \.id) { puzzle in
-                                Button(action: {
-                                    viewModel.selectPuzzle(puzzle)
-                                }) {
-                                    VStack {
-                                        Text(puzzle.name)
-                                            .font(.title2)
-                                            .fontWeight(.semibold)
-                                        Text("Category: \(puzzle.category)")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                        Text("Difficulty: \(puzzle.difficulty)")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.blue.opacity(0.1))
-                                    .cornerRadius(10)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding()
-                    }
-                }
+                puzzleSelectionView
                 
             case .playingPuzzle:
                 gamePlayView
@@ -81,29 +41,206 @@ struct TangramGameView: View {
         .background(Color("GameBackground", bundle: nil))
     }
     
+    // MARK: - Puzzle Selection View
+    
+    private var puzzleSelectionView: some View {
+        VStack(spacing: 0) {
+            // Use proper safe area inset
+            Color.clear
+                .frame(height: 0)
+                .background(Color(UIColor.systemBackground))
+                .safeAreaInset(edge: .top) {
+                    // Header with back button
+                    HStack {
+                        Button(action: {
+                            viewModel.requestQuit()
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 20, weight: .medium))
+                                Text("Back")
+                                    .font(.system(size: 17, weight: .medium))
+                            }
+                        }
+                        .foregroundColor(.primary)
+                        
+                        Spacer()
+                        
+                        Text("Choose a Puzzle")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        
+                        Spacer()
+                        
+                        // Invisible spacer for balance
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                            Text("Back")
+                        }
+                        .opacity(0)
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 12)
+                    .background(Color(UIColor.systemBackground))
+                }
+            
+            // Filter chips
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    // Category filters
+                    FilterChip(
+                        title: "All",
+                        isSelected: selectedCategory == nil,
+                        action: { selectedCategory = nil }
+                    )
+                    
+                    ForEach(availableCategories, id: \.self) { category in
+                        FilterChip(
+                            title: category.capitalized,
+                            isSelected: selectedCategory == category,
+                            icon: categoryIcon(for: category),
+                            action: { 
+                                selectedCategory = selectedCategory == category ? nil : category 
+                            }
+                        )
+                    }
+                    
+                    Divider()
+                        .frame(height: 20)
+                    
+                    // Difficulty filters
+                    ForEach(0..<5) { difficulty in
+                        FilterChip(
+                            title: difficultyEmoji(for: difficulty),
+                            isSelected: selectedDifficulty == difficulty,
+                            color: difficultyColor(for: difficulty),
+                            action: {
+                                selectedDifficulty = selectedDifficulty == difficulty ? nil : difficulty
+                            }
+                        )
+                    }
+                }
+                .padding(.horizontal)
+            }
+            .padding(.vertical, 8)
+            
+            // Puzzle grid
+            if viewModel.availablePuzzles.isEmpty {
+                Spacer()
+                VStack(spacing: 20) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                    Text("Loading puzzles...")
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: [
+                        GridItem(.flexible(), spacing: 16),
+                        GridItem(.flexible(), spacing: 16),
+                        GridItem(.flexible(), spacing: 16)
+                    ], spacing: 16) {
+                        ForEach(filteredPuzzles, id: \.id) { puzzle in
+                            PuzzleThumbnailView(
+                                puzzle: puzzle,
+                                action: {
+                                    viewModel.selectPuzzle(puzzle)
+                                }
+                            )
+                        }
+                    }
+                    .padding()
+                }
+            }
+        }
+        .background(Color(UIColor.secondarySystemBackground))
+    }
+    
+    private var availableCategories: [String] {
+        Array(Set(viewModel.availablePuzzles.map { $0.category })).sorted()
+    }
+    
+    private var filteredPuzzles: [GamePuzzleData] {
+        viewModel.availablePuzzles.filter { puzzle in
+            let matchesCategory = selectedCategory == nil || puzzle.category == selectedCategory
+            let matchesDifficulty = selectedDifficulty == nil || puzzle.difficulty == selectedDifficulty
+            let matchesSearch = searchText.isEmpty || 
+                                puzzle.name.localizedCaseInsensitiveContains(searchText)
+            return matchesCategory && matchesDifficulty && matchesSearch
+        }
+    }
+    
+    private func categoryIcon(for category: String) -> String {
+        switch category.lowercased() {
+        case "animals": return "🐾"
+        case "objects": return "📦"
+        case "people": return "👤"
+        case "geometric": return "🔷"
+        default: return "✨"
+        }
+    }
+    
+    private func difficultyEmoji(for difficulty: Int) -> String {
+        switch difficulty {
+        case 0: return "⭐"
+        case 1: return "⭐⭐"
+        case 2: return "⭐⭐⭐"
+        case 3: return "⭐⭐⭐⭐"
+        case 4: return "⭐⭐⭐⭐⭐"
+        default: return "⭐"
+        }
+    }
+    
+    private func difficultyColor(for difficulty: Int) -> Color {
+        switch difficulty {
+        case 0: return .green
+        case 1: return .blue
+        case 2: return .orange
+        case 3: return .red
+        case 4: return .purple
+        default: return .gray
+        }
+    }
+    
     // MARK: - Game Views
     
     private var gamePlayView: some View {
-        VStack(spacing: 0) {
-            // Clean header with timer and progress
-            gameHeader
-                .padding()
-            
-            // Main puzzle canvas - Always use SpriteKit
+        Group {
+            // Full-screen SpriteKit with all UI handled inside the scene
             if let puzzle = viewModel.selectedPuzzle {
                 TangramSpriteView(
                     puzzle: puzzle,
                     placedPieces: $viewModel.placedPieces,
                     showHints: viewModel.showHints,
+                    timerStarted: viewModel.timerStarted,
+                    formattedTime: viewModel.formattedTime,
+                    progress: viewModel.progress,
+                    isPuzzleComplete: viewModel.currentPhase == .puzzleComplete,
                     onPieceCompleted: { pieceType in
                         viewModel.handlePieceCompletion(pieceType: pieceType)
                     },
                     onPuzzleCompleted: {
                         viewModel.handlePuzzleCompletion()
+                    },
+                    onBackPressed: {
+                        viewModel.exitToSelection()
+                    },
+                    onNextPressed: {
+                        viewModel.loadNextPuzzle()
+                    },
+                    onStartTimer: {
+                        viewModel.startTimer()
+                    },
+                    onToggleHints: {
+                        viewModel.toggleHints()
                     }
                 )
+                .ignoresSafeArea() // Full screen
+            } else {
+                Text("No puzzle selected")
+                    .foregroundColor(.secondary)
             }
-            
         }
     }
     
@@ -274,5 +411,189 @@ struct TangramGameView: View {
                 .shadow(radius: 10)
         )
         .padding()
+    }
+}
+
+// MARK: - Supporting Views
+
+struct FilterChip: View {
+    let title: String
+    let isSelected: Bool
+    var icon: String? = nil
+    var color: Color = .blue
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                if let icon = icon {
+                    Text(icon)
+                        .font(.caption)
+                }
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 15)
+                    .fill(isSelected ? color.opacity(0.2) : Color(UIColor.tertiarySystemFill))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 15)
+                    .stroke(isSelected ? color : Color.clear, lineWidth: 2)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct PuzzleThumbnailView: View {
+    let puzzle: GamePuzzleData
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 0) {
+                // Thumbnail preview - full square
+                GeometryReader { geometry in
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(UIColor.secondarySystemBackground))
+                        
+                        // Render puzzle silhouette properly scaled
+                        PuzzleSilhouetteView(puzzle: puzzle)
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                    }
+                }
+                .aspectRatio(1, contentMode: .fit)
+                
+                // Difficulty indicator - use actual database difficulty (1-5 scale)
+                if puzzle.difficulty > 0 {
+                    HStack(spacing: 2) {
+                        ForEach(0..<min(puzzle.difficulty, 5), id: \.self) { _ in
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 8))
+                                .foregroundColor(.yellow)
+                        }
+                        ForEach(puzzle.difficulty..<5, id: \.self) { _ in
+                            Image(systemName: "star")
+                                .font(.system(size: 8))
+                                .foregroundColor(.gray.opacity(0.3))
+                        }
+                    }
+                    .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity)
+                    .background(Color(UIColor.systemBackground))
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct PuzzleSilhouetteView: View {
+    let puzzle: GamePuzzleData
+    
+    var body: some View {
+        GeometryReader { geometry in
+            // Calculate bounds of all pieces to scale appropriately
+            let bounds = calculatePuzzleBounds()
+            let scale = calculateScale(for: bounds, in: geometry.size)
+            let offset = calculateOffset(for: bounds, scale: scale, in: geometry.size)
+            
+            ForEach(puzzle.targetPieces.indices, id: \.self) { index in
+                let piece = puzzle.targetPieces[index]
+                PuzzlePieceShape(
+                    pieceType: piece.pieceType,
+                    transform: piece.transform,
+                    scale: scale,
+                    offset: offset
+                )
+                .fill(Color.gray.opacity(0.7))
+            }
+        }
+        .padding(8)
+    }
+    
+    private func calculatePuzzleBounds() -> CGRect {
+        var minX = CGFloat.greatestFiniteMagnitude
+        var maxX = -CGFloat.greatestFiniteMagnitude
+        var minY = CGFloat.greatestFiniteMagnitude
+        var maxY = -CGFloat.greatestFiniteMagnitude
+        
+        for piece in puzzle.targetPieces {
+            let vertices = TangramGameGeometry.normalizedVertices(for: piece.pieceType)
+            let scaled = TangramGameGeometry.scaleVertices(vertices, by: TangramGameConstants.visualScale)
+            let transformed = TangramGameGeometry.transformVertices(scaled, with: piece.transform)
+            
+            for vertex in transformed {
+                minX = min(minX, vertex.x)
+                maxX = max(maxX, vertex.x)
+                minY = min(minY, vertex.y)
+                maxY = max(maxY, vertex.y)
+            }
+        }
+        
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+    
+    private func calculateScale(for bounds: CGRect, in size: CGSize) -> CGFloat {
+        let padding: CGFloat = 16
+        let availableWidth = size.width - padding * 2
+        let availableHeight = size.height - padding * 2
+        
+        let scaleX = availableWidth / bounds.width
+        let scaleY = availableHeight / bounds.height
+        
+        return min(scaleX, scaleY, 1.0) // Don't scale up beyond original size
+    }
+    
+    private func calculateOffset(for bounds: CGRect, scale: CGFloat, in size: CGSize) -> CGPoint {
+        let scaledWidth = bounds.width * scale
+        let scaledHeight = bounds.height * scale
+        
+        let centerX = size.width / 2
+        let centerY = size.height / 2
+        
+        let offsetX = centerX - (bounds.midX * scale)
+        let offsetY = centerY - (bounds.midY * scale)
+        
+        return CGPoint(x: offsetX, y: offsetY)
+    }
+}
+
+struct PuzzlePieceShape: Shape {
+    let pieceType: TangramPieceType
+    let transform: CGAffineTransform
+    var scale: CGFloat = 1.0
+    var offset: CGPoint = .zero
+    
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        
+        let normalizedVertices = TangramGameGeometry.normalizedVertices(for: pieceType)
+        let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
+        let transformedVertices = TangramGameGeometry.transformVertices(scaledVertices, with: transform)
+        
+        // Apply thumbnail scaling and offset
+        let finalVertices = transformedVertices.map { vertex in
+            CGPoint(
+                x: vertex.x * scale + offset.x,
+                y: vertex.y * scale + offset.y
+            )
+        }
+        
+        if let firstVertex = finalVertices.first {
+            path.move(to: firstVertex)
+            for vertex in finalVertices.dropFirst() {
+                path.addLine(to: vertex)
+            }
+            path.closeSubpath()
+        }
+        
+        return path
     }
 }

@@ -344,15 +344,6 @@ extension TangramEditorViewModel {
         case .rotatable(let pivot, _):
             let piece = puzzle.pieces[pieceIndex]
             
-            // CRITICAL: Force exact 45° increments
-            let angleDegrees = angle * 180 / .pi
-            let validAngles: [Double] = [-180, -135, -90, -45, 0, 45, 90, 135, 180]
-            
-            // Find nearest valid angle
-            guard let snappedAngle = validAngles.min(by: { 
-                abs($0 - angleDegrees) < abs($1 - angleDegrees) 
-            }) else { return }
-            
             // Store initial transform if not already stored
             if initialManipulationTransforms[pieceId] == nil {
                 initialManipulationTransforms[pieceId] = piece.transform
@@ -360,12 +351,16 @@ extension TangramEditorViewModel {
             
             guard let initialTransform = initialManipulationTransforms[pieceId] else { return }
             
+            // IMPORTANT: 'angle' is already a DELTA in RADIANS, already snapped by PieceView
+            // No conversion or snapping needed!
+            let deltaRadians = angle
+            
             // Find the connection for this piece
             let relevantConnection = puzzle.connections.first { conn in
                 conn.involvesPiece(pieceId)
             }
             
-            // Get which vertex of this piece is connected (if vertex-to-vertex)
+            // Get which vertex of this piece is connected
             var pieceVertexIndex = 0
             if let connection = relevantConnection {
                 switch connection.type {
@@ -393,40 +388,40 @@ extension TangramEditorViewModel {
                 y: localVertex.y * CGFloat(TangramConstants.visualScale)
             )
             
-            // Calculate rotation from initial position
-            let snappedRadians = snappedAngle * .pi / 180
+            // Get the initial rotation from the initial transform
+            let initialRotation = atan2(initialTransform.b, initialTransform.a)
             
-            // Create rotation transform
-            let rotationTransform = CGAffineTransform(rotationAngle: snappedRadians)
+            // Calculate the new total rotation (initial + delta)
+            let totalRotation = initialRotation + deltaRadians
             
-            // Apply rotation to the vertex to see where it ends up
+            // CORRECT APPROACH: Create transform that rotates piece and positions it
+            // so the vertex stays at the pivot
+            
+            // First, create the rotation transform
+            let rotationTransform = CGAffineTransform(rotationAngle: totalRotation)
+            
+            // Apply rotation to find where the vertex ends up
             let rotatedVertex = visualVertex.applying(rotationTransform)
             
-            // Calculate translation to put the rotated vertex at the pivot
-            let translation = CGPoint(
-                x: pivot.x - rotatedVertex.x,
-                y: pivot.y - rotatedVertex.y
-            )
-            
-            // Combine rotation and translation into final transform
-            var finalTransform = rotationTransform
-            finalTransform.tx = translation.x
-            finalTransform.ty = translation.y
+            // Create final transform: rotation + translation to keep vertex at pivot
+            var correctedTransform = rotationTransform
+            correctedTransform.tx = pivot.x - rotatedVertex.x
+            correctedTransform.ty = pivot.y - rotatedVertex.y
             
             // CRITICAL: Use comprehensive validation
             // Create a test piece with the same ID for connection validation
             var testPiece = piece  // Copy the existing piece
-            testPiece.transform = finalTransform  // Update only the transform
+            testPiece.transform = correctedTransform  // Update only the transform
             let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
             
             if PuzzleValidationRules.isValidPlacement(
                 piece: testPiece,
-                withTransform: finalTransform,
+                withTransform: correctedTransform,
                 amongPieces: otherPieces,
                 maintainingConnection: relevantConnection
             ) {
                 // Only show preview if valid
-                uiState.ghostTransform = finalTransform
+                uiState.ghostTransform = correctedTransform
                 uiState.showSnapIndicator = true
                 uiState.manipulatingPieceId = pieceId
             } else {
@@ -485,20 +480,9 @@ extension TangramEditorViewModel {
             
             guard let initialTransform = initialManipulationTransforms[pieceId] else { return }
             
-            // CRITICAL: Force exact percentage positions
-            let rangeLength = baseRange.upperBound - baseRange.lowerBound
-            guard rangeLength > 0 else { return } // Prevent division by zero
-            
-            let normalizedDistance = (distance - baseRange.lowerBound) / rangeLength
-            
-            // Snap to nearest percentage: 0%, 25%, 50%, 75%, 100%
-            let snapPercentages: [Double] = [0.0, 0.25, 0.5, 0.75, 1.0]
-            guard let snappedPercentage = snapPercentages.min(by: {
-                abs($0 - normalizedDistance) < abs($1 - normalizedDistance)
-            }) else { return }
-            
-            // Calculate actual distance at snap position
-            let snappedDistance = baseRange.lowerBound + (snappedPercentage * rangeLength)
+            // IMPORTANT: 'distance' is already snapped by PieceView
+            // No additional snapping needed!
+            let snappedDistance = distance
             
             // Create translation from initial position
             let translation = CGAffineTransform(

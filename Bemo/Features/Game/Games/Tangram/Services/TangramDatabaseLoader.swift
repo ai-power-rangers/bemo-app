@@ -51,9 +51,17 @@ class TangramDatabaseLoader {
                 }
                 
                 if let puzzleDict = puzzleDict,
-                   let gamePuzzle = PuzzleDataConverter.convertFromDatabase(puzzleDict) {
+                   var gamePuzzle = PuzzleDataConverter.convertFromDatabase(puzzleDict) {
+                    // Override with DTO's actual database values
+                    gamePuzzle = GamePuzzleData(
+                        id: gamePuzzle.id,
+                        name: dto.name,
+                        category: dto.category,
+                        difficulty: dto.difficulty,
+                        targetPieces: gamePuzzle.targetPieces
+                    )
                     puzzles.append(gamePuzzle)
-                    print("Loaded puzzle: \(gamePuzzle.name)")
+                    print("Loaded puzzle: \(gamePuzzle.name) with difficulty: \(gamePuzzle.difficulty)")
                 }
             }
             

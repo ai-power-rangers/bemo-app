@@ -398,7 +398,10 @@ struct ManipulationGestureModifier: ViewModifier {
                                 // CRITICAL: Snap to discrete positions (0%, 25%, 50%, 75%, 100%)
                                 let rangeLength = range.upperBound - range.lowerBound
                                 if rangeLength > 0 {
-                                    let normalizedDistance = (dotProduct - range.lowerBound) / rangeLength
+                                    // dotProduct is already the distance along the edge
+                                    // Clamp it to the valid range first
+                                    let clampedDistance = max(range.lowerBound, min(range.upperBound, dotProduct))
+                                    let normalizedDistance = (clampedDistance - range.lowerBound) / rangeLength
                                     
                                     // Snap to nearest percentage
                                     let snapPercentages: [Double] = [0.0, 0.25, 0.5, 0.75, 1.0]
