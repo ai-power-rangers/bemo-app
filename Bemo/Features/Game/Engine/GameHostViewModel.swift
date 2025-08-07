@@ -25,7 +25,7 @@ class GameHostViewModel {
     private var totalSessionXP: Int = 0
     private var levelsCompleted: Int = 0
     
-    private let game: Game
+    let game: Game  // Made non-private so GameHostView can access game.gameUIConfig
     private let cvService: CVService
     private let profileService: ProfileService
     private let supabaseService: SupabaseService

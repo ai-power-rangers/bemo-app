@@ -94,16 +94,16 @@ class APIService {
     
     // MARK: - Game Progress
     
-    func saveGameProgress(profileId: String, gameId: String, progress: GameProgress) -> AnyPublisher<Void, APIError> {
+    func saveGameProgress(profileId: String, gameId: String, progress: APIGameProgress) -> AnyPublisher<Void, APIError> {
         // Stub implementation
         return Just(())
             .setFailureType(to: APIError.self)
             .eraseToAnyPublisher()
     }
     
-    func getGameProgress(profileId: String, gameId: String) -> AnyPublisher<GameProgress, APIError> {
+    func getGameProgress(profileId: String, gameId: String) -> AnyPublisher<APIGameProgress, APIError> {
         // Stub implementation
-        let progress = GameProgress(
+        let progress = APIGameProgress(
             gameId: gameId,
             profileId: profileId,
             currentLevel: 1,
@@ -191,7 +191,7 @@ struct User: Codable {
     let createdAt: Date
 }
 
-struct GameProgress: Codable {
+struct APIGameProgress: Codable {
     let gameId: String
     let profileId: String
     let currentLevel: Int

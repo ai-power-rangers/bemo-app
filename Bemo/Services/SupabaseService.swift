@@ -16,8 +16,9 @@ import Observation
 @Observable
 class SupabaseService {
     private let client: SupabaseClient
-    private let authService: AuthenticationService
+    private let authService: AuthenticationService?
     private let errorTracking: ErrorTrackingService?
+    private let useServiceRole: Bool
     
     // Observable state
     private(set) var isConnected = false
@@ -27,34 +28,49 @@ class SupabaseService {
     // Connection state
     private(set) var authStateChangeTask: Task<Void, Never>?
     
-    init(authService: AuthenticationService, errorTracking: ErrorTrackingService? = nil) {
+    init(authService: AuthenticationService? = nil, errorTracking: ErrorTrackingService? = nil, useServiceRole: Bool = false) {
         self.authService = authService
         self.errorTracking = errorTracking
+        self.useServiceRole = useServiceRole
         
         // Initialize Supabase client with configuration from AppConfiguration
         let config = AppConfiguration.shared
         
+        // Use service role key if requested and available (for editor/developer tools)
+        let supabaseKey: String
+        if useServiceRole, let serviceKey = config.supabaseServiceRoleKey {
+            supabaseKey = serviceKey
+            print("[SupabaseService] Using service role key for authentication (bypasses RLS)")
+        } else {
+            supabaseKey = config.supabaseAnonKey
+            print("[SupabaseService] Using anonymous key for authentication")
+        }
+        
         print("[SupabaseService] Initializing with URL: '\(config.supabaseURL)'")
-        print("[SupabaseService] Anon key present: \(!config.supabaseAnonKey.isEmpty)")
         
         guard let supabaseURL = URL(string: config.supabaseURL),
-              !config.supabaseAnonKey.isEmpty else {
+              !supabaseKey.isEmpty else {
             print("[SupabaseService] Failed to create URL from: '\(config.supabaseURL)'")
             fatalError("Supabase configuration missing. Please configure SUPABASE_URL and SUPABASE_ANON_KEY in .xcconfig files")
         }
         
         self.client = SupabaseClient(
             supabaseURL: supabaseURL,
-            supabaseKey: config.supabaseAnonKey,
+            supabaseKey: supabaseKey,
             options: SupabaseClientOptions(
                 auth: .init(
                     flowType: .pkce,
-                    autoRefreshToken: true
+                    autoRefreshToken: !useServiceRole  // Don't auto-refresh for service role
                 )
             )
         )
         
-        setupAuthenticationSync()
+        // Service role doesn't need auth sync
+        if useServiceRole {
+            isConnected = true  // Service role is always "connected"
+        } else if authService != nil {
+            setupAuthenticationSync()
+        }
     }
     
     deinit {
@@ -677,6 +693,279 @@ struct LearningStats {
     let totalPlayTimeMinutes: Int
     let levelsCompleted: Int
     let favoriteGame: String?
+}
+
+// MARK: - Tangram Puzzle Storage
+
+extension SupabaseService {
+    
+    /// Fetch all official tangram puzzles from Supabase
+    func fetchOfficialTangramPuzzles() async throws -> [TangramPuzzleDTO] {
+        guard isConnected || useServiceRole else {
+            throw SupabaseError.notAuthenticated
+        }
+        
+        do {
+            let response = try await client
+                .from("tangram_puzzles")
+                .select()
+                .eq("is_official", value: true)
+                .not("published_at", operator: .is, value: "null")
+                .order("category", ascending: true)
+                .order("order_index", ascending: true)
+                .order("difficulty", ascending: true)
+                .execute()
+            
+            let puzzles = try JSONDecoder().decode([TangramPuzzleDTO].self, from: response.data)
+            print("Supabase: Fetched \(puzzles.count) official tangram puzzles")
+            return puzzles
+            
+        } catch {
+            print("Supabase: Failed to fetch tangram puzzles - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "fetchOfficialTangramPuzzles"
+            ))
+            throw error
+        }
+    }
+    
+    /// Save a tangram puzzle to Supabase (developer use only)
+    func saveTangramPuzzle(_ puzzle: TangramPuzzleDTO) async throws {
+        guard isConnected || useServiceRole else {
+            throw SupabaseError.notAuthenticated
+        }
+        
+        do {
+            // Upsert puzzle (insert or update based on puzzle_id)
+            try await client
+                .from("tangram_puzzles")
+                .upsert(puzzle)
+                .execute()
+            
+            print("Supabase: Saved tangram puzzle - \(puzzle.puzzle_id)")
+            
+        } catch {
+            print("Supabase: Failed to save tangram puzzle - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "saveTangramPuzzle",
+                metadata: ["puzzle_id": puzzle.puzzle_id]
+            ))
+            throw error
+        }
+    }
+    
+    /// Upload thumbnail for a tangram puzzle
+    func uploadTangramThumbnail(puzzleId: String, thumbnailData: Data) async throws -> String {
+        guard isConnected || useServiceRole else {
+            throw SupabaseError.notAuthenticated
+        }
+        
+        do {
+            let path = "\(puzzleId).png"
+            
+            // Upload to storage bucket (updated API)
+            _ = try await client.storage
+                .from("tangram-thumbnails")
+                .upload(
+                    path,
+                    data: thumbnailData,
+                    options: FileOptions(
+                        cacheControl: "3600",
+                        contentType: "image/png",
+                        upsert: true
+                    )
+                )
+            
+            // Get public URL
+            let publicURL = try client.storage
+                .from("tangram-thumbnails")
+                .getPublicURL(path: path)
+            
+            print("Supabase: Uploaded thumbnail for puzzle \(puzzleId)")
+            return publicURL.absoluteString
+            
+        } catch {
+            print("Supabase: Failed to upload thumbnail - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "uploadTangramThumbnail",
+                metadata: ["puzzle_id": puzzleId]
+            ))
+            throw error
+        }
+    }
+    
+    /// Download thumbnail for a tangram puzzle
+    func downloadTangramThumbnail(puzzleId: String) async throws -> Data {
+        do {
+            let path = "\(puzzleId).png"
+            let data = try await client.storage
+                .from("tangram-thumbnails")
+                .download(path: path)
+            
+            return data
+            
+        } catch {
+            print("Supabase: Failed to download thumbnail - \(error)")
+            // Don't track as error - thumbnails might not exist for all puzzles
+            throw error
+        }
+    }
+    
+    /// Get tangram puzzles by category
+    func fetchTangramPuzzlesByCategory(_ category: String) async throws -> [TangramPuzzleDTO] {
+        guard isConnected || useServiceRole else {
+            throw SupabaseError.notAuthenticated
+        }
+        
+        do {
+            let response = try await client
+                .from("tangram_puzzles")
+                .select()
+                .eq("is_official", value: true)
+                .eq("category", value: category)
+                .not("published_at", operator: .is, value: "null")
+                .order("order_index", ascending: true)
+                .order("difficulty", ascending: true)
+                .execute()
+            
+            return try JSONDecoder().decode([TangramPuzzleDTO].self, from: response.data)
+            
+        } catch {
+            print("Supabase: Failed to fetch puzzles for category \(category) - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "fetchTangramPuzzlesByCategory",
+                metadata: ["category": category]
+            ))
+            throw error
+        }
+    }
+    
+    /// Delete a tangram puzzle from Supabase
+    func deleteTangramPuzzle(puzzleId: String) async throws {
+        guard isConnected || useServiceRole else {
+            throw SupabaseError.notAuthenticated
+        }
+        
+        do {
+            try await client
+                .from("tangram_puzzles")
+                .delete()
+                .eq("puzzle_id", value: puzzleId)
+                .execute()
+            
+            print("Supabase: Deleted tangram puzzle - \(puzzleId)")
+            
+        } catch {
+            print("Supabase: Failed to delete tangram puzzle - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "deleteTangramPuzzle",
+                metadata: ["puzzle_id": puzzleId]
+            ))
+            throw error
+        }
+    }
+}
+
+// MARK: - Tangram Puzzle DTO
+
+struct TangramPuzzleDTO: Codable {
+    let id: UUID?
+    let puzzle_id: String
+    let name: String
+    let category: String
+    let difficulty: Int
+    let puzzle_data: Data  // Entire TangramPuzzle stored as JSONB
+    let solution_checksum: String?
+    let is_official: Bool
+    let tags: [String]?
+    let order_index: Int?
+    let thumbnail_path: String?
+    let published_at: String?
+    let metadata: AnyCodable?  // JSONB metadata
+    
+    // Convert to TangramPuzzle model
+    func toTangramPuzzle() throws -> TangramPuzzle {
+        // Decode the entire puzzle from the puzzle_data JSONB column
+        let puzzle = try JSONDecoder().decode(TangramPuzzle.self, from: puzzle_data)
+        return puzzle
+    }
+    
+    // Create DTO from TangramPuzzle
+    init(from puzzle: TangramPuzzle) throws {
+        self.id = nil  // Let database generate
+        self.puzzle_id = puzzle.id
+        self.name = puzzle.name
+        self.category = puzzle.category.rawValue
+        self.difficulty = puzzle.difficulty.rawValue
+        
+        // Encode the entire puzzle as JSONB
+        self.puzzle_data = try JSONEncoder().encode(puzzle)
+        
+        self.solution_checksum = puzzle.solutionChecksum
+        self.is_official = true  // All saved puzzles are official
+        self.tags = puzzle.tags
+        self.order_index = 0  // Default order
+        self.thumbnail_path = nil  // Set after upload
+        self.published_at = ISO8601DateFormatter().string(from: Date())  // Publish immediately
+        self.metadata = AnyCodable([:] as [String: String])  // Empty metadata as AnyCodable
+    }
+}
+
+// Helper to encode/decode Any types for JSONB
+struct AnyCodable: Codable {
+    let value: Any
+    
+    init(_ value: Any) {
+        self.value = value
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let dict = try? container.decode([String: AnyCodable].self) {
+            self.value = dict.mapValues { $0.value }
+        } else if let array = try? container.decode([AnyCodable].self) {
+            self.value = array.map { $0.value }
+        } else if let string = try? container.decode(String.self) {
+            self.value = string
+        } else if let bool = try? container.decode(Bool.self) {
+            self.value = bool
+        } else if let int = try? container.decode(Int.self) {
+            self.value = int
+        } else if let double = try? container.decode(Double.self) {
+            self.value = double
+        } else if container.decodeNil() {
+            self.value = NSNull()
+        } else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "AnyCodable value cannot be decoded")
+        }
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch value {
+        case let dict as [String: Any]:
+            try container.encode(dict.mapValues { AnyCodable($0) })
+        case let array as [Any]:
+            try container.encode(array.map { AnyCodable($0) })
+        case let string as String:
+            try container.encode(string)
+        case let bool as Bool:
+            try container.encode(bool)
+        case let int as Int:
+            try container.encode(int)
+        case let double as Double:
+            try container.encode(double)
+        case is NSNull:
+            try container.encodeNil()
+        default:
+            throw EncodingError.invalidValue(value, EncodingError.Context(codingPath: container.codingPath, debugDescription: "AnyCodable value cannot be encoded"))
+        }
+    }
 }
 
 // MARK: - Error Types

@@ -28,7 +28,8 @@ class AppConfiguration {
     }
     
     var postHogHost: String {
-        return "https://us.i.posthog.com"
+        let host = Bundle.main.object(forInfoDictionaryKey: "PostHogHost") as? String ?? "https://us.i.posthog.com"
+        return host.replacingOccurrences(of: "\"", with: "")
     }
     
     // MARK: - Supabase Configuration
@@ -42,8 +43,9 @@ class AppConfiguration {
             return ""
         }
 
-        // Add this line to remove the escape characters
+        // Remove escape characters and quotes
         let cleanedURL = url.replacingOccurrences(of: "\\", with: "")
+                           .replacingOccurrences(of: "\"", with: "")
 
         print("[AppConfiguration] SupabaseURL loaded: \(cleanedURL)")
         return cleanedURL // Return the cleaned URL
@@ -55,7 +57,18 @@ class AppConfiguration {
             assertionFailure("SupabaseAnonKey not found or not configured in Info.plist")
             return ""
         }
-        return key
+        // Remove quotes that might come from xcconfig
+        return key.replacingOccurrences(of: "\"", with: "")
+    }
+    
+    var supabaseServiceRoleKey: String? {
+        guard let key = Bundle.main.object(forInfoDictionaryKey: "SupabaseServiceRoleKey") as? String,
+              !key.isEmpty else {
+            // Service role key is optional - only used in developer mode
+            return nil
+        }
+        // Remove quotes that might come from xcconfig
+        return key.replacingOccurrences(of: "\"", with: "")
     }
     
     // MARK: - Sentry Configuration

@@ -165,6 +165,7 @@ class AppCoordinator {
         case .lobby:
             GameLobbyView(viewModel: GameLobbyViewModel(
                 profileService: self.dependencyContainer.profileService,
+                supabaseService: self.dependencyContainer.supabaseService,
                 onGameSelected: { [weak self] selectedGame in
                     self?.currentState = .game(selectedGame)
                 },

@@ -1,0 +1,580 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		913FD9782E42756D00B06FA4 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = 913FD9772E42756D00B06FA4 /* PostHog */; };
+		913FD9A62E42CF2C00B06FA4 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 913FD9A52E42CF2C00B06FA4 /* Auth */; };
+		913FD9A82E42CF2C00B06FA4 /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = 913FD9A72E42CF2C00B06FA4 /* Functions */; };
+		913FD9AA2E42CF2C00B06FA4 /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = 913FD9A92E42CF2C00B06FA4 /* PostgREST */; };
+		913FD9AC2E42CF2C00B06FA4 /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = 913FD9AB2E42CF2C00B06FA4 /* Realtime */; };
+		913FD9AE2E42CF2C00B06FA4 /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 913FD9AD2E42CF2C00B06FA4 /* Storage */; };
+		913FD9B02E42CF2C00B06FA4 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 913FD9AF2E42CF2C00B06FA4 /* Supabase */; };
+		913FD9B52E42E82D00B06FA4 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 913FD9B42E42E82D00B06FA4 /* Sentry */; };
+		913FD9B72E42E82D00B06FA4 /* SentrySwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 913FD9B62E42E82D00B06FA4 /* SentrySwiftUI */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		BD643C682E42EB6D005BC720 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 91D79E992E41895600EDD4EF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 91D79EA02E41895600EDD4EF;
+			remoteInfo = Bemo;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		91D79EA12E41895600EDD4EF /* Bemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Bemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BD0449822E4275C2003B72D1 /* BemoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BemoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		91D79EB12E41895700EDD4EF /* Exceptions for "Bemo" folder in "Bemo" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 91D79EA02E41895600EDD4EF /* Bemo */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		91D79EA32E41895600EDD4EF /* Bemo */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				91D79EB12E41895700EDD4EF /* Exceptions for "Bemo" folder in "Bemo" target */,
+			);
+			path = Bemo;
+			sourceTree = "<group>";
+		};
+		BD0449A32E427799003B72D1 /* BemoTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = BemoTests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		91D79E9E2E41895600EDD4EF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				913FD9B02E42CF2C00B06FA4 /* Supabase in Frameworks */,
+				913FD9B72E42E82D00B06FA4 /* SentrySwiftUI in Frameworks */,
+				913FD9AE2E42CF2C00B06FA4 /* Storage in Frameworks */,
+				913FD9AA2E42CF2C00B06FA4 /* PostgREST in Frameworks */,
+				913FD9B52E42E82D00B06FA4 /* Sentry in Frameworks */,
+				913FD9A82E42CF2C00B06FA4 /* Functions in Frameworks */,
+				913FD9A62E42CF2C00B06FA4 /* Auth in Frameworks */,
+				913FD9AC2E42CF2C00B06FA4 /* Realtime in Frameworks */,
+				913FD9782E42756D00B06FA4 /* PostHog in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BD04497F2E4275C2003B72D1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		91D79E982E41895600EDD4EF = {
+			isa = PBXGroup;
+			children = (
+				91D79EA32E41895600EDD4EF /* Bemo */,
+				BD0449A32E427799003B72D1 /* BemoTests */,
+				91D79EA22E41895600EDD4EF /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		91D79EA22E41895600EDD4EF /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				91D79EA12E41895600EDD4EF /* Bemo.app */,
+				BD0449822E4275C2003B72D1 /* BemoTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		91D79EA02E41895600EDD4EF /* Bemo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 91D79EB22E41895700EDD4EF /* Build configuration list for PBXNativeTarget "Bemo" */;
+			buildPhases = (
+				91D79E9D2E41895600EDD4EF /* Sources */,
+				91D79E9E2E41895600EDD4EF /* Frameworks */,
+				91D79E9F2E41895600EDD4EF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				91D79EA32E41895600EDD4EF /* Bemo */,
+			);
+			name = Bemo;
+			packageProductDependencies = (
+				913FD9772E42756D00B06FA4 /* PostHog */,
+				913FD9A52E42CF2C00B06FA4 /* Auth */,
+				913FD9A72E42CF2C00B06FA4 /* Functions */,
+				913FD9A92E42CF2C00B06FA4 /* PostgREST */,
+				913FD9AB2E42CF2C00B06FA4 /* Realtime */,
+				913FD9AD2E42CF2C00B06FA4 /* Storage */,
+				913FD9AF2E42CF2C00B06FA4 /* Supabase */,
+				913FD9B42E42E82D00B06FA4 /* Sentry */,
+				913FD9B62E42E82D00B06FA4 /* SentrySwiftUI */,
+			);
+			productName = Bemo;
+			productReference = 91D79EA12E41895600EDD4EF /* Bemo.app */;
+			productType = "com.apple.product-type.application";
+		};
+		BD0449812E4275C2003B72D1 /* BemoTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BD0449882E4275C3003B72D1 /* Build configuration list for PBXNativeTarget "BemoTests" */;
+			buildPhases = (
+				BD04497E2E4275C2003B72D1 /* Sources */,
+				BD04497F2E4275C2003B72D1 /* Frameworks */,
+				BD0449802E4275C2003B72D1 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BD0449872E4275C2003B72D1 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				BD0449A32E427799003B72D1 /* BemoTests */,
+			);
+			name = BemoTests;
+			packageProductDependencies = (
+			);
+			productName = BemoTests;
+			productReference = BD0449822E4275C2003B72D1 /* BemoTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		91D79E992E41895600EDD4EF /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					91D79EA02E41895600EDD4EF = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					BD0449812E4275C2003B72D1 = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 91D79EA02E41895600EDD4EF;
+					};
+				};
+			};
+			buildConfigurationList = 91D79E9C2E41895600EDD4EF /* Build configuration list for PBXProject "Bemo" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 91D79E982E41895600EDD4EF;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				913FD9762E42756D00B06FA4 /* XCRemoteSwiftPackageReference "posthog-ios" */,
+				913FD9A42E42CF2C00B06FA4 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				913FD9B32E42E82D00B06FA4 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 91D79EA22E41895600EDD4EF /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				91D79EA02E41895600EDD4EF /* Bemo */,
+				BD0449812E4275C2003B72D1 /* BemoTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		91D79E9F2E41895600EDD4EF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BD0449802E4275C2003B72D1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		91D79E9D2E41895600EDD4EF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BD04497E2E4275C2003B72D1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BD0449872E4275C2003B72D1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 91D79EA02E41895600EDD4EF /* Bemo */;
+			targetProxy = BD643C682E42EB6D005BC720 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		91D79EB32E41895700EDD4EF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Bemo/Bemo.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 54Q9XU57JS;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Bemo/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mitchellwhite.Bemo;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		91D79EB42E41895700EDD4EF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Bemo/Bemo.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 54Q9XU57JS;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Bemo/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mitchellwhite.Bemo;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		91D79EB52E41895700EDD4EF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 91D79EA32E41895600EDD4EF /* Bemo */;
+			baseConfigurationReferenceRelativePath = Bemo/Config/Debug.xcconfig;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 9N72JQ6947;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		91D79EB62E41895700EDD4EF /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 91D79EA32E41895600EDD4EF /* Bemo */;
+			baseConfigurationReferenceRelativePath = Bemo/Config/Release.xcconfig;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 9N72JQ6947;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		BD0449892E4275C3003B72D1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 54Q9XU57JS;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mitchellwhite.Bemo;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Bemo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Bemo";
+			};
+			name = Debug;
+		};
+		BD04498A2E4275C3003B72D1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 54Q9XU57JS;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mitchellwhite.Bemo;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Bemo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Bemo";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		91D79E9C2E41895600EDD4EF /* Build configuration list for PBXProject "Bemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				91D79EB52E41895700EDD4EF /* Debug */,
+				91D79EB62E41895700EDD4EF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		91D79EB22E41895700EDD4EF /* Build configuration list for PBXNativeTarget "Bemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				91D79EB32E41895700EDD4EF /* Debug */,
+				91D79EB42E41895700EDD4EF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BD0449882E4275C3003B72D1 /* Build configuration list for PBXNativeTarget "BemoTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BD0449892E4275C3003B72D1 /* Debug */,
+				BD04498A2E4275C3003B72D1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		913FD9762E42756D00B06FA4 /* XCRemoteSwiftPackageReference "posthog-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/PostHog/posthog-ios.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.30.0;
+			};
+		};
+		913FD9A42E42CF2C00B06FA4 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase-community/supabase-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+		913FD9B32E42E82D00B06FA4 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.54.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		913FD9772E42756D00B06FA4 /* PostHog */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 913FD9762E42756D00B06FA4 /* XCRemoteSwiftPackageReference "posthog-ios" */;
+			productName = PostHog;
+		};
+		913FD9A52E42CF2C00B06FA4 /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 913FD9A42E42CF2C00B06FA4 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		913FD9A72E42CF2C00B06FA4 /* Functions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 913FD9A42E42CF2C00B06FA4 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Functions;
+		};
+		913FD9A92E42CF2C00B06FA4 /* PostgREST */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 913FD9A42E42CF2C00B06FA4 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = PostgREST;
+		};
+		913FD9AB2E42CF2C00B06FA4 /* Realtime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 913FD9A42E42CF2C00B06FA4 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Realtime;
+		};
+		913FD9AD2E42CF2C00B06FA4 /* Storage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 913FD9A42E42CF2C00B06FA4 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Storage;
+		};
+		913FD9AF2E42CF2C00B06FA4 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 913FD9A42E42CF2C00B06FA4 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+		913FD9B42E42E82D00B06FA4 /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 913FD9B32E42E82D00B06FA4 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
+		};
+		913FD9B62E42E82D00B06FA4 /* SentrySwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 913FD9B32E42E82D00B06FA4 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = SentrySwiftUI;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 91D79E992E41895600EDD4EF /* Project object */;
+}
