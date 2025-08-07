@@ -10,6 +10,8 @@
 	<string>$(SUPABASE_URL)</string>
 	<key>SupabaseAnonKey</key>
 	<string>$(SUPABASE_ANON_KEY)</string>
+	<key>SupabaseServiceRoleKey</key>
+	<string>$(SUPABASE_SERVICE_ROLE_KEY)</string>
 	<key>SentryDSN</key>
 	<string>$(SENTRY_DSN)</string>
 	<key>SentryEnvironment</key>

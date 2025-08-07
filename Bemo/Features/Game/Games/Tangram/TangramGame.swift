@@ -2,155 +2,110 @@
 //  TangramGame.swift
 //  Bemo
 //
-//  Concrete implementation of the Tangram puzzle game
+//  Game protocol implementation for Tangram puzzle gameplay
 //
 
-// WHAT: Tangram puzzle game implementation. Manages game logic for matching physical pieces to target shapes.
-// ARCHITECTURE: Concrete Game protocol implementation. Self-contained game module that processes CV input and manages game state.
-// USAGE: Add to GameLobbyViewModel's game list. Handles piece placement validation, level progression, and score tracking.
+// WHAT: Implements the Game protocol for Tangram puzzles, enabling players to solve
+//       classic tangram challenges using computer vision to track physical pieces
+// ARCHITECTURE: Game protocol implementation in MVVM-S pattern
+// USAGE: Instantiated by GameLobbyViewModel, creates game view via makeGameView
 
 import SwiftUI
 
 class TangramGame: Game {
+    
+    // MARK: - Game Protocol Properties
+    
     let id = "tangram"
     let title = "Tangram Puzzles"
-    let description = "Create shapes using geometric pieces"
-    let recommendedAge = 4...8
-    let thumbnailImageName = "tangram_thumbnail"
+    let description = "Solve classic tangram puzzles by arranging shapes"
+    let recommendedAge = 5...12
+    let thumbnailImageName = "tangram_thumb"
     
-    private weak var delegate: GameDelegate?
-    private var currentLevel = 1
-    private var placedPieces: Set<PlacedPiece> = []
-    private var targetShape: TargetShape
+    // MARK: - Game UI Configuration
     
-    struct PlacedPiece: Hashable {
-        let shape: ShapeType
-        let position: CGPoint
-        let rotation: Double
-    }
-    
-    struct TargetShape {
-        let name: String
-        let requiredPieces: [ShapeRequirement]
-    }
-    
-    struct ShapeRequirement {
-        let shape: ShapeType
-        let targetPosition: CGPoint
-        let targetRotation: Double
-        let tolerance: Double = 50.0 // Position tolerance in points
-    }
-    
-    enum ShapeType {
-        case triangle
-        case square
-        case parallelogram
-    }
-    
-    init() {
-        // Initialize with first level
-        self.targetShape = TargetShape(
-            name: "House",
-            requiredPieces: [
-                ShapeRequirement(shape: .triangle, targetPosition: CGPoint(x: 200, y: 100), targetRotation: 0),
-                ShapeRequirement(shape: .square, targetPosition: CGPoint(x: 200, y: 200), targetRotation: 0)
-            ]
+    var gameUIConfig: GameUIConfig {
+        // Only show hint button during gameplay, not in puzzle selection
+        let showHints = viewModel?.currentPhase == .playingPuzzle
+        
+        return GameUIConfig(
+            respectsSafeAreas: false,
+            showHintButton: showHints,
+            showProgressBar: showHints,
+            showQuitButton: false  // We handle quit in our own UI
         )
     }
     
+    // MARK: - Services
+    
+    private var viewModel: TangramGameViewModel?
+    private let supabaseService: SupabaseService?
+    
+    // MARK: - Initialization
+    
+    init(supabaseService: SupabaseService? = nil) {
+        self.supabaseService = supabaseService
+    }
+    
+    // MARK: - Game Protocol Methods
+    
     func makeGameView(delegate: GameDelegate) -> AnyView {
-        self.delegate = delegate
-        let viewModel = TangramGameViewModel(game: self, delegate: delegate)
-        return AnyView(TangramGameView(viewModel: viewModel))
+        let vm = TangramGameViewModel(delegate: delegate, supabaseService: supabaseService)
+        self.viewModel = vm
+        return AnyView(
+            TangramGameView(viewModel: vm)
+        )
     }
     
     func processRecognizedPieces(_ pieces: [RecognizedPiece]) -> PlayerActionOutcome {
-        // Convert recognized pieces to game pieces
-        for piece in pieces {
-            if let shapeType = convertToShapeType(piece.shape) {
-                let placedPiece = PlacedPiece(
-                    shape: shapeType,
-                    position: piece.position,
-                    rotation: piece.rotation
-                )
-                
-                // Check if this piece fits the target
-                if let matchedRequirement = findMatchingRequirement(for: placedPiece) {
-                    placedPieces.insert(placedPiece)
-                    
-                    // Check if level is complete
-                    if placedPieces.count == targetShape.requiredPieces.count {
-                        delegate?.gameDidCompleteLevel(xpAwarded: 50)
-                        return .levelComplete(xpAwarded: 50)
-                    }
-                    
-                    return .correctPlacement(points: 10)
-                } else {
-                    return .incorrectPlacement
-                }
-            }
+        // Convert CV pieces directly to PlacedPieces (no color mapping needed)
+        let placedPieces = pieces.map { PlacedPiece(from: $0) }
+        
+        // Pass to view model for processing
+        viewModel?.processCVInput(placedPieces)
+        
+        // Determine outcome based on piece state
+        if placedPieces.isEmpty {
+            return .noAction
+        }
+        
+        // Only validate pieces that are placed and stationary
+        let stationaryPieces = placedPieces.filter { $0.isPlacedLongEnough() }
+        
+        // Check if any pieces are correctly placed
+        let correctPieces = stationaryPieces.filter { $0.validationState == .correct }
+        if !correctPieces.isEmpty {
+            return .correctPlacement(points: correctPieces.count * 10)
+        }
+        
+        // Check if pieces are being moved
+        let movingPieces = placedPieces.filter { $0.isMoving }
+        if !movingPieces.isEmpty {
+            return .stateUpdated // User is actively working
+        }
+        
+        // Check if pieces are placed but incorrect
+        let incorrectPieces = stationaryPieces.filter { $0.validationState == .incorrect }
+        if !incorrectPieces.isEmpty {
+            return .incorrectPlacement
         }
         
         return .noAction
     }
     
     func reset() {
-        placedPieces.removeAll()
-        currentLevel = 1
-        loadLevel(currentLevel)
+        viewModel?.resetGame()
     }
     
     func saveState() -> Data? {
-        // TODO: Implement state serialization
-        return nil
+        // Save current game state for persistence
+        guard let gameState = viewModel?.gameState else { return nil }
+        return try? JSONEncoder().encode(gameState)
     }
     
     func loadState(from data: Data) {
-        // TODO: Implement state deserialization
-    }
-    
-    // MARK: - Private Methods
-    
-    private func convertToShapeType(_ shape: RecognizedPiece.Shape) -> ShapeType? {
-        switch shape {
-        case .triangle:
-            return .triangle
-        case .square:
-            return .square
-        case .rectangle:
-            return .parallelogram
-        default:
-            return nil
-        }
-    }
-    
-    private func findMatchingRequirement(for piece: PlacedPiece) -> ShapeRequirement? {
-        return targetShape.requiredPieces.first { requirement in
-            requirement.shape == piece.shape &&
-            distance(from: piece.position, to: requirement.targetPosition) < requirement.tolerance
-        }
-    }
-    
-    private func distance(from: CGPoint, to: CGPoint) -> Double {
-        let dx = from.x - to.x
-        let dy = from.y - to.y
-        return sqrt(dx * dx + dy * dy)
-    }
-    
-    private func loadLevel(_ level: Int) {
-        // Load level configuration
-        // This would typically load from a level definition file
-        switch level {
-        case 1:
-            targetShape = TargetShape(
-                name: "House",
-                requiredPieces: [
-                    ShapeRequirement(shape: .triangle, targetPosition: CGPoint(x: 200, y: 100), targetRotation: 0),
-                    ShapeRequirement(shape: .square, targetPosition: CGPoint(x: 200, y: 200), targetRotation: 0)
-                ]
-            )
-        default:
-            break
-        }
+        // Restore game state from saved data
+        guard let gameState = try? JSONDecoder().decode(PuzzleGameState.self, from: data) else { return }
+        viewModel?.restoreGameState(gameState)
     }
 }

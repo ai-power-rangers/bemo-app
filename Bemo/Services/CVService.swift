@@ -109,16 +109,18 @@ class CVService {
             .sink { [weak self] _ in
                 guard let self = self, self.isSessionActive else { return }
                 
-                // Create mock recognized pieces
+                // Create mock recognized pieces with updated structure
                 let mockPieces = [
                     RecognizedPiece(
-                        id: UUID().uuidString,
-                        shape: .triangle,
-                        color: .red,
+                        id: "mock_piece_\(UUID().uuidString.prefix(8))",
+                        pieceTypeId: "largeTriangle1",
                         position: CGPoint(x: 200, y: 150),
                         rotation: 0,
+                        velocity: CGVector(dx: 0, dy: 0),
+                        isMoving: false,
                         confidence: 0.95,
-                        timestamp: Date()
+                        timestamp: Date(),
+                        frameNumber: Int.random(in: 1000...9999)
                     )
                 ]
                 
