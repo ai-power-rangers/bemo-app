@@ -54,6 +54,16 @@ class TangramEditorViewModel {
     let manipulationService: PieceManipulationService
     let stateManager: TangramEditorStateMachine
     let toastService: ToastService
+    let puzzleManagementService: PuzzleManagementService?
+    
+    // MARK: - Dynamic Manipulation Constraints
+    var manipulationConstraints: [String: ManipulationConstraints] = [:]
+    var initialManipulationTransforms: [String: CGAffineTransform] = [:]  // Store initial transform when starting manipulation
+    
+    struct ManipulationConstraints {
+        var rotationLimits: (min: Double, max: Double)?
+        var slideLimits: ClosedRange<Double>?
+    }
     
     // MARK: - Initialization
     
@@ -65,7 +75,8 @@ class TangramEditorViewModel {
          validationService: ValidationService,
          manipulationService: PieceManipulationService,
          stateManager: TangramEditorStateMachine,
-         toastService: ToastService) {
+         toastService: ToastService,
+         puzzleManagementService: PuzzleManagementService? = nil) {
         
         // Initialize services
         self.coordinator = coordinator
@@ -76,6 +87,7 @@ class TangramEditorViewModel {
         self.manipulationService = manipulationService
         self.stateManager = stateManager
         self.toastService = toastService
+        self.puzzleManagementService = puzzleManagementService
         
         // Initialize puzzle
         self.puzzle = puzzle ?? TangramPuzzle(name: "New Puzzle")

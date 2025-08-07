@@ -937,12 +937,14 @@ struct AnyCodable: Codable {
             self.value = array.map { $0.value }
         } else if let string = try? container.decode(String.self) {
             self.value = string
-        } else if let bool = try? container.decode(Bool.self) {
-            self.value = bool
-        } else if let int = try? container.decode(Int.self) {
-            self.value = int
-        } else if let double = try? container.decode(Double.self) {
+        } else if let double = try? container.decode(Double.self) {  // Check Double BEFORE Bool
             self.value = double
+        } else if let float = try? container.decode(Float.self) {    // Add Float support
+            self.value = float
+        } else if let int = try? container.decode(Int.self) {        // Check Int BEFORE Bool
+            self.value = int
+        } else if let bool = try? container.decode(Bool.self) {      // Bool check moved to LAST
+            self.value = bool
         } else if container.decodeNil() {
             self.value = NSNull()
         } else {
@@ -959,12 +961,14 @@ struct AnyCodable: Codable {
             try container.encode(array.map { AnyCodable($0) })
         case let string as String:
             try container.encode(string)
-        case let bool as Bool:
-            try container.encode(bool)
-        case let int as Int:
-            try container.encode(int)
-        case let double as Double:
+        case let double as Double:  // Check Double BEFORE Bool
             try container.encode(double)
+        case let float as Float:    // Add Float support BEFORE Bool
+            try container.encode(float)
+        case let int as Int:        // Check Int BEFORE Bool
+            try container.encode(int)
+        case let bool as Bool:      // Bool check moved to LAST numeric position
+            try container.encode(bool)
         case is NSNull:
             try container.encodeNil()
         default:

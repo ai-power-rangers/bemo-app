@@ -258,8 +258,20 @@ extension TangramEditorViewModel {
                     connections: connections,
                     existingPieces: puzzle.pieces
                 ) {
-                    uiState.previewPiece = placedPiece
-                    uiState.previewTransform = placedPiece.transform
+                    // CRITICAL: Validate before showing preview
+                    if PuzzleValidationRules.isValidPlacement(
+                        piece: placedPiece,
+                        withTransform: placedPiece.transform,
+                        amongPieces: puzzle.pieces,
+                        maintainingConnection: nil  // New piece, no existing connection
+                    ) {
+                        uiState.previewPiece = placedPiece
+                        uiState.previewTransform = placedPiece.transform
+                    } else {
+                        // NO PREVIEW for invalid positions
+                        uiState.previewPiece = nil
+                        uiState.previewTransform = nil
+                    }
                 } else {
                     uiState.previewPiece = nil
                     uiState.previewTransform = nil

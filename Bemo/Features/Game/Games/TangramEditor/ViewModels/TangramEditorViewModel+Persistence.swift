@@ -17,11 +17,25 @@ extension TangramEditorViewModel {
     // MARK: - Persistence
     
     func save() async throws {
+        // Check if this is a new puzzle (doesn't exist in database yet)
+        let isNewPuzzle = puzzle.createdDate == puzzle.modifiedDate
+        
         puzzle.modifiedDate = Date()
         puzzle.solutionChecksum = generateChecksum()
         let updatedPuzzle = try await persistenceService.savePuzzle(puzzle)
         puzzle = updatedPuzzle
         await loadSavedPuzzles()
+        
+        // Update the PuzzleManagementService cache efficiently
+        if let puzzleManagement = puzzleManagementService {
+            if isNewPuzzle {
+                print("[TangramEditor] Adding new puzzle to cache: \(puzzle.id)")
+                await puzzleManagement.addNewPuzzle(puzzle.id)
+            } else {
+                print("[TangramEditor] Updating existing puzzle in cache: \(puzzle.id)")
+                await puzzleManagement.updateSinglePuzzle(puzzle.id)
+            }
+        }
     }
     
     func loadSavedPuzzles() async {
@@ -63,6 +77,12 @@ extension TangramEditorViewModel {
         do {
             try await persistenceService.deletePuzzle(id: puzzleToDelete.id)
             await loadSavedPuzzles()
+            
+            // Remove from PuzzleManagementService cache efficiently
+            if let puzzleManagement = puzzleManagementService {
+                print("[TangramEditor] Removing puzzle from cache: \(puzzleToDelete.id)")
+                await puzzleManagement.removePuzzle(puzzleToDelete.id)
+            }
         } catch {
             print("Failed to delete puzzle: \(error)")
         }
@@ -82,8 +102,14 @@ extension TangramEditorViewModel {
         newPuzzle.tags = puzzleToDuplicate.tags
         
         do {
-            _ = try await persistenceService.savePuzzle(newPuzzle)
+            let savedPuzzle = try await persistenceService.savePuzzle(newPuzzle)
             await loadSavedPuzzles()
+            
+            // Add new puzzle to PuzzleManagementService cache efficiently
+            if let puzzleManagement = puzzleManagementService {
+                print("[TangramEditor] Adding duplicated puzzle to cache: \(savedPuzzle.id)")
+                await puzzleManagement.addNewPuzzle(savedPuzzle.id)
+            }
         } catch {
             print("Failed to duplicate puzzle: \(error)")
         }

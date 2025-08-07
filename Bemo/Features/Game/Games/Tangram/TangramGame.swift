@@ -37,17 +37,23 @@ class TangramGame: Game {
     
     private var viewModel: TangramGameViewModel?
     private let supabaseService: SupabaseService?
+    private let puzzleManagementService: PuzzleManagementService?
     
     // MARK: - Initialization
     
-    init(supabaseService: SupabaseService? = nil) {
+    init(supabaseService: SupabaseService? = nil, puzzleManagementService: PuzzleManagementService? = nil) {
         self.supabaseService = supabaseService
+        self.puzzleManagementService = puzzleManagementService
     }
     
     // MARK: - Game Protocol Methods
     
     func makeGameView(delegate: GameDelegate) -> AnyView {
-        let vm = TangramGameViewModel(delegate: delegate, supabaseService: supabaseService)
+        let vm = TangramGameViewModel(
+            delegate: delegate, 
+            supabaseService: supabaseService,
+            puzzleManagementService: puzzleManagementService
+        )
         self.viewModel = vm
         return AnyView(
             TangramGameView(viewModel: vm)

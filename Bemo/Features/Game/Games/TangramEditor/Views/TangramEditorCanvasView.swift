@@ -213,6 +213,7 @@ struct TangramEditorCanvasView: View {
                 availableConnectionPoints: [],
                 selectedConnectionPoints: [],
                 manipulationMode: nil,
+                manipulationConstraints: nil,
                 onRotation: { _ in },
                 onSlide: { _ in },
                 onManipulationEnd: { }
@@ -233,6 +234,7 @@ struct TangramEditorCanvasView: View {
                 availableConnectionPoints: [],
                 selectedConnectionPoints: [],
                 manipulationMode: viewModel.pieceManipulationModes[piece.id],
+                manipulationConstraints: viewModel.manipulationConstraints[piece.id],
                 onRotation: { angle in
                     viewModel.handleRotation(pieceId: piece.id, angle: angle)
                 },

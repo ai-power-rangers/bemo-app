@@ -34,6 +34,10 @@ class AppCoordinator {
     }
     
     func start() {
+        // Preload puzzles in background for fast access
+        Task {
+            await dependencyContainer.puzzleManagementService.preloadAllPuzzles()
+        }
         checkAuthenticationAndNavigate()
     }
     
@@ -166,6 +170,7 @@ class AppCoordinator {
             GameLobbyView(viewModel: GameLobbyViewModel(
                 profileService: self.dependencyContainer.profileService,
                 supabaseService: self.dependencyContainer.supabaseService,
+                puzzleManagementService: self.dependencyContainer.puzzleManagementService,
                 onGameSelected: { [weak self] selectedGame in
                     self?.currentState = .game(selectedGame)
                 },

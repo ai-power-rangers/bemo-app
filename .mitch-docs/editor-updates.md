@@ -1,171 +1,104 @@
-# Tangram Editor Connection System Updates
+# Tangram Editor Critical Fix: Strict Validation and Discrete Positioning
 
-## Overview
-This document outlines surgical fixes to the tangram editor's connection and manipulation system based on deep code analysis. The fixes address vertex-to-edge sliding, dynamic constraint calculation for overlaps, and proper range limiting for both rotation and sliding operations.
+## Executive Summary
 
-**CRITICAL: The implementation preserves the existing `ManipulationMode` enum to avoid breaking pattern matching throughout the codebase. Dynamic limits are calculated and stored separately in the ViewModel.**
+The Tangram Editor currently allows invalid piece placements and previews to be shown to users. This document outlines a comprehensive plan to enforce strict validation rules, ensuring pieces can only be placed in valid positions with discrete snap points and proper connection integrity.
 
-## Implementation Order (CRITICAL - Must Follow)
+## Current Problems Identified
 
-1. **Issue 4** - Add pieces parameter (Foundation - Required by other fixes)
-2. **Issue 1** - Enable vertex-to-edge sliding (Simple, isolated)
-3. **Issue 3** - Add dynamic sliding limits (Builds on Issue 1 & 4)
-4. **Issue 2** - Add dynamic rotation limits (Similar to Issue 3)
-5. **Issue 6** - Update visual feedback (Depends on 2 & 3)
-6. **Issue 5** - Add performance caching (Optimization)
+### 1. Invalid Preview Display
+- **Problem**: The preview system shows pieces in positions that would cause overlaps
+- **Location**: `TangramEditorViewModel+StateAndUI.swift`, lines 216-275
+- **Root Cause**: `updatePreviewIfNeeded()` doesn't validate transforms before displaying preview
 
----
+### 2. Continuous vs. Discrete Positioning
+- **Problem**: Pieces can be positioned at any angle/position instead of discrete snap points
+- **Current Behavior**: 
+  - Rotation allows any angle, not just 45° increments
+  - Sliding allows any position along edge, not just 0%, 25%, 50%, 75%, 100%
+- **Root Cause**: Snap calculations are suggestions, not enforced constraints
 
-## Issue 1: Vertex-to-Edge Sliding Not Enabled
+### 3. Connection Integrity Not Enforced
+- **Problem**: Connections can be broken during manipulation
+- **Specific Issues**:
+  - Vertex-to-vertex connections don't maintain exact point connection
+  - Vertex-to-edge connections allow vertex to leave the edge
+  - Edge-to-edge connections don't maintain parallel alignment
 
-### Current Problem
-- **File**: `Bemo/Features/Game/Games/TangramEditor/Services/PieceManipulationService.swift`
-- **Lines**: 99-102
-- Vertex-to-edge connections return `.fixed` instead of `.slidable`
+### 4. Incomplete Validation Integration
+- **Problem**: `PuzzleValidationRules` exists but isn't used consistently
+- **Location**: Validation happens with basic `hasAreaOverlap()` instead of comprehensive rules
+- **Impact**: Misses connection integrity checks and other validation rules
 
-### Fix Required
-Replace lines 99-102 in `PieceManipulationService.swift`:
+## Required Behavior Specification
 
-```swift
-case .vertexToEdge(let pieceAId, let vertex, let pieceBId, let edge):
-    // Get the piece B (the edge owner) to determine the slide track
-    guard let pieceB = allPieces.first(where: { $0.id == pieceBId }) else {
-        return .fixed
-    }
-    
-    let worldVerticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
-    let edgesB = TangramGeometry.edges(for: pieceB.type)
-    
-    guard edge < edgesB.count else {
-        return .fixed
-    }
-    
-    let edgeDef = edgesB[edge]
-    let edgeStart = worldVerticesB[edgeDef.startVertex]
-    let edgeEnd = worldVerticesB[edgeDef.endVertex]
-    
-    // Calculate edge vector and length
-    let dx = edgeEnd.x - edgeStart.x
-    let dy = edgeEnd.y - edgeStart.y
-    let edgeLength = sqrt(dx * dx + dy * dy)
-    let normalizedVector = CGVector(dx: dx / edgeLength, dy: dy / edgeLength)
-    
-    // Calculate dynamic slide limits if we have obstacle checking
-    let baseRange = 0...Double(edgeLength)
-    let otherPieces = allPieces.filter { $0.id != piece.id && $0.id != pieceBId }
-    
-    // For initial implementation, use full edge range
-    // Dynamic limits will be calculated in Phase 3
-    let slideRange = baseRange
-    let snapPositions = [0.0, 0.5, 1.0] // Snap at start, middle, end
-    
-    return .slidable(
-        edge: ManipulationMode.Edge(
-            start: edgeStart,
-            end: edgeEnd,
-            vector: normalizedVector
-        ),
-        range: slideRange,
-        snapPositions: snapPositions
-    )
+### Rotation Rules
+- **ONLY** allow rotations at 45° increments: -180°, -135°, -90°, -45°, 0°, 45°, 90°, 135°, 180°
+- **NO** intermediate angles
+- **NO** preview at invalid angles
+
+### Sliding Rules  
+- **ONLY** allow sliding at discrete positions: 0%, 25%, 50%, 75%, 100% of the stationary piece's edge
+- **NO** continuous sliding between these points
+- **NO** preview at invalid positions
+
+### Connection Integrity Rules
+
+#### Vertex-to-Vertex
+- Connected vertices must remain at the EXACT same point
+- During rotation: Connected vertex is the immovable pivot point
+- During sliding: Not applicable (piece cannot slide)
+
+#### Vertex-to-Edge
+- Vertex must remain ON the edge at all times
+- During rotation: Vertex stays on edge but may slide along it
+- During sliding: Vertex moves to one of 5 discrete positions on edge
+
+#### Edge-to-Edge
+- Edges must remain parallel and touching
+- During rotation: Not applicable (piece cannot rotate)
+- During sliding: Piece moves to one of 5 discrete positions
+
+### Preview Rules
+- **NEVER** show a preview in an invalid position
+- If position would cause overlap → No preview
+- If position would break connection → No preview
+- If position is between snap points → No preview
+
+## Data Flow Analysis
+
+### Current Flow (Broken)
+```
+User Gesture 
+→ Calculate Transform (any value)
+→ Basic Overlap Check
+→ Show Preview (even if invalid)
+→ User Confirms
+→ Place Piece
 ```
 
----
-
-## Issue 2: Dynamic Rotation Limits Based on Overlaps
-
-### Current Problem
-- **File**: `Bemo/Features/Game/Games/TangramEditor/ViewModels/TangramEditorViewModel+PieceOperations.swift`
-- **Lines**: 299-353
-- Rotation checks for overlap but doesn't find the maximum valid rotation range
-
-### Fix Required
-
-**Step 1:** Add constraint storage to `TangramEditorViewModel.swift` (around line 50 after other state variables):
-
-```swift
-// MARK: - Dynamic Manipulation Constraints
-var manipulationConstraints: [String: ManipulationConstraints] = [:]
-
-struct ManipulationConstraints {
-    var rotationLimits: (min: Double, max: Double)?
-    var slideLimits: ClosedRange<Double>?
-}
+### Required Flow (Fixed)
+```
+User Gesture
+→ Calculate Nearest Snap Point
+→ Create Transform at Snap Point
+→ Comprehensive Validation (PuzzleValidationRules)
+→ IF VALID: Show Preview
+  IF INVALID: Show Nothing
+→ User Confirms Valid Position
+→ Place Piece
 ```
 
-**Step 2:** Add helper method to `PieceManipulationService.swift`:
+## Comprehensive Fix Plan
 
+### Phase 1: Enforce Discrete Snap Points
+
+#### Fix 1.1: Force 45° Rotation Snapping
+**File**: `Bemo/Features/Game/Games/TangramEditor/ViewModels/TangramEditorViewModel+PieceOperations.swift`
+
+**Lines 337-436** - `handleRotation` method:
 ```swift
-/// Calculate the valid rotation range for a piece to prevent overlaps
-func calculateRotationLimits(
-    piece: TangramPiece,
-    pivot: CGPoint,
-    otherPieces: [TangramPiece],
-    stepDegrees: Double = 5.0
-) -> (minAngle: Double, maxAngle: Double) {
-    let validationService = ValidationService()
-    
-    // Start from current rotation (0 degrees relative)
-    var minValidAngle: Double = -360
-    var maxValidAngle: Double = 360
-    
-    // Find minimum valid angle (counterclockwise limit)
-    for angle in stride(from: 0, through: -360, by: -stepDegrees) {
-        let radians = angle * .pi / 180
-        var testTransform = CGAffineTransform.identity
-        testTransform = testTransform.translatedBy(x: pivot.x, y: pivot.y)
-        testTransform = testTransform.rotated(by: radians)
-        testTransform = testTransform.translatedBy(x: -pivot.x, y: -pivot.y)
-        
-        let newTransform = piece.transform.concatenating(testTransform)
-        let testPiece = TangramPiece(type: piece.type, transform: newTransform)
-        
-        var hasOverlap = false
-        for other in otherPieces {
-            if validationService.hasAreaOverlap(pieceA: testPiece, pieceB: other) {
-                hasOverlap = true
-                break
-            }
-        }
-        
-        if hasOverlap {
-            minValidAngle = angle + stepDegrees
-            break
-        }
-    }
-    
-    // Find maximum valid angle (clockwise limit)
-    for angle in stride(from: 0, through: 360, by: stepDegrees) {
-        let radians = angle * .pi / 180
-        var testTransform = CGAffineTransform.identity
-        testTransform = testTransform.translatedBy(x: pivot.x, y: pivot.y)
-        testTransform = testTransform.rotated(by: radians)
-        testTransform = testTransform.translatedBy(x: -pivot.x, y: -pivot.y)
-        
-        let newTransform = piece.transform.concatenating(testTransform)
-        let testPiece = TangramPiece(type: piece.type, transform: newTransform)
-        
-        var hasOverlap = false
-        for other in otherPieces {
-            if validationService.hasAreaOverlap(pieceA: testPiece, pieceB: other) {
-                hasOverlap = true
-                break
-            }
-        }
-        
-        if hasOverlap {
-            maxValidAngle = angle - stepDegrees
-            break
-        }
-    }
-    
-    return (minValidAngle, maxValidAngle)
-}
-```
-
-**Step 3:** Update `handleRotation` in `TangramEditorViewModel+PieceOperations.swift` (replace lines 299-353):
-
-```swift
+// Replace lines 350-355 with:
 func handleRotation(pieceId: String, angle: Double) {
     guard let mode = pieceManipulationModes[pieceId],
           let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else {
@@ -173,69 +106,58 @@ func handleRotation(pieceId: String, angle: Double) {
     }
     
     switch mode {
-    case .rotatable(let pivot, let snapAngles):
+    case .rotatable(let pivot, _):
         let piece = puzzle.pieces[pieceIndex]
         
-        // Calculate dynamic rotation limits if not cached
-        if manipulationConstraints[pieceId]?.rotationLimits == nil {
-            let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
-            let limits = manipulationService.calculateRotationLimits(
-                piece: piece,
-                pivot: pivot,
-                otherPieces: otherPieces
-            )
-            manipulationConstraints[pieceId] = ManipulationConstraints(
-                rotationLimits: limits,
-                slideLimits: nil
-            )
-        }
-        
-        let limits = manipulationConstraints[pieceId]?.rotationLimits ?? (-360.0, 360.0)
-        
-        // Convert angle to degrees and clamp to limits
+        // CRITICAL: Force exact 45° increments
         let angleDegrees = angle * 180 / .pi
-        let clampedAngle = max(limits.min, min(limits.max, angleDegrees))
+        let validAngles: [Double] = [-180, -135, -90, -45, 0, 45, 90, 135, 180]
         
-        // Find nearest valid snap angle within limits
-        let validSnapAngles = snapAngles.filter { snapAngle in
-            snapAngle >= limits.min && snapAngle <= limits.max
+        // Find nearest valid angle
+        guard let snappedAngle = validAngles.min(by: { 
+            abs($0 - angleDegrees) < abs($1 - angleDegrees) 
+        }) else { return }
+        
+        // Store initial transform if not already stored
+        if initialManipulationTransforms[pieceId] == nil {
+            initialManipulationTransforms[pieceId] = piece.transform
         }
         
-        let snappedAngle = validSnapAngles.min(by: { 
-            abs($0 - clampedAngle) < abs($1 - clampedAngle) 
-        }) ?? clampedAngle
+        guard let initialTransform = initialManipulationTransforms[pieceId] else { return }
         
-        // Convert back to radians
+        // Calculate rotation from initial position
         let snappedRadians = snappedAngle * .pi / 180
         
         // Create rotation transform around pivot
-        var transform = CGAffineTransform.identity
-        transform = transform.translatedBy(x: pivot.x, y: pivot.y)
-        transform = transform.rotated(by: snappedRadians)
-        transform = transform.translatedBy(x: -pivot.x, y: -pivot.y)
+        var rotationTransform = CGAffineTransform.identity
+        rotationTransform = rotationTransform.translatedBy(x: pivot.x, y: pivot.y)
+        rotationTransform = rotationTransform.rotated(by: snappedRadians)
+        rotationTransform = rotationTransform.translatedBy(x: -pivot.x, y: -pivot.y)
         
-        // Apply to piece's base transform
-        let newTransform = piece.transform.concatenating(transform)
+        // Apply to initial transform (not current)
+        let finalTransform = initialTransform.concatenating(rotationTransform)
         
-        // Final overlap check (should always pass due to limits)
-        let testPiece = TangramPiece(type: piece.type, transform: newTransform)
-        let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
-        
-        var hasOverlap = false
-        for other in otherPieces {
-            if validationService.hasAreaOverlap(pieceA: testPiece, pieceB: other) {
-                hasOverlap = true
-                break
-            }
+        // Find the connection this piece is maintaining
+        let relevantConnection = puzzle.connections.first { conn in
+            conn.pieceAId == pieceId || conn.pieceBId == pieceId
         }
         
-        if !hasOverlap {
-            // Update ghost preview
-            uiState.ghostTransform = newTransform
-            uiState.showSnapIndicator = abs(angle - snappedRadians) < 0.1
-            
-            // Store as manipulating piece
+        // CRITICAL: Use comprehensive validation
+        let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
+        if PuzzleValidationRules.isValidPlacement(
+            piece: piece,
+            withTransform: finalTransform,
+            amongPieces: otherPieces,
+            maintainingConnection: relevantConnection
+        ) {
+            // Only show preview if valid
+            uiState.ghostTransform = finalTransform
+            uiState.showSnapIndicator = true
             uiState.manipulatingPieceId = pieceId
+        } else {
+            // NO PREVIEW for invalid positions
+            uiState.ghostTransform = nil
+            uiState.showSnapIndicator = false
         }
         
     default:
@@ -244,139 +166,12 @@ func handleRotation(pieceId: String, angle: Double) {
 }
 ```
 
----
+#### Fix 1.2: Force Discrete Slide Positions
+**File**: `Bemo/Features/Game/Games/TangramEditor/ViewModels/TangramEditorViewModel+PieceOperations.swift`
 
-## Issue 3: Dynamic Sliding Limits Based on Overlaps
-
-### Current Problem
-- **File**: `Bemo/Features/Game/Games/TangramEditor/Services/PieceManipulationService.swift`
-- **Lines**: 61-97 (edge-to-edge) and new vertex-to-edge
-- Sliding doesn't account for obstacles along the path
-
-### Fix Required
-
-**Step 1:** Add method to `PieceManipulationService.swift`:
-
+**Lines 464-539** - `handleSlide` method:
 ```swift
-/// Calculate valid sliding range considering obstacles
-func calculateSlideLimits(
-    piece: TangramPiece,
-    edge: ManipulationMode.Edge,
-    baseRange: ClosedRange<Double>,
-    otherPieces: [TangramPiece],
-    stepSize: Double = 2.0
-) -> ClosedRange<Double> {
-    let validationService = ValidationService()
-    var minValidDistance = baseRange.lowerBound
-    var maxValidDistance = baseRange.upperBound
-    
-    // Get current position along edge (assumed to be 0 for initial placement)
-    let currentPosition: Double = 0
-    
-    // Check forward (positive) direction from current position
-    for distance in stride(from: currentPosition, through: baseRange.upperBound, by: stepSize) {
-        let translation = CGAffineTransform(
-            translationX: edge.vector.dx * CGFloat(distance),
-            y: edge.vector.dy * CGFloat(distance)
-        )
-        
-        let newTransform = piece.transform.concatenating(translation)
-        let testPiece = TangramPiece(type: piece.type, transform: newTransform)
-        
-        var hasOverlap = false
-        for other in otherPieces {
-            if validationService.hasAreaOverlap(pieceA: testPiece, pieceB: other) {
-                hasOverlap = true
-                break
-            }
-        }
-        
-        if hasOverlap {
-            maxValidDistance = max(currentPosition, distance - stepSize)
-            break
-        }
-    }
-    
-    // Check backward (negative) direction from current position
-    for distance in stride(from: currentPosition, through: baseRange.lowerBound, by: -stepSize) {
-        let translation = CGAffineTransform(
-            translationX: edge.vector.dx * CGFloat(distance),
-            y: edge.vector.dy * CGFloat(distance)
-        )
-        
-        let newTransform = piece.transform.concatenating(translation)
-        let testPiece = TangramPiece(type: piece.type, transform: newTransform)
-        
-        var hasOverlap = false
-        for other in otherPieces {
-            if validationService.hasAreaOverlap(pieceA: testPiece, pieceB: other) {
-                hasOverlap = true
-                break
-            }
-        }
-        
-        if hasOverlap {
-            minValidDistance = min(currentPosition, distance + stepSize)
-            break
-        }
-    }
-    
-    return minValidDistance...maxValidDistance
-}
-```
-
-**Step 2:** Update edge-to-edge case in `calculateManipulationMode` (lines 61-97):
-
-```swift
-case .edgeToEdge(let pieceAId, let edgeA, let pieceBId, let edgeB):
-    // Determine which piece is sliding and which is stationary
-    let isPieceA = piece.id == pieceAId
-    
-    // Get the other piece to determine the slide track
-    guard let otherPiece = allPieces.first(where: { 
-        $0.id == (isPieceA ? pieceBId : pieceAId) 
-    }) else {
-        return .fixed
-    }
-    
-    let edgeIndex = isPieceA ? edgeA : edgeB
-    let worldVertices = TangramCoordinateSystem.getWorldVertices(for: piece)
-    let edges = TangramGeometry.edges(for: piece.type)
-    
-    guard edgeIndex < edges.count else {
-        return .fixed
-    }
-    
-    let edgeDef = edges[edgeIndex]
-    let edgeStart = worldVertices[edgeDef.startVertex]
-    let edgeEnd = worldVertices[edgeDef.endVertex]
-    
-    // Calculate edge vector
-    let dx = edgeEnd.x - edgeStart.x
-    let dy = edgeEnd.y - edgeStart.y
-    let edgeLength = sqrt(dx * dx + dy * dy)
-    let normalizedVector = CGVector(dx: dx / edgeLength, dy: dy / edgeLength)
-    
-    // Calculate base slide range
-    let slideRange = 0...Double(edgeLength)
-    
-    // For now, use base range - dynamic limits will be calculated in ViewModel
-    let snapPositions = [0.0, 0.5, 1.0]
-    
-    return .slidable(
-        edge: ManipulationMode.Edge(
-            start: edgeStart,
-            end: edgeEnd,
-            vector: normalizedVector
-        ),
-        range: slideRange,
-        snapPositions: snapPositions
-    )
-```
-
-**Step 3:** Update `handleSlide` in `TangramEditorViewModel+PieceOperations.swift` (lines 376-433):
-
-```swift
+// Replace lines 464-539 with:
 func handleSlide(pieceId: String, distance: Double) {
     guard let mode = pieceManipulationModes[pieceId],
           let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else {
@@ -384,79 +179,59 @@ func handleSlide(pieceId: String, distance: Double) {
     }
     
     switch mode {
-    case .slidable(let edge, let baseRange, let snapPositions):
+    case .slidable(let edge, let baseRange, _):
         let piece = puzzle.pieces[pieceIndex]
         
-        // Calculate dynamic slide limits if not cached
-        if manipulationConstraints[pieceId]?.slideLimits == nil {
-            let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
-            let limits = manipulationService.calculateSlideLimits(
-                piece: piece,
-                edge: edge,
-                baseRange: baseRange,
-                otherPieces: otherPieces
-            )
-            
-            if var constraints = manipulationConstraints[pieceId] {
-                constraints.slideLimits = limits
-                manipulationConstraints[pieceId] = constraints
-            } else {
-                manipulationConstraints[pieceId] = ManipulationConstraints(
-                    rotationLimits: nil,
-                    slideLimits: limits
-                )
-            }
+        // Store initial transform if not already stored
+        if initialManipulationTransforms[pieceId] == nil {
+            initialManipulationTransforms[pieceId] = piece.transform
         }
         
-        let range = manipulationConstraints[pieceId]?.slideLimits ?? baseRange
+        guard let initialTransform = initialManipulationTransforms[pieceId] else { return }
         
-        // Clamp distance to valid range
-        let clampedDistance = max(range.lowerBound, min(range.upperBound, distance))
+        // CRITICAL: Force exact percentage positions
+        let rangeLength = baseRange.upperBound - baseRange.lowerBound
+        let normalizedDistance = (distance - baseRange.lowerBound) / rangeLength
         
-        // Find nearest snap position within valid range
-        let normalizedDistance = (clampedDistance - range.lowerBound) / (range.upperBound - range.lowerBound)
-        let validSnapPositions = snapPositions.filter { pos in
-            let absolutePos = range.lowerBound + pos * (range.upperBound - range.lowerBound)
-            return absolutePos >= range.lowerBound && absolutePos <= range.upperBound
-        }
-        
-        let snappedPosition = validSnapPositions.min(by: {
+        // Snap to nearest percentage: 0%, 25%, 50%, 75%, 100%
+        let snapPercentages: [Double] = [0.0, 0.25, 0.5, 0.75, 1.0]
+        guard let snappedPercentage = snapPercentages.min(by: {
             abs($0 - normalizedDistance) < abs($1 - normalizedDistance)
-        }) ?? normalizedDistance
+        }) else { return }
         
-        // Convert back to actual distance
-        let snappedDistance = range.lowerBound + snappedPosition * (range.upperBound - range.lowerBound)
+        // Calculate actual distance at snap position
+        let snappedDistance = baseRange.lowerBound + (snappedPercentage * rangeLength)
         
-        // Calculate translation along edge vector
-        let translation = CGVector(
-            dx: edge.vector.dx * snappedDistance,
-            dy: edge.vector.dy * snappedDistance
+        // Create translation from initial position
+        let translation = CGAffineTransform(
+            translationX: edge.vector.dx * CGFloat(snappedDistance),
+            y: edge.vector.dy * CGFloat(snappedDistance)
         )
         
-        // Create new transform
-        var newTransform = piece.transform
-        newTransform.tx += translation.dx
-        newTransform.ty += translation.dy
+        // Apply to initial transform
+        let finalTransform = initialTransform.concatenating(translation)
         
-        // Final overlap check (should always pass due to limits)
-        let testPiece = TangramPiece(type: piece.type, transform: newTransform)
-        let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
-        
-        var hasOverlap = false
-        for other in otherPieces {
-            if validationService.hasAreaOverlap(pieceA: testPiece, pieceB: other) {
-                hasOverlap = true
-                break
-            }
+        // Find the connection this piece is maintaining
+        let relevantConnection = puzzle.connections.first { conn in
+            conn.pieceAId == pieceId || conn.pieceBId == pieceId
         }
         
-        if !hasOverlap {
-            // Update ghost preview
-            uiState.ghostTransform = newTransform
-            uiState.showSnapIndicator = validSnapPositions.contains(snappedPosition)
-            
-            // Store as manipulating piece
+        // CRITICAL: Use comprehensive validation
+        let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
+        if PuzzleValidationRules.isValidPlacement(
+            piece: piece,
+            withTransform: finalTransform,
+            amongPieces: otherPieces,
+            maintainingConnection: relevantConnection
+        ) {
+            // Only show preview if valid
+            uiState.ghostTransform = finalTransform
+            uiState.showSnapIndicator = true
             uiState.manipulatingPieceId = pieceId
+        } else {
+            // NO PREVIEW for invalid positions
+            uiState.ghostTransform = nil
+            uiState.showSnapIndicator = false
         }
         
     default:
@@ -465,363 +240,291 @@ func handleSlide(pieceId: String, distance: Double) {
 }
 ```
 
----
+### Phase 2: Fix Preview Validation
 
-## Issue 4: Missing PieceManipulationService Dependency (DO THIS FIRST!)
+#### Fix 2.1: Validate New Piece Preview
+**File**: `Bemo/Features/Game/Games/TangramEditor/ViewModels/TangramEditorViewModel+StateAndUI.swift`
 
-### Current Problem
-- `calculateManipulationMode` needs access to all pieces but only receives the single piece
-- This blocks Issues 1, 2, and 3
-
-### Fix Required
-
-**Step 1:** Update method signature in `PieceManipulationService.swift` line 21:
-
+**Lines 216-275** - `updatePreviewIfNeeded` method:
 ```swift
-func calculateManipulationMode(
-    piece: TangramPiece, 
-    connections: [Connection], 
-    allPieces: [TangramPiece],  // Add this parameter
-    isFirstPiece: Bool = false
-) -> ManipulationMode {
-```
-
-**Step 2:** Update the method body to use `allPieces` parameter:
-- Line 44: Already handled in Issue 1 fix
-- Lines 61-97: Already handled in Issue 3 fix
-
-**Step 3:** Update caller in `TangramEditorViewModel+PieceOperations.swift` line 283:
-
-```swift
-return manipulationService.calculateManipulationMode(
-    piece: piece, 
-    connections: puzzle.connections,
-    allPieces: puzzle.pieces,  // Add this
-    isFirstPiece: isFirstPiece
-)
-```
-
-**Step 4:** Update `updateManipulationModes` in same file around line 291:
-
-```swift
-func updateManipulationModes() {
-    pieceManipulationModes.removeAll()
-    manipulationConstraints.removeAll()  // Clear cached constraints
+// Add validation after line 260:
+private func updatePreviewIfNeeded() {
+    // ... existing code up to line 260 ...
     
-    for piece in puzzle.pieces {
-        let mode = determineManipulationMode(for: piece.id)
-        pieceManipulationModes[piece.id] = mode
+    // After placeConnectedPiece call (around line 260):
+    if case .success(let placedPiece) = result {
+        // CRITICAL: Validate before showing preview
+        if PuzzleValidationRules.isValidPlacement(
+            piece: placedPiece,
+            withTransform: placedPiece.transform,
+            amongPieces: puzzle.pieces,
+            maintainingConnection: nil  // New piece, no existing connection
+        ) {
+            uiState.previewPiece = placedPiece
+            uiState.previewTransform = placedPiece.transform
+        } else {
+            // NO PREVIEW for invalid positions
+            uiState.previewPiece = nil
+            uiState.previewTransform = nil
+            // Optionally show error feedback
+            toastService.showError("Invalid placement - pieces would overlap")
+        }
     }
 }
 ```
 
----
+### Phase 3: Update Manipulation Service
 
-## Issue 5: Improve Overlap Detection Performance
+#### Fix 3.1: Enforce Discrete Snap Points in Service
+**File**: `Bemo/Features/Game/Games/TangramEditor/Services/PieceManipulationService.swift`
 
-### Current Problem
-- Multiple overlap checks during manipulation can be expensive
-
-### Fix Required
-Add caching to `ValidationService.swift` (after line 13):
-
+**Lines 65-66** - Rotation snap angles:
 ```swift
-class ValidationService {
-    
-    private let geometryService = GeometryService()
-    private var overlapCache: [String: Bool] = [:]  // Add cache
-    
-    // Add cache management methods
-    func clearCache() {
-        overlapCache.removeAll()
-    }
-    
-    private func getCacheKey(pieceA: TangramPiece, pieceB: TangramPiece) -> String {
-        // Create a stable cache key based on piece IDs and transforms
-        let transformA = "\(pieceA.transform.a),\(pieceA.transform.b),\(pieceA.transform.c),\(pieceA.transform.d),\(pieceA.transform.tx),\(pieceA.transform.ty)"
-        let transformB = "\(pieceB.transform.a),\(pieceB.transform.b),\(pieceB.transform.c),\(pieceB.transform.d),\(pieceB.transform.tx),\(pieceB.transform.ty)"
-        return "\(pieceA.id)_\(transformA)_\(pieceB.id)_\(transformB)"
-    }
-    
-    // Update hasAreaOverlap to use cache
-    func hasAreaOverlap(pieceA: TangramPiece, pieceB: TangramPiece, useCache: Bool = true) -> Bool {
-        let cacheKey = getCacheKey(pieceA: pieceA, pieceB: pieceB)
-        
-        if useCache, let cached = overlapCache[cacheKey] {
-            return cached
-        }
-        
-        // Existing overlap detection logic (lines 47-89)
-        let verticesA = TangramCoordinateSystem.getWorldVertices(for: pieceA)
-        let verticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
-        
-        // ... rest of existing overlap detection code ...
-        
-        let result = // ... existing calculation result
-        
-        if useCache {
-            overlapCache[cacheKey] = result
-        }
-        
-        return result
-    }
+// Line 65-66, ensure exact values:
+let snapAngles = [-180.0, -135.0, -90.0, -45.0, 0.0, 45.0, 90.0, 135.0, 180.0]
 ```
 
-Update `TangramEditorViewModel+PieceOperations.swift` to clear cache when pieces change:
-
+**Lines 130-131** - Edge-to-edge slide positions:
 ```swift
+// Replace lines 130-131:
+// Calculate snap positions as exact percentages
+let snapPositions: [Double] = [
+    0.0,                    // 0% - Start of edge
+    maxSlide * 0.25,        // 25%
+    maxSlide * 0.5,         // 50% - Middle
+    maxSlide * 0.75,        // 75%
+    maxSlide                // 100% - End of edge
+].filter { $0 >= 0 && $0 <= maxSlide }  // Remove invalid positions
+```
+
+**Lines 173-174** - Vertex-to-edge slide positions:
+```swift
+// Replace lines 173-174:
+// Snap at exact percentages along the edge
+let edgeLengthDouble = Double(edgeLength)
+let snapPositions = [
+    0.0,                        // 0% - Start of edge
+    edgeLengthDouble * 0.25,    // 25%
+    edgeLengthDouble * 0.5,     // 50% - Middle
+    edgeLengthDouble * 0.75,    // 75%
+    edgeLengthDouble            // 100% - End of edge
+]
+```
+
+### Phase 4: Add Manipulation State Management
+
+#### Fix 4.1: Track Initial Transform During Manipulation
+**File**: `Bemo/Features/Game/Games/TangramEditor/ViewModels/TangramEditorViewModel.swift`
+
+**After line 60** - Add state tracking:
+```swift
+// MARK: - Manipulation State
+var initialManipulationTransforms: [String: CGAffineTransform] = [:]  // Store initial transform when starting manipulation
+```
+
+#### Fix 4.2: Clear Initial Transform on Manipulation End
+**File**: `Bemo/Features/Game/Games/TangramEditor/ViewModels/TangramEditorViewModel+PieceOperations.swift`
+
+Add new methods:
+```swift
+// Add after confirmRotation (around line 360):
 func confirmRotation() {
-    // ... existing code ...
-    validationService.clearCache()  // Add this line
+    guard let ghostTransform = uiState.ghostTransform,
+          let manipulatingId = uiState.manipulatingPieceId,
+          let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == manipulatingId }) else {
+        return
+    }
+    
+    // Apply the validated transform
+    undoManager.saveState(puzzle: puzzle)
+    puzzle.pieces[pieceIndex].transform = ghostTransform
+    
+    // Clear manipulation state
+    uiState.ghostTransform = nil
+    uiState.manipulatingPieceId = nil
+    uiState.showSnapIndicator = false
+    initialManipulationTransforms.removeValue(forKey: manipulatingId)  // Clear initial transform
+    
+    // Update and validate
+    updateManipulationModes()
     validate()
     notifyPuzzleChanged()
 }
 
 func confirmSlide() {
-    // ... existing code ...
-    validationService.clearCache()  // Add this line
+    // Same as confirmRotation
+    guard let ghostTransform = uiState.ghostTransform,
+          let manipulatingId = uiState.manipulatingPieceId,
+          let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == manipulatingId }) else {
+        return
+    }
+    
+    // Apply the validated transform
+    undoManager.saveState(puzzle: puzzle)
+    puzzle.pieces[pieceIndex].transform = ghostTransform
+    
+    // Clear manipulation state
+    uiState.ghostTransform = nil
+    uiState.manipulatingPieceId = nil
+    uiState.showSnapIndicator = false
+    initialManipulationTransforms.removeValue(forKey: manipulatingId)  // Clear initial transform
+    
+    // Update and validate
+    updateManipulationModes()
     validate()
     notifyPuzzleChanged()
 }
-```
 
----
-
-## Issue 6: Visual Feedback for Constraints
-
-### Current Problem
-- Users can't see the valid manipulation range
-- **NOTE:** We pass constraints through props instead of modifying the enum
-
-### Fix Required
-
-**Step 1:** Update `TangramEditorCanvasView.swift` to pass constraints (around line 235):
-
-```swift
-PieceView(
-    piece: piece,
-    isSelected: viewModel.selectedPieceId == piece.id,
-    isGhost: false,
-    showConnectionPoints: showConnectionPoints,
-    availableConnectionPoints: connectionPoints,
-    selectedConnectionPoints: viewModel.uiState.selectedCanvasPoints,
-    manipulationMode: viewModel.pieceManipulationModes[piece.id],
-    manipulationConstraints: viewModel.manipulationConstraints[piece.id],  // Add this
-    onRotation: { angle in
-        viewModel.handleRotation(pieceId: piece.id, angle: angle)
-    },
-    onSlide: { distance in
-        viewModel.handleSlide(pieceId: piece.id, distance: distance)
-    },
-    onManipulationEnd: {
-        viewModel.confirmRotation()
+func cancelManipulation() {
+    // Clear all manipulation state without applying changes
+    if let manipulatingId = uiState.manipulatingPieceId {
+        initialManipulationTransforms.removeValue(forKey: manipulatingId)
     }
-)
-```
-
-**Step 2:** Update `PieceView.swift` to accept and use constraints:
-
-Add property (after line 18):
-```swift
-let manipulationConstraints: TangramEditorViewModel.ManipulationConstraints?
-```
-
-Update the manipulation indicator overlay (lines 76-133):
-
-```swift
-@ViewBuilder
-private func manipulationIndicatorOverlay(for mode: ManipulationMode) -> some View {
-    switch mode {
-    case .fixed:
-        // Fixed piece indicator (subtle)
-        Circle()
-            .fill(Color.gray.opacity(0.3))
-            .frame(width: 8, height: 8)
-            .position(getPieceCenter())
-        
-    case .rotatable(let pivot, let snapAngles):
-        // Rotation arc and snap indicators
-        ZStack {
-            // Pivot point
-            Circle()
-                .fill(Color.blue.opacity(0.8))
-                .frame(width: 12, height: 12)
-                .position(pivot)
-            
-            // Rotation arc with limits
-            if isManipulating {
-                if let limits = manipulationConstraints?.rotationLimits {
-                    // Show constrained arc
-                    Path { path in
-                        path.addArc(
-                            center: pivot,
-                            radius: 50,
-                            startAngle: Angle(degrees: limits.min),
-                            endAngle: Angle(degrees: limits.max),
-                            clockwise: false
-                        )
-                    }
-                    .stroke(Color.blue.opacity(0.5), lineWidth: 3)
-                    
-                    // Limit indicators
-                    Circle()
-                        .fill(Color.red.opacity(0.6))
-                        .frame(width: 8, height: 8)
-                        .position(snapAnglePosition(angle: limits.min, pivot: pivot))
-                    
-                    Circle()
-                        .fill(Color.red.opacity(0.6))
-                        .frame(width: 8, height: 8)
-                        .position(snapAnglePosition(angle: limits.max, pivot: pivot))
-                } else {
-                    // Show full circle if no limits
-                    Circle()
-                        .stroke(Color.blue.opacity(0.3), lineWidth: 2)
-                        .frame(width: 100, height: 100)
-                        .position(pivot)
-                }
-                
-                // Snap angle indicators (only show valid ones)
-                let validSnapAngles = manipulationConstraints?.rotationLimits != nil ?
-                    snapAngles.filter { angle in
-                        let limits = manipulationConstraints!.rotationLimits!
-                        return angle >= limits.min && angle <= limits.max
-                    } : snapAngles
-                
-                ForEach(validSnapAngles, id: \.self) { angle in
-                    Circle()
-                        .fill(isNearAngle(angle) ? Color.green : Color.gray.opacity(0.5))
-                        .frame(width: 6, height: 6)
-                        .position(snapAnglePosition(angle: angle, pivot: pivot))
-                }
-            }
-        }
-        
-    case .slidable(let edge, let baseRange, let snapPositions):
-        // Slide track and snap points
-        ZStack {
-            let range = manipulationConstraints?.slideLimits ?? baseRange
-            
-            // Full theoretical track (semi-transparent)
-            Path { path in
-                path.move(to: edge.start)
-                path.addLine(to: edge.end)
-            }
-            .stroke(Color.orange.opacity(0.2), style: StrokeStyle(lineWidth: 3, dash: [5, 5]))
-            
-            // Valid slide range (solid)
-            if let limits = manipulationConstraints?.slideLimits {
-                Path { path in
-                    let startPoint = CGPoint(
-                        x: edge.start.x + edge.vector.dx * CGFloat(limits.lowerBound),
-                        y: edge.start.y + edge.vector.dy * CGFloat(limits.lowerBound)
-                    )
-                    let endPoint = CGPoint(
-                        x: edge.start.x + edge.vector.dx * CGFloat(limits.upperBound),
-                        y: edge.start.y + edge.vector.dy * CGFloat(limits.upperBound)
-                    )
-                    path.move(to: startPoint)
-                    path.addLine(to: endPoint)
-                }
-                .stroke(Color.orange.opacity(0.8), lineWidth: 4)
-                
-                // Range limit indicators
-                Circle()
-                    .fill(Color.red.opacity(0.6))
-                    .frame(width: 10, height: 10)
-                    .position(CGPoint(
-                        x: edge.start.x + edge.vector.dx * CGFloat(limits.lowerBound),
-                        y: edge.start.y + edge.vector.dy * CGFloat(limits.lowerBound)
-                    ))
-                
-                Circle()
-                    .fill(Color.red.opacity(0.6))
-                    .frame(width: 10, height: 10)
-                    .position(CGPoint(
-                        x: edge.start.x + edge.vector.dx * CGFloat(limits.upperBound),
-                        y: edge.start.y + edge.vector.dy * CGFloat(limits.upperBound)
-                    ))
-            }
-            
-            // Snap points within valid range
-            ForEach(snapPositions, id: \.self) { position in
-                let isWithinLimits = manipulationConstraints?.slideLimits != nil ?
-                    range.contains(position) : true
-                
-                if isWithinLimits {
-                    Circle()
-                        .fill(isNearPosition(position, range: range) ? Color.green : Color.gray.opacity(0.5))
-                        .frame(width: 10, height: 10)
-                        .position(snapPointPosition(position: position, edge: edge, range: range))
-                }
-            }
-        }
-        
-    case .free:
-        // Free movement indicator - no visual needed
-        EmptyView()
-    }
+    uiState.ghostTransform = nil
+    uiState.manipulatingPieceId = nil
+    uiState.showSnapIndicator = false
 }
 ```
 
----
+### Phase 5: Enhance Validation Rules
+
+#### Fix 5.1: Implement Proper Edge-to-Edge Validation
+**File**: `Bemo/Features/Game/Games/TangramEditor/Services/PuzzleValidationRules.swift`
+
+**Lines 82-93** - Complete edge-to-edge validation:
+```swift
+static func isEdgeToEdgeConnectionValid(
+    pieceA: TangramPiece,
+    edgeA: Int,
+    pieceB: TangramPiece,
+    edgeB: Int
+) -> Bool {
+    let verticesA = TangramCoordinateSystem.getWorldVertices(for: pieceA)
+    let verticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
+    
+    let edgesA = TangramGeometry.edges(for: pieceA.type)
+    let edgesB = TangramGeometry.edges(for: pieceB.type)
+    
+    guard edgeA < edgesA.count, edgeB < edgesB.count else {
+        return false
+    }
+    
+    let edgeDefA = edgesA[edgeA]
+    let edgeDefB = edgesB[edgeB]
+    
+    let edgeStartA = verticesA[edgeDefA.startVertex]
+    let edgeEndA = verticesA[edgeDefA.endVertex]
+    let edgeStartB = verticesB[edgeDefB.startVertex]
+    let edgeEndB = verticesB[edgeDefB.endVertex]
+    
+    // Check if edges are parallel (within tolerance)
+    let vectorA = CGVector(dx: edgeEndA.x - edgeStartA.x, dy: edgeEndA.y - edgeStartA.y)
+    let vectorB = CGVector(dx: edgeEndB.x - edgeStartB.x, dy: edgeEndB.y - edgeStartB.y)
+    
+    let lengthA = sqrt(vectorA.dx * vectorA.dx + vectorA.dy * vectorA.dy)
+    let lengthB = sqrt(vectorB.dx * vectorB.dx + vectorB.dy * vectorB.dy)
+    
+    let normalizedA = CGVector(dx: vectorA.dx / lengthA, dy: vectorA.dy / lengthB)
+    let normalizedB = CGVector(dx: vectorB.dx / lengthB, dy: vectorB.dy / lengthB)
+    
+    // Dot product should be -1 (opposite direction) or 1 (same direction) for parallel
+    let dotProduct = normalizedA.dx * normalizedB.dx + normalizedA.dy * normalizedB.dy
+    let isParallel = abs(abs(dotProduct) - 1.0) < 0.01
+    
+    if !isParallel {
+        return false
+    }
+    
+    // Check if edges are touching (at least one endpoint is close to the other edge)
+    let startAToB = isPointOnLineSegment(point: edgeStartA, lineStart: edgeStartB, lineEnd: edgeEndB, tolerance: touchTolerance)
+    let endAToB = isPointOnLineSegment(point: edgeEndA, lineStart: edgeStartB, lineEnd: edgeEndB, tolerance: touchTolerance)
+    let startBToA = isPointOnLineSegment(point: edgeStartB, lineStart: edgeStartA, lineEnd: edgeEndA, tolerance: touchTolerance)
+    let endBToA = isPointOnLineSegment(point: edgeEndB, lineStart: edgeStartA, lineEnd: edgeEndA, tolerance: touchTolerance)
+    
+    return startAToB || endAToB || startBToA || endBToA
+}
+```
 
 ## Testing Plan
 
-### Test Cases for Each Fix:
+### Test Case 1: Rotation at 45° Increments
+1. Place a piece with vertex-to-vertex connection
+2. Attempt to rotate to 30° → Should snap to 45°
+3. Attempt to rotate to 50° → Should snap to 45°
+4. Verify preview only appears at valid 45° positions
 
-1. **Foundation (Issue 4)**
-   - Verify `calculateManipulationMode` receives all pieces
-   - Check that manipulation modes are calculated correctly
+### Test Case 2: Sliding at Discrete Positions
+1. Place a piece with edge-to-edge connection
+2. Attempt to slide to 10% → Should snap to 0% or 25%
+3. Attempt to slide to 60% → Should snap to 50% or 75%
+4. Verify preview only appears at 0%, 25%, 50%, 75%, 100%
 
-2. **Vertex-to-Edge Sliding (Issue 1)**
-   - Place a piece with vertex on another piece's edge
-   - Verify piece can slide along the edge
-   - Verify sliding stops at edge endpoints
-   - Verify snap points work at 0%, 50%, 100%
+### Test Case 3: No Invalid Previews
+1. Attempt to place piece that would overlap
+2. Verify NO preview appears
+3. Verify error feedback is shown
+4. Verify placement is prevented
 
-3. **Dynamic Rotation Limits (Issue 2)**
-   - Place pieces in configuration where rotation would cause overlap
-   - Verify rotation stops just before overlap
-   - Verify rotation works in opposite direction
-   - Verify visual indicators show valid range (red dots at limits)
+### Test Case 4: Connection Integrity
+1. Place piece with vertex-to-vertex connection
+2. Rotate piece → Verify vertex remains at exact connection point
+3. Place piece with vertex-to-edge connection
+4. Slide piece → Verify vertex stays on edge at snap points
+5. Rotate piece → Verify vertex stays on edge during rotation
 
-4. **Dynamic Sliding Limits (Issue 3)**
-   - Place obstacle pieces along a sliding path
-   - Verify sliding stops before collision
-   - Verify sliding range updates when obstacles are added/removed
-   - Verify visual indicators show constrained range (solid orange line)
+### Test Case 5: Multi-Connection Pieces
+1. Place piece with two connections
+2. Verify piece becomes fixed (cannot move)
+3. Verify no manipulation handles appear
 
-5. **Performance (Issue 5)**
-   - Verify cache speeds up repeated overlap checks
-   - Verify cache clears when pieces change
+## Implementation Order
 
-6. **Visual Feedback (Issue 6)**
-   - Verify rotation arc shows limited range when constrained
-   - Verify slide track shows limited range when constrained
-   - Verify limit indicators (red dots) appear at constraint boundaries
+1. **Phase 1**: Enforce discrete snap points (handleRotation, handleSlide)
+2. **Phase 2**: Fix preview validation (updatePreviewIfNeeded)
+3. **Phase 3**: Update manipulation service snap calculations
+4. **Phase 4**: Add manipulation state management
+5. **Phase 5**: Enhance validation rules
 
-### Edge Cases:
-- Test with all 7 tangram piece types
-- Test with pieces at canvas boundaries
-- Test with multiple simultaneous constraints
-- Test undo/redo with constrained manipulations
-- Test performance with complex arrangements
+## Estimated Timeline
 
-## File Change Summary
+- Phase 1: 2 hours (critical path)
+- Phase 2: 1 hour (critical path)
+- Phase 3: 1 hour
+- Phase 4: 1 hour
+- Phase 5: 2 hours
+- Testing: 2 hours
 
-Files to modify (in order):
-1. `PieceManipulationService.swift` - Add allPieces parameter, fix vertex-to-edge, add limit calculation methods
-2. `TangramEditorViewModel+PieceOperations.swift` - Update method calls, add constraint storage and handling
-3. `TangramEditorViewModel.swift` - Add ManipulationConstraints struct and storage
-4. `ValidationService.swift` - Add caching
-5. `TangramEditorCanvasView.swift` - Pass constraints to PieceView
-6. `PieceView.swift` - Enhanced visual feedback using constraints
+**Total: 9 hours**
 
-**Critical Notes:**
-- DO NOT modify the `ManipulationMode` enum - this would break pattern matching throughout the codebase
-- Constraints are calculated and stored separately in the ViewModel
-- Visual feedback reads constraints from props, not from the enum
-- Cache must be cleared whenever pieces are modified
+## Success Criteria
 
-Estimated effort: 3-4 hours for full implementation and testing
+1. ✅ Pieces ONLY rotate at 45° increments
+2. ✅ Pieces ONLY slide at 0%, 25%, 50%, 75%, 100% positions
+3. ✅ Preview NEVER shows invalid positions
+4. ✅ Connections are ALWAYS maintained during manipulation
+5. ✅ Overlapping pieces are IMPOSSIBLE to create
+6. ✅ All validation uses centralized `PuzzleValidationRules`
+
+## Risk Mitigation
+
+- **Risk**: Breaking existing puzzles
+- **Mitigation**: Validation only affects new placements, existing puzzles remain valid
+
+- **Risk**: Performance impact from validation
+- **Mitigation**: Cache validation results during manipulation
+
+- **Risk**: User confusion from strict constraints
+- **Mitigation**: Clear visual feedback showing valid positions
+
+## Notes
+
+- The `ManipulationMode` enum is NOT modified (would break pattern matching)
+- Dynamic constraints stored separately in ViewModel
+- Initial transform tracking ensures manipulations are relative to starting position
+- All changes are surgical - no architectural changes required
+
+---
+
+*Document Version: 2.0*
+*Last Updated: [Current Date]*
+*Status: Ready for Implementation*

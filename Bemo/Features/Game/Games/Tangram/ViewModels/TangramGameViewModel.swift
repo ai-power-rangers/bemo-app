@@ -51,22 +51,25 @@ class TangramGameViewModel {
     
     // MARK: - Initialization
     
-    init(delegate: GameDelegate, supabaseService: SupabaseService? = nil) {
+    init(delegate: GameDelegate, supabaseService: SupabaseService? = nil, puzzleManagementService: PuzzleManagementService? = nil) {
         self.delegate = delegate
         self.databaseLoader = TangramDatabaseLoader(supabaseService: supabaseService)
         self.puzzleLibraryService = PuzzleLibraryService(supabaseService: supabaseService)
         
-        // Load puzzles from database
+        // Load puzzles - prefer cached puzzles from PuzzleManagementService
         Task { @MainActor in
-            do {
-                let puzzles = try await self.databaseLoader.loadOfficialPuzzles()
+            if let managementService = puzzleManagementService {
+                // Use cached puzzles for instant loading!
+                let puzzles = await managementService.getTangramPuzzles()
                 self.availablePuzzles = puzzles
-                print("Loaded \(puzzles.count) puzzles from database")
-                for puzzle in puzzles {
-                    print("  - \(puzzle.name) (\(puzzle.category))")
+            } else {
+                // Fallback to direct database loading
+                do {
+                    let puzzles = try await self.databaseLoader.loadOfficialPuzzles()
+                    self.availablePuzzles = puzzles
+                } catch {
+                    print("Failed to load puzzles: \(error)")
                 }
-            } catch {
-                print("Failed to load puzzles: \(error)")
             }
         }
     }

@@ -75,7 +75,9 @@ extension TangramEditorViewModel {
             
             // Use the preview piece if available
             if let preview = uiState.previewPiece {
-                puzzle.pieces.append(preview)
+                // DON'T append preview here - coordinator.placeConnectedPiece will create and append the piece
+                // This was causing duplicate pieces bug!
+                // puzzle.pieces.append(preview)  // REMOVED - FIX FOR DUPLICATE PIECES
                 
                 // Create connections based on the selected points
                 if let type = uiState.pendingPieceType {
@@ -84,14 +86,13 @@ extension TangramEditorViewModel {
                         rotation: uiState.pendingPieceRotation * .pi / 180,
                         canvasConnections: uiState.selectedCanvasPoints,
                         pieceConnections: uiState.selectedPendingPoints,
-                        existingPieces: Array(puzzle.pieces.dropLast()), // Don't include the just-added piece
+                        existingPieces: puzzle.pieces, // Pass ALL pieces since we didn't append preview
                         puzzle: &puzzle
                     )
                     
-                    if case .failure(_) = result {
-                        // Remove the piece if connection creation failed
-                        puzzle.pieces.removeLast()
-                        handleError(.placementCalculationFailed("Failed to create connections"))
+                    if case .failure(let error) = result {
+                        // No piece to remove since we didn't append
+                        handleError(.placementCalculationFailed("Failed to create connections: \(error)"))
                         return
                     }
                 }
@@ -280,16 +281,53 @@ extension TangramEditorViewModel {
         
         // Check if it's the first piece
         let isFirstPiece = puzzle.pieces.first?.id == pieceId
-        return manipulationService.calculateManipulationMode(piece: piece, connections: puzzle.connections, isFirstPiece: isFirstPiece)
+        return manipulationService.calculateManipulationMode(piece: piece, connections: puzzle.connections, allPieces: puzzle.pieces, isFirstPiece: isFirstPiece)
     }
     
     /// Update manipulation modes for all pieces
     func updateManipulationModes() {
         pieceManipulationModes.removeAll()
+        manipulationConstraints.removeAll()  // Clear cached constraints
         
         for piece in puzzle.pieces {
             let mode = determineManipulationMode(for: piece.id)
             pieceManipulationModes[piece.id] = mode
+            
+            // Pre-calculate constraints for each piece based on its mode
+            let otherPieces = puzzle.pieces.filter { $0.id != piece.id }
+            
+            switch mode {
+            case .rotatable(let pivot, _):
+                // Calculate rotation limits upfront
+                let limits = manipulationService.calculateRotationLimits(
+                    piece: piece,
+                    pivot: pivot,
+                    otherPieces: otherPieces,
+                    stepDegrees: 5.0
+                )
+                manipulationConstraints[piece.id] = ManipulationConstraints(
+                    rotationLimits: (min: limits.minAngle, max: limits.maxAngle),
+                    slideLimits: nil
+                )
+                
+            case .slidable(let edge, let baseRange, _):
+                // Calculate slide limits upfront
+                let limits = manipulationService.calculateSlideLimits(
+                    piece: piece,
+                    edge: edge,
+                    baseRange: baseRange,
+                    otherPieces: otherPieces,
+                    stepSize: 2.0
+                )
+                manipulationConstraints[piece.id] = ManipulationConstraints(
+                    rotationLimits: nil,
+                    slideLimits: limits
+                )
+                
+            default:
+                // Fixed or free pieces don't need constraints
+                break
+            }
         }
     }
     
@@ -303,47 +341,99 @@ extension TangramEditorViewModel {
         }
         
         switch mode {
-        case .rotatable(let pivot, let snapAngles):
+        case .rotatable(let pivot, _):
             let piece = puzzle.pieces[pieceIndex]
             
-            // Convert angle to degrees for snapping
+            // CRITICAL: Force exact 45° increments
             let angleDegrees = angle * 180 / .pi
+            let validAngles: [Double] = [-180, -135, -90, -45, 0, 45, 90, 135, 180]
             
-            // Find nearest snap angle
-            let snappedAngle = snapAngles.min(by: { 
+            // Find nearest valid angle
+            guard let snappedAngle = validAngles.min(by: { 
                 abs($0 - angleDegrees) < abs($1 - angleDegrees) 
-            }) ?? angleDegrees
+            }) else { return }
             
-            // Convert back to radians
-            let snappedRadians = snappedAngle * .pi / 180
+            // Store initial transform if not already stored
+            if initialManipulationTransforms[pieceId] == nil {
+                initialManipulationTransforms[pieceId] = piece.transform
+            }
             
-            // Create rotation transform around pivot
-            var transform = CGAffineTransform.identity
-            transform = transform.translatedBy(x: pivot.x, y: pivot.y)
-            transform = transform.rotated(by: snappedRadians)
-            transform = transform.translatedBy(x: -pivot.x, y: -pivot.y)
+            guard let initialTransform = initialManipulationTransforms[pieceId] else { return }
             
-            // Apply to piece's base transform
-            let newTransform = piece.transform.concatenating(transform)
+            // Find the connection for this piece
+            let relevantConnection = puzzle.connections.first { conn in
+                conn.involvesPiece(pieceId)
+            }
             
-            // Check for overlaps with validation service
-            let testPiece = TangramPiece(type: piece.type, transform: newTransform)
-            let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
-            
-            var hasOverlap = false
-            for other in otherPieces {
-                if validationService.hasAreaOverlap(pieceA: testPiece, pieceB: other) {
-                    hasOverlap = true
-                    break
+            // Get which vertex of this piece is connected (if vertex-to-vertex)
+            var pieceVertexIndex = 0
+            if let connection = relevantConnection {
+                switch connection.type {
+                case .vertexToVertex(let pieceAId, let vertexA, _, let vertexB):
+                    pieceVertexIndex = (pieceAId == pieceId) ? vertexA : vertexB
+                case .vertexToEdge(let pieceAId, let vertex, _, _):
+                    if pieceAId == pieceId {
+                        pieceVertexIndex = vertex
+                    } else {
+                        return // This piece is the edge, not the vertex
+                    }
+                default:
+                    return // Edge-to-edge connections don't rotate
                 }
             }
             
-            if !hasOverlap {
-                // Update ghost preview
-                uiState.ghostTransform = newTransform
-                uiState.showSnapIndicator = abs(angle - snappedRadians) < 0.1
-                
-                // Store as manipulating piece
+            // Get the piece's LOCAL vertex (in piece coordinate space)
+            let geometry = TangramGeometry.vertices(for: piece.type)
+            guard pieceVertexIndex < geometry.count else { return }
+            let localVertex = geometry[pieceVertexIndex]
+            
+            // Scale to visual space
+            let visualVertex = CGPoint(
+                x: localVertex.x * CGFloat(TangramConstants.visualScale),
+                y: localVertex.y * CGFloat(TangramConstants.visualScale)
+            )
+            
+            // Calculate rotation from initial position
+            let snappedRadians = snappedAngle * .pi / 180
+            
+            // Create rotation transform
+            let rotationTransform = CGAffineTransform(rotationAngle: snappedRadians)
+            
+            // Apply rotation to the vertex to see where it ends up
+            let rotatedVertex = visualVertex.applying(rotationTransform)
+            
+            // Calculate translation to put the rotated vertex at the pivot
+            let translation = CGPoint(
+                x: pivot.x - rotatedVertex.x,
+                y: pivot.y - rotatedVertex.y
+            )
+            
+            // Combine rotation and translation into final transform
+            var finalTransform = rotationTransform
+            finalTransform.tx = translation.x
+            finalTransform.ty = translation.y
+            
+            // CRITICAL: Use comprehensive validation
+            // Create a test piece with the same ID for connection validation
+            var testPiece = piece  // Copy the existing piece
+            testPiece.transform = finalTransform  // Update only the transform
+            let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
+            
+            if PuzzleValidationRules.isValidPlacement(
+                piece: testPiece,
+                withTransform: finalTransform,
+                amongPieces: otherPieces,
+                maintainingConnection: relevantConnection
+            ) {
+                // Only show preview if valid
+                uiState.ghostTransform = finalTransform
+                uiState.showSnapIndicator = true
+                uiState.manipulatingPieceId = pieceId
+            } else {
+                // NO PREVIEW for invalid positions
+                uiState.ghostTransform = nil
+                uiState.showSnapIndicator = false
+                // Keep manipulatingPieceId to track we're still manipulating
                 uiState.manipulatingPieceId = pieceId
             }
             
@@ -354,22 +444,27 @@ extension TangramEditorViewModel {
     
     /// Confirm the rotation and apply it to the piece
     func confirmRotation() {
-        guard let pieceId = uiState.manipulatingPieceId,
-              let transform = uiState.ghostTransform,
-              let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else {
-            return
+        guard let pieceId = uiState.manipulatingPieceId else {
+            return  // No piece being manipulated
         }
         
-        undoManager.saveState(puzzle: puzzle)
-        puzzle.pieces[pieceIndex].transform = transform
+        // Only apply transform if we have a valid ghost position
+        if let transform = uiState.ghostTransform,
+           let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) {
+            undoManager.saveState(puzzle: puzzle)
+            puzzle.pieces[pieceIndex].transform = transform
+            
+            // Update manipulation modes after confirming rotation
+            updateManipulationModes()
+            validate()
+            notifyPuzzleChanged()
+        }
         
-        // Clear manipulation state
+        // ALWAYS clear manipulation state, even if no valid transform
+        initialManipulationTransforms.removeValue(forKey: pieceId)  // Clear before setting to nil
         uiState.manipulatingPieceId = nil
         uiState.ghostTransform = nil
         uiState.showSnapIndicator = false
-        
-        validate()
-        notifyPuzzleChanged()
     }
     
     /// Handle sliding gesture for a piece with single edge connection
@@ -380,50 +475,66 @@ extension TangramEditorViewModel {
         }
         
         switch mode {
-        case .slidable(let edge, let range, let snapPositions):
+        case .slidable(let edge, let baseRange, _):
             let piece = puzzle.pieces[pieceIndex]
             
-            // Clamp distance to valid range
-            let clampedDistance = max(range.lowerBound, min(range.upperBound, distance))
-            
-            // Find nearest snap position
-            let normalizedDistance = (clampedDistance - range.lowerBound) / (range.upperBound - range.lowerBound)
-            let snappedPosition = snapPositions.min(by: {
-                abs($0 - normalizedDistance) < abs($1 - normalizedDistance)
-            }) ?? normalizedDistance
-            
-            // Convert back to actual distance
-            let snappedDistance = range.lowerBound + snappedPosition * (range.upperBound - range.lowerBound)
-            
-            // Calculate translation along edge vector
-            let translation = CGVector(
-                dx: edge.vector.dx * snappedDistance,
-                dy: edge.vector.dy * snappedDistance
-            )
-            
-            // Create new transform
-            var newTransform = piece.transform
-            newTransform.tx += translation.dx
-            newTransform.ty += translation.dy
-            
-            // Check for overlaps
-            let testPiece = TangramPiece(type: piece.type, transform: newTransform)
-            let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
-            
-            var hasOverlap = false
-            for other in otherPieces {
-                if validationService.hasAreaOverlap(pieceA: testPiece, pieceB: other) {
-                    hasOverlap = true
-                    break
-                }
+            // Store initial transform if not already stored
+            if initialManipulationTransforms[pieceId] == nil {
+                initialManipulationTransforms[pieceId] = piece.transform
             }
             
-            if !hasOverlap {
-                // Update ghost preview
-                uiState.ghostTransform = newTransform
-                uiState.showSnapIndicator = snapPositions.contains(snappedPosition)
-                
-                // Store as manipulating piece
+            guard let initialTransform = initialManipulationTransforms[pieceId] else { return }
+            
+            // CRITICAL: Force exact percentage positions
+            let rangeLength = baseRange.upperBound - baseRange.lowerBound
+            guard rangeLength > 0 else { return } // Prevent division by zero
+            
+            let normalizedDistance = (distance - baseRange.lowerBound) / rangeLength
+            
+            // Snap to nearest percentage: 0%, 25%, 50%, 75%, 100%
+            let snapPercentages: [Double] = [0.0, 0.25, 0.5, 0.75, 1.0]
+            guard let snappedPercentage = snapPercentages.min(by: {
+                abs($0 - normalizedDistance) < abs($1 - normalizedDistance)
+            }) else { return }
+            
+            // Calculate actual distance at snap position
+            let snappedDistance = baseRange.lowerBound + (snappedPercentage * rangeLength)
+            
+            // Create translation from initial position
+            let translation = CGAffineTransform(
+                translationX: edge.vector.dx * CGFloat(snappedDistance),
+                y: edge.vector.dy * CGFloat(snappedDistance)
+            )
+            
+            // Apply to initial transform
+            let finalTransform = initialTransform.concatenating(translation)
+            
+            // Find the connection this piece is maintaining
+            let relevantConnection = puzzle.connections.first { conn in
+                conn.pieceAId == pieceId || conn.pieceBId == pieceId
+            }
+            
+            // CRITICAL: Use comprehensive validation
+            // Create a test piece with the same ID for connection validation
+            var testPiece = piece  // Copy the existing piece
+            testPiece.transform = finalTransform  // Update only the transform
+            let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
+            
+            if PuzzleValidationRules.isValidPlacement(
+                piece: testPiece,
+                withTransform: finalTransform,
+                amongPieces: otherPieces,
+                maintainingConnection: relevantConnection
+            ) {
+                // Only show preview if valid
+                uiState.ghostTransform = finalTransform
+                uiState.showSnapIndicator = true
+                uiState.manipulatingPieceId = pieceId
+            } else {
+                // NO PREVIEW for invalid positions
+                uiState.ghostTransform = nil
+                uiState.showSnapIndicator = false
+                // Keep manipulatingPieceId to track we're still manipulating
                 uiState.manipulatingPieceId = pieceId
             }
             
@@ -434,26 +545,34 @@ extension TangramEditorViewModel {
     
     /// Confirm the slide and apply it to the piece
     func confirmSlide() {
-        guard let pieceId = uiState.manipulatingPieceId,
-              let transform = uiState.ghostTransform,
-              let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else {
-            return
+        guard let pieceId = uiState.manipulatingPieceId else {
+            return  // No piece being manipulated
         }
         
-        undoManager.saveState(puzzle: puzzle)
-        puzzle.pieces[pieceIndex].transform = transform
+        // Only apply transform if we have a valid ghost position
+        if let transform = uiState.ghostTransform,
+           let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) {
+            undoManager.saveState(puzzle: puzzle)
+            puzzle.pieces[pieceIndex].transform = transform
+            
+            // Update manipulation modes after confirming slide
+            updateManipulationModes()
+            validate()
+            notifyPuzzleChanged()
+        }
         
-        // Clear manipulation state
+        // ALWAYS clear manipulation state, even if no valid transform
+        initialManipulationTransforms.removeValue(forKey: pieceId)  // Clear before setting to nil
         uiState.manipulatingPieceId = nil
         uiState.ghostTransform = nil
         uiState.showSnapIndicator = false
-        
-        validate()
-        notifyPuzzleChanged()
     }
     
     /// Cancel any ongoing manipulation
     func cancelManipulation() {
+        if let pieceId = uiState.manipulatingPieceId {
+            initialManipulationTransforms.removeValue(forKey: pieceId)  // Clear initial transform
+        }
         uiState.manipulatingPieceId = nil
         uiState.ghostTransform = nil
         uiState.showSnapIndicator = false

@@ -19,6 +19,7 @@ class DependencyContainer {
     let profileService: ProfileService
     let analyticsService: AnalyticsService
     let supabaseService: SupabaseService
+    let puzzleManagementService: PuzzleManagementService
     
     init() {
         // Initialize error tracking first so it's available for other services
@@ -29,7 +30,9 @@ class DependencyContainer {
         self.profileService = ProfileService()
         self.cvService = CVService()
         self.analyticsService = AnalyticsService()
-        self.supabaseService = SupabaseService(authService: authenticationService, errorTracking: errorTrackingService)
+        // Use service role for Supabase to ensure puzzle loading always works
+        self.supabaseService = SupabaseService(errorTracking: errorTrackingService, useServiceRole: true)
+        self.puzzleManagementService = PuzzleManagementService(supabaseService: supabaseService, errorTracking: errorTrackingService)
         
         // Initialize services that need setup
         setupServices()

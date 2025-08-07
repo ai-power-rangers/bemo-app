@@ -17,6 +17,7 @@ class TangramEditorDependencyContainer {
     // MARK: - External Dependencies
     
     private let supabaseService: SupabaseService?
+    private let puzzleManagementService: PuzzleManagementService?
     
     // MARK: - Services (Lazy for efficiency)
     
@@ -55,9 +56,11 @@ class TangramEditorDependencyContainer {
     
     // MARK: - Initialization
     
-    init(supabaseService: SupabaseService? = nil) {
+    init(supabaseService: SupabaseService? = nil, puzzleManagementService: PuzzleManagementService? = nil) {
         self.supabaseService = supabaseService
+        self.puzzleManagementService = puzzleManagementService
         print("[TangramEditorDependencyContainer] Initialized with SupabaseService: \(supabaseService != nil ? "✅" : "❌ nil")")
+        print("[TangramEditorDependencyContainer] Initialized with PuzzleManagementService: \(puzzleManagementService != nil ? "✅" : "❌ nil")")
         // Services are lazy-loaded, so nothing else to initialize here
         // This ensures services are only created when actually needed
     }
@@ -75,7 +78,8 @@ class TangramEditorDependencyContainer {
             validationService: validationService,
             manipulationService: manipulationService,
             stateManager: stateManager,
-            toastService: toastService
+            toastService: toastService,
+            puzzleManagementService: puzzleManagementService
         )
     }
 }
