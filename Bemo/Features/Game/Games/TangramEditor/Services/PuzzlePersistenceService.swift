@@ -48,7 +48,7 @@ class PuzzlePersistenceService {
     
     // MARK: - Public Methods
     
-    /// Save puzzle with cloud sync for official puzzles
+    /// Save puzzle with cloud sync (all puzzles are official)
     func savePuzzle(_ puzzle: TangramPuzzle) async throws -> TangramPuzzle {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
@@ -69,7 +69,7 @@ class PuzzlePersistenceService {
         // Update local index
         try await updatePuzzleIndex(updatedPuzzle)
         
-        // Sync to Supabase (all puzzles created in editor should sync)
+        // Sync to Supabase - all editor puzzles are official
         if let supabase = supabaseService {
             print("[PuzzlePersistenceService] Syncing puzzle to Supabase - ID: \(updatedPuzzle.id), Name: \(updatedPuzzle.name)")
             do {
@@ -325,17 +325,7 @@ class PuzzlePersistenceService {
         return try await loadOfficialPuzzles()
     }
     
-    func getUserPuzzles() async throws -> [TangramPuzzle] {
-        // Filter for user-created puzzles only
-        let allPuzzles = try await loadAllPuzzles()
-        return allPuzzles.filter { $0.source == .user }
-    }
-    
-    func getBundledPuzzles() async throws -> [TangramPuzzle] {
-        // Filter for bundled puzzles only
-        let allPuzzles = try await loadAllPuzzles()
-        return allPuzzles.filter { $0.source == .bundled }
-    }
+    // All puzzles are official - no need to filter by source
 }
 
 // MARK: - Supporting Types

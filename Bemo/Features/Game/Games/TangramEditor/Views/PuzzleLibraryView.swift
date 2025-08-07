@@ -36,13 +36,7 @@ struct PuzzleLibraryView: View {
         return puzzles.sorted { $0.modifiedDate > $1.modifiedDate }
     }
     
-    private var officialPuzzles: [TangramPuzzle] {
-        filteredPuzzles.filter { $0.source == .bundled }
-    }
-    
-    private var userPuzzles: [TangramPuzzle] {
-        filteredPuzzles.filter { $0.source == .user }
-    }
+    // All puzzles are official - no need to separate them
     
     var body: some View {
         VStack(spacing: 0) {
@@ -119,52 +113,21 @@ struct PuzzleLibraryView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        // Official Puzzles Section
-                        if !officialPuzzles.isEmpty {
+                        // All Puzzles (all are official)
+                        if !filteredPuzzles.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {
-                                    Label("Official Puzzles", systemImage: "checkmark.seal.fill")
+                                    Label("All Puzzles", systemImage: "checkmark.seal.fill")
                                         .font(.headline)
                                         .foregroundColor(.blue)
                                     Spacer()
-                                    Text("\(officialPuzzles.count)")
+                                    Text("\(filteredPuzzles.count)")
                                         .foregroundColor(.secondary)
                                 }
                                 .padding(.horizontal)
                                 
                                 LazyVGrid(columns: columns, spacing: 16) {
-                                    ForEach(officialPuzzles) { puzzle in
-                                        PuzzleCardView(
-                                            puzzle: puzzle,
-                                            onTap: { viewModel.loadPuzzle(from: puzzle) },
-                                            onDelete: nil,  // Can't delete official puzzles
-                                            onDuplicate: {
-                                                Task {
-                                                    await viewModel.duplicatePuzzle(puzzle)
-                                                }
-                                            }
-                                        )
-                                    }
-                                }
-                                .padding(.horizontal)
-                            }
-                        }
-                        
-                        // User Puzzles Section
-                        if !userPuzzles.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Label("My Puzzles", systemImage: "person.circle.fill")
-                                        .font(.headline)
-                                        .foregroundColor(.green)
-                                    Spacer()
-                                    Text("\(userPuzzles.count)")
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.horizontal)
-                                
-                                LazyVGrid(columns: columns, spacing: 16) {
-                                    ForEach(userPuzzles) { puzzle in
+                                    ForEach(filteredPuzzles) { puzzle in
                                         PuzzleCardView(
                                             puzzle: puzzle,
                                             onTap: { viewModel.loadPuzzle(from: puzzle) },
@@ -270,21 +233,20 @@ struct PuzzleCardView: View {
             .overlay(
                 // Official badge for bundled puzzles
                 Group {
-                    if puzzle.source == .bundled {
-                        VStack {
-                            HStack {
-                                Spacer()
-                                Label("Official", systemImage: "checkmark.seal.fill")
-                                    .font(.caption2)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.blue)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(4)
-                                    .padding(8)
-                            }
+                    // All puzzles are official
+                    VStack {
+                        HStack {
                             Spacer()
+                            Label("Official", systemImage: "checkmark.seal.fill")
+                                .font(.caption2)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(4)
+                                .padding(8)
                         }
+                        Spacer()
                     }
                 }
             )
@@ -337,8 +299,7 @@ struct PuzzleCardView: View {
         }
         .contextMenu {
             Button(action: onTap) {
-                Label(puzzle.source == .bundled ? "View" : "Edit", 
-                      systemImage: puzzle.source == .bundled ? "eye" : "pencil")
+                Label("Edit", systemImage: "pencil")
             }
             
             Button(action: onDuplicate) {

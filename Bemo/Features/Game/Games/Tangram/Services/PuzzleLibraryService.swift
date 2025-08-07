@@ -138,8 +138,7 @@ class PuzzleLibraryService {
         var squarePuzzle = TangramPuzzle(
             name: "Basic Square",
             category: .geometric,
-            difficulty: .beginner,
-            source: .bundled
+            difficulty: .beginner
         )
         
         // Add pieces forming a square pattern
@@ -186,8 +185,7 @@ class PuzzleLibraryService {
         var housePuzzle = TangramPuzzle(
             name: "Simple House",
             category: .objects,
-            difficulty: .easy,
-            source: .bundled
+            difficulty: .easy
         )
         
         // House shape with roof

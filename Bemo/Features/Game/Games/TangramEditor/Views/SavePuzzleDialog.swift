@@ -171,8 +171,7 @@ struct SavePuzzleDialog: View {
         viewModel.puzzle.category = selectedCategory
         viewModel.puzzle.difficulty = selectedDifficulty
         
-        // All puzzles created in editor are official
-        viewModel.puzzle.source = .bundled
+        // All puzzles created in editor are official (no source field needed anymore)
         
         // Parse and set tags
         if !tags.isEmpty {
