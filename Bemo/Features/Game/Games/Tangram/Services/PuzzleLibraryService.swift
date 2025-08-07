@@ -146,37 +146,30 @@ class PuzzleLibraryService {
             TangramPiece(
                 type: .largeTriangle1,
                 transform: CGAffineTransform(translationX: 200, y: 200).rotated(by: 0),
-                isLocked: true
             ),
             TangramPiece(
                 type: .largeTriangle2,
                 transform: CGAffineTransform(translationX: 400, y: 200).rotated(by: .pi/2),
-                isLocked: true
             ),
             TangramPiece(
                 type: .mediumTriangle,
                 transform: CGAffineTransform(translationX: 300, y: 300).rotated(by: .pi/4),
-                isLocked: true
             ),
             TangramPiece(
                 type: .smallTriangle1,
                 transform: CGAffineTransform(translationX: 200, y: 400).rotated(by: -.pi/4),
-                isLocked: true
             ),
             TangramPiece(
                 type: .smallTriangle2,
                 transform: CGAffineTransform(translationX: 400, y: 400).rotated(by: .pi * 3/4),
-                isLocked: true
             ),
             TangramPiece(
                 type: .square,
                 transform: CGAffineTransform(translationX: 300, y: 200),
-                isLocked: true
             ),
             TangramPiece(
                 type: .parallelogram,
                 transform: CGAffineTransform(translationX: 300, y: 400),
-                isLocked: true
             )
         ]
         puzzles.append(squarePuzzle)
@@ -194,39 +187,32 @@ class PuzzleLibraryService {
             TangramPiece(
                 type: .largeTriangle1,
                 transform: CGAffineTransform(translationX: 250, y: 150).rotated(by: -.pi/4),
-                isLocked: true
             ),
             TangramPiece(
                 type: .largeTriangle2,
                 transform: CGAffineTransform(translationX: 350, y: 150).rotated(by: .pi/4),
-                isLocked: true
             ),
             // Walls (square and parallelogram)
             TangramPiece(
                 type: .square,
                 transform: CGAffineTransform(translationX: 250, y: 300),
-                isLocked: true
             ),
             TangramPiece(
                 type: .parallelogram,
                 transform: CGAffineTransform(translationX: 350, y: 300),
-                isLocked: true
             ),
             // Door/windows (small triangles and medium)
             TangramPiece(
                 type: .mediumTriangle,
                 transform: CGAffineTransform(translationX: 300, y: 250),
-                isLocked: true
             ),
             TangramPiece(
                 type: .smallTriangle1,
                 transform: CGAffineTransform(translationX: 250, y: 350),
-                isLocked: true
             ),
             TangramPiece(
                 type: .smallTriangle2,
                 transform: CGAffineTransform(translationX: 350, y: 350),
-                isLocked: true
             )
         ]
         puzzles.append(housePuzzle)

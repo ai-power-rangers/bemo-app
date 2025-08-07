@@ -43,6 +43,7 @@ struct TangramEditorUIState {
     // MARK: - Pending Operation State
     var pendingPieceType: PieceType? = nil
     var pendingPieceRotation: Double = 0
+    var pendingPieceIsFlipped: Bool = false
     var previewTransform: CGAffineTransform?
     var previewPiece: TangramPiece?
     
@@ -66,6 +67,42 @@ struct TangramEditorUIState {
     var canConfirmPlacement: Bool {
         selectedCanvasPoints.count == selectedPendingPoints.count && 
         !selectedCanvasPoints.isEmpty
+    }
+    
+    /// Check if connection points are properly matched by type
+    var hasValidConnectionPointMatching: Bool {
+        // Must have matching counts
+        guard selectedCanvasPoints.count == selectedPendingPoints.count,
+              !selectedCanvasPoints.isEmpty else {
+            return false
+        }
+        
+        // Count types on each side
+        let canvasVertexCount = selectedCanvasPoints.filter { 
+            if case .vertex = $0.type { return true } else { return false }
+        }.count
+        let canvasEdgeCount = selectedCanvasPoints.filter { 
+            if case .edge = $0.type { return true } else { return false }
+        }.count
+        let pendingVertexCount = selectedPendingPoints.filter { 
+            if case .vertex = $0.type { return true } else { return false }
+        }.count
+        let pendingEdgeCount = selectedPendingPoints.filter { 
+            if case .edge = $0.type { return true } else { return false }
+        }.count
+        
+        // Types must match
+        return canvasVertexCount == pendingVertexCount && canvasEdgeCount == pendingEdgeCount
+    }
+    
+    /// Check if we have a valid preview piece ready for placement
+    var hasValidPreview: Bool {
+        previewPiece != nil
+    }
+    
+    /// Combined check for whether placement can be confirmed
+    var canPlacePiece: Bool {
+        hasValidConnectionPointMatching && hasValidPreview
     }
     
     // MARK: - Mutation Methods

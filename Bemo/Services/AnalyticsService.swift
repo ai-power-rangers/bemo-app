@@ -56,6 +56,23 @@ class AnalyticsService {
         PostHogSDK.shared.reset()
     }
     
+    // MARK: - Puzzle Analytics for Badges
+    
+    struct PuzzleMetrics {
+        let puzzleId: String
+        let playCount: Int
+        let recentPlayCount: Int  // Last 7 days
+        let createdAt: Date?
+        let difficulty: Int
+    }
+    
+    // Mock data for badge assignment - in production would query database
+    func getPuzzleMetrics() -> [String: PuzzleMetrics] {
+        // For now, return mock data to demonstrate badges
+        // In production, this would query the learning_events table
+        return [:]
+    }
+    
     // MARK: - Game Events
     
     func trackGameSelected(gameId: String, gameTitle: String, userId: String) {

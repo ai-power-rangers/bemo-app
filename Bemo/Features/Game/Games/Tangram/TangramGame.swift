@@ -37,21 +37,42 @@ class TangramGame: Game {
     
     private var viewModel: TangramGameViewModel?
     private let supabaseService: SupabaseService?
+    private let puzzleManagementService: PuzzleManagementService?
+    private var childProfileId: String?
     
     // MARK: - Initialization
     
-    init(supabaseService: SupabaseService? = nil) {
+    init(supabaseService: SupabaseService? = nil, puzzleManagementService: PuzzleManagementService? = nil) {
         self.supabaseService = supabaseService
+        self.puzzleManagementService = puzzleManagementService
     }
     
     // MARK: - Game Protocol Methods
     
     func makeGameView(delegate: GameDelegate) -> AnyView {
-        let vm = TangramGameViewModel(delegate: delegate, supabaseService: supabaseService)
+        let vm = TangramGameViewModel(
+            delegate: delegate, 
+            supabaseService: supabaseService,
+            puzzleManagementService: puzzleManagementService
+        )
+        
+        // Set child profile ID if available
+        if let childId = childProfileId {
+            vm.setChildProfileId(childId)
+        }
+        
         self.viewModel = vm
         return AnyView(
             TangramGameView(viewModel: vm)
         )
+    }
+    
+    // MARK: - Configuration
+    
+    func setChildProfileId(_ childId: String) {
+        self.childProfileId = childId
+        // Also update view model if it exists
+        viewModel?.setChildProfileId(childId)
     }
     
     func processRecognizedPieces(_ pieces: [RecognizedPiece]) -> PlayerActionOutcome {

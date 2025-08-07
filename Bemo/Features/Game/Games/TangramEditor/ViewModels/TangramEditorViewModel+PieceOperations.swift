@@ -46,24 +46,39 @@ extension TangramEditorViewModel {
         let size = canvasSize ?? uiState.currentCanvasSize
         
         switch editorState {
-        case .manipulatingFirstPiece(let type, let rotation, _):
-            // Place first piece at center (convert degrees to radians)
-            var piece = placementService.placeFirstPiece(
-                type: type,
-                rotation: rotation * .pi / 180,
+        case .manipulatingFirstPiece(let type, let rotation, let isFlipped):
+            // Use transform engine to calculate placement transform
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let tempPiece = TangramPiece(type: type, transform: .identity)
+            
+            let result = transformEngine.calculateTransform(
+                for: tempPiece,
+                operation: .place(center: center, rotation: rotation * .pi / 180),
+                connection: nil,
+                otherPieces: [],
                 canvasSize: size
             )
-            piece.isLocked = true  // First piece is always locked
+            
+            // Apply flip if needed (for parallelogram)
+            var finalTransform = result.transform
+            if isFlipped && type == .parallelogram {
+                let flipTransform = CGAffineTransform(scaleX: -1, y: 1)
+                finalTransform = finalTransform.concatenating(flipTransform)
+            }
+            
+            // Create piece with the calculated transform
+            var piece = TangramPiece(type: type, transform: finalTransform)
             puzzle.pieces.append(piece)
             // Clear pending piece type after successful placement
             uiState.pendingPieceType = nil
             uiState.pendingPieceRotation = 0
+            uiState.pendingPieceIsFlipped = false
             // After placing first piece, transition to selecting next piece
             _ = transitionToState(.selectingNextPiece)
             setupNewState()  // Clear pending state properly
-            autoLockPieces()  // Auto-lock based on connections
             updateManipulationModes()
             validate()
+            // No need to recenter for first piece - it's already centered
             notifyPuzzleChanged()
             toastService.showSuccess("First piece placed")
             
@@ -73,25 +88,48 @@ extension TangramEditorViewModel {
             print("[DEBUG] Selected canvas points: \(uiState.selectedCanvasPoints.count)")
             print("[DEBUG] Selected pending points: \(uiState.selectedPendingPoints.count)")
             
-            // Use the preview piece if available
-            if let preview = uiState.previewPiece {
-                puzzle.pieces.append(preview)
+            // Use the preview piece if available AND valid
+            guard let preview = uiState.previewPiece else {
+                // No valid preview available - this shouldn't happen with proper UI validation
+                handleError(.placementCalculationFailed("No valid placement found for the selected connections"))
+                return
+            }
+            
+            // Double-check the preview is still valid before placing
+            let validationResult = transformEngine.calculateTransform(
+                for: preview,
+                operation: .place(center: CGPoint.zero, rotation: 0),
+                connection: nil,
+                otherPieces: puzzle.pieces,
+                canvasSize: uiState.currentCanvasSize
+            )
+            
+            if !validationResult.isValid {
+                handleError(.placementCalculationFailed("Placement validation failed. Please try different connection points."))
+                return
+            }
+            
+            // Now proceed with the valid preview
+            if true {  // Keep the same indentation level
+                // DON'T append preview here - coordinator.placeConnectedPiece will create and append the piece
+                // This was causing duplicate pieces bug!
+                // puzzle.pieces.append(preview)  // REMOVED - FIX FOR DUPLICATE PIECES
                 
                 // Create connections based on the selected points
                 if let type = uiState.pendingPieceType {
                     let result = coordinator.placeConnectedPiece(
                         type: type,
                         rotation: uiState.pendingPieceRotation * .pi / 180,
+                        isFlipped: uiState.pendingPieceIsFlipped && type == .parallelogram,
                         canvasConnections: uiState.selectedCanvasPoints,
                         pieceConnections: uiState.selectedPendingPoints,
-                        existingPieces: Array(puzzle.pieces.dropLast()), // Don't include the just-added piece
+                        existingPieces: puzzle.pieces, // Pass ALL pieces since we didn't append preview
                         puzzle: &puzzle
                     )
                     
-                    if case .failure(_) = result {
-                        // Remove the piece if connection creation failed
-                        puzzle.pieces.removeLast()
-                        handleError(.placementCalculationFailed("Failed to create connections"))
+                    if case .failure(let error) = result {
+                        // No piece to remove since we didn't append
+                        handleError(.placementCalculationFailed("Failed to create connections: \(error)"))
                         return
                     }
                 }
@@ -120,9 +158,10 @@ extension TangramEditorViewModel {
                 print("[DEBUG] After force cleanup - selectedPendingPoints: \(uiState.selectedPendingPoints.count)")
                 print("[DEBUG] Final state: \(editorState)")
                 
-                autoLockPieces()
                 updateManipulationModes()
                 validate()
+                // Recenter puzzle after adding connected piece
+                recenterPuzzle()
                 notifyPuzzleChanged()
                 toastService.showSuccess("Piece connected successfully")
             } else {
@@ -142,9 +181,10 @@ extension TangramEditorViewModel {
             // Setup the new state (clears pending state)
             setupNewState()
             
-            autoLockPieces()  // Auto-lock based on connections
             updateManipulationModes()
             validate()
+            // Recenter puzzle after preview placement
+            recenterPuzzle()
             notifyPuzzleChanged()
             toastService.showSuccess("Piece placed successfully")
             
@@ -204,6 +244,12 @@ extension TangramEditorViewModel {
         switch editorState {
         case .manipulatingFirstPiece(let type, let rotation, let isFlipped):
             _ = transitionToState(.manipulatingFirstPiece(type: type, rotation: rotation, isFlipped: !isFlipped))
+        case .manipulatingPendingPiece(let type, let points, let rotation):
+            // For pending pieces, toggle the flip state
+            uiState.pendingPieceIsFlipped.toggle()
+        case .selectingPendingConnections(let type, let points):
+            // Allow flipping while selecting connections
+            uiState.pendingPieceIsFlipped.toggle()
         default:
             break
         }
@@ -214,11 +260,12 @@ extension TangramEditorViewModel {
     // MARK: - Piece Operations
     
     func removePiece(id: String) {
-        // Check if piece is locked
-        guard let piece = puzzle.pieces.first(where: { $0.id == id }) else { return }
+        // Check if piece can be removed (not structurally critical)
+        guard puzzle.pieces.first(where: { $0.id == id }) != nil else { return }
         
-        if piece.isLocked {
-            handleError(.operationNotAllowed("Piece must be unlocked before deletion"))
+        // For now, allow deletion of any piece except the first one
+        if puzzle.pieces.first?.id == id && puzzle.pieces.count > 1 {
+            handleError(.operationNotAllowed("Cannot delete the base piece while other pieces exist"))
             return
         }
         
@@ -233,12 +280,12 @@ extension TangramEditorViewModel {
     }
     
     func removeSelectedPieces() {
-        // Check if any selected pieces are locked
+        // Check if any selected pieces are the base piece
         let selectedPieces = puzzle.pieces.filter { uiState.selectedPieceIds.contains($0.id) }
-        let lockedPieces = selectedPieces.filter { $0.isLocked }
         
-        if !lockedPieces.isEmpty {
-            handleError(.operationNotAllowed("\(lockedPieces.count) piece(s) must be unlocked before deletion"))
+        if let firstPiece = puzzle.pieces.first,
+           selectedPieces.contains(where: { $0.id == firstPiece.id }) && puzzle.pieces.count > 1 {
+            handleError(.operationNotAllowed("Cannot delete the base piece while other pieces exist"))
             return
         }
         
@@ -256,6 +303,50 @@ extension TangramEditorViewModel {
         editorState = stateManager.currentState
     }
     
+    func rotateSelectedPieces(by degrees: Double) {
+        guard !uiState.selectedPieceIds.isEmpty else { return }
+        
+        undoManager.saveState(puzzle: puzzle)
+        
+        for pieceId in uiState.selectedPieceIds {
+            guard let index = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else { continue }
+            
+            let piece = puzzle.pieces[index]
+            let currentTransform = piece.transform
+            
+            // Extract current rotation and apply additional rotation
+            let angle = degrees * .pi / 180
+            let rotationTransform = CGAffineTransform(rotationAngle: angle)
+            
+            // Apply rotation to the existing transform
+            puzzle.pieces[index].transform = currentTransform.concatenating(rotationTransform)
+        }
+        
+        validate()
+        notifyPuzzleChanged()
+    }
+    
+    func flipSelectedPieces() {
+        guard !uiState.selectedPieceIds.isEmpty else { return }
+        
+        undoManager.saveState(puzzle: puzzle)
+        
+        for pieceId in uiState.selectedPieceIds {
+            guard let index = puzzle.pieces.firstIndex(where: { $0.id == pieceId }),
+                  puzzle.pieces[index].type == .parallelogram else { continue }
+            
+            let piece = puzzle.pieces[index]
+            let currentTransform = piece.transform
+            
+            // Apply horizontal flip by scaling x by -1
+            let flipTransform = CGAffineTransform(scaleX: -1, y: 1)
+            puzzle.pieces[index].transform = currentTransform.concatenating(flipTransform)
+        }
+        
+        validate()
+        notifyPuzzleChanged()
+    }
+    
     func updatePieceTransform(id: String, transform: CGAffineTransform) {
         guard let index = puzzle.pieces.firstIndex(where: { $0.id == id }) else { return }
         
@@ -265,67 +356,65 @@ extension TangramEditorViewModel {
         notifyPuzzleChanged()
     }
     
-    // MARK: - Piece Locking
-    
-    func togglePieceLock(id: String) {
-        undoManager.saveState(puzzle: puzzle)
-        
-        let result = lockingService.toggleLock(id: id, in: &puzzle)
-        switch result {
-        case .success(let isNowLocked):
-            if isNowLocked {
-                _ = transitionToState(.pieceSelected(id: id, isLocked: true))
-                toastService.showInfo("Piece locked")
-            } else {
-                _ = transitionToState(.pieceSelected(id: id, isLocked: false))
-                toastService.showSuccess("Piece unlocked")
-            }
-            updateManipulationModes()
-            notifyPuzzleChanged()
-            
-        case .failure(let error):
-            handleError(error)
-        }
-    }
-    
-    func unlockPiece(id: String) {
-        undoManager.saveState(puzzle: puzzle)
-        
-        let result = lockingService.unlockPiece(id: id, in: &puzzle)
-        switch result {
-        case .success:
-            _ = transitionToState(.manipulatingExistingPiece(id: id, mode: determineManipulationMode(for: id)))
-            updateManipulationModes()
-            notifyPuzzleChanged()
-            
-        case .failure(let error):
-            handleError(error)
-        }
-    }
-    
-    func autoLockPieces() {
-        lockingService.autoLockPieces(in: &puzzle)
-        updateManipulationModes()
-    }
+    // MARK: - Piece Manipulation Management
     
     // MARK: - Manipulation Mode Management
     
     /// Determine manipulation mode for a piece based on its connections
     func determineManipulationMode(for pieceId: String) -> ManipulationMode {
         guard let piece = puzzle.pieces.first(where: { $0.id == pieceId }) else {
-            return .locked
+            return .fixed
         }
         
-        return manipulationService.calculateManipulationMode(piece: piece, connections: puzzle.connections)
+        // Check if it's the first piece
+        let isFirstPiece = puzzle.pieces.first?.id == pieceId
+        return manipulationService.calculateManipulationMode(piece: piece, connections: puzzle.connections, allPieces: puzzle.pieces, isFirstPiece: isFirstPiece)
     }
     
     /// Update manipulation modes for all pieces
     func updateManipulationModes() {
         pieceManipulationModes.removeAll()
+        manipulationConstraints.removeAll()  // Clear cached constraints
         
         for piece in puzzle.pieces {
             let mode = determineManipulationMode(for: piece.id)
             pieceManipulationModes[piece.id] = mode
+            
+            // Pre-calculate constraints for each piece based on its mode
+            let otherPieces = puzzle.pieces.filter { $0.id != piece.id }
+            
+            switch mode {
+            case .rotatable(let pivot, _):
+                // Calculate rotation limits upfront
+                let limits = manipulationService.calculateRotationLimits(
+                    piece: piece,
+                    pivot: pivot,
+                    otherPieces: otherPieces,
+                    stepDegrees: 5.0
+                )
+                manipulationConstraints[piece.id] = ManipulationConstraints(
+                    rotationLimits: (min: limits.minAngle, max: limits.maxAngle),
+                    slideLimits: nil
+                )
+                
+            case .slidable(let edge, let baseRange, _):
+                // Calculate slide limits upfront
+                let limits = manipulationService.calculateSlideLimits(
+                    piece: piece,
+                    edge: edge,
+                    baseRange: baseRange,
+                    otherPieces: otherPieces,
+                    stepSize: 2.0
+                )
+                manipulationConstraints[piece.id] = ManipulationConstraints(
+                    rotationLimits: nil,
+                    slideLimits: limits
+                )
+                
+            default:
+                // Fixed or free pieces don't need constraints
+                break
+            }
         }
     }
     
@@ -334,162 +423,181 @@ extension TangramEditorViewModel {
     /// Handle rotation gesture for a piece with single vertex connection
     func handleRotation(pieceId: String, angle: Double) {
         guard let mode = pieceManipulationModes[pieceId],
-              let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else {
+              case .rotatable(let pivot, _) = mode,
+              let piece = puzzle.pieces.first(where: { $0.id == pieceId }) else {
             return
         }
         
-        switch mode {
-        case .rotatable(let pivot, let snapAngles):
-            let piece = puzzle.pieces[pieceIndex]
+        // Store initial transform if this is the first manipulation
+        if initialManipulationTransforms[pieceId] == nil {
+            initialManipulationTransforms[pieceId] = piece.transform
+        }
+        
+        // Get the initial transform (before any rotation in this gesture)
+        guard let initialTransform = initialManipulationTransforms[pieceId] else {
+            return
+        }
+        
+        // Create a piece with the initial transform to apply the rotation to
+        var rotatingPiece = piece
+        rotatingPiece.transform = initialTransform
+        
+        // Get the connection for this piece
+        let connection = puzzle.connections.first { $0.involvesPiece(pieceId) }
+        let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
+        
+        // Use unified transform engine - angle is the delta from the initial position
+        let result = transformEngine.calculateTransform(
+            for: rotatingPiece,
+            operation: .rotate(angle: angle, pivot: pivot),
+            connection: connection,
+            otherPieces: otherPieces,
+            canvasSize: uiState.currentCanvasSize
+        )
+        
+        // Apply result to UI state
+        if result.isValid {
+            uiState.ghostTransform = result.transform
+            uiState.showSnapIndicator = true
+            uiState.manipulatingPieceId = pieceId
             
-            // Convert angle to degrees for snapping
-            let angleDegrees = angle * 180 / .pi
+            // Store snap indicators if available
+            if let snapInfo = result.snapInfo {
+                // Could be used to show snap points in UI
+            }
+        } else {
+            // No preview for invalid positions
+            uiState.ghostTransform = nil
+            uiState.showSnapIndicator = false
+            uiState.manipulatingPieceId = pieceId
             
-            // Find nearest snap angle
-            let snappedAngle = snapAngles.min(by: { 
-                abs($0 - angleDegrees) < abs($1 - angleDegrees) 
-            }) ?? angleDegrees
-            
-            // Convert back to radians
-            let snappedRadians = snappedAngle * .pi / 180
-            
-            // Create rotation transform around pivot
-            var transform = CGAffineTransform.identity
-            transform = transform.translatedBy(x: pivot.x, y: pivot.y)
-            transform = transform.rotated(by: snappedRadians)
-            transform = transform.translatedBy(x: -pivot.x, y: -pivot.y)
-            
-            // Apply to piece's base transform
-            let newTransform = piece.transform.concatenating(transform)
-            
-            // Check for overlaps with validation service
-            let testPiece = TangramPiece(type: piece.type, transform: newTransform)
-            let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
-            
-            var hasOverlap = false
-            for other in otherPieces {
-                if validationService.hasAreaOverlap(pieceA: testPiece, pieceB: other) {
-                    hasOverlap = true
+            // Show validation feedback
+            if let violation = result.violations.first {
+                switch violation.type {
+                case .overlap:
+                    // Silent - visual feedback is enough
+                    break
+                case .connectionBroken:
+                    // Silent - shouldn't happen with proper constraints
+                    break
+                case .outOfBounds:
+                    // Silent - allow temporary out of bounds during manipulation
                     break
                 }
             }
-            
-            if !hasOverlap {
-                // Update ghost preview
-                uiState.ghostTransform = newTransform
-                uiState.showSnapIndicator = abs(angle - snappedRadians) < 0.1
-                
-                // Store as manipulating piece
-                uiState.manipulatingPieceId = pieceId
-            }
-            
-        default:
-            break
         }
     }
     
     /// Confirm the rotation and apply it to the piece
     func confirmRotation() {
-        guard let pieceId = uiState.manipulatingPieceId,
-              let transform = uiState.ghostTransform,
-              let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else {
-            return
+        guard let pieceId = uiState.manipulatingPieceId else {
+            return  // No piece being manipulated
         }
         
-        undoManager.saveState(puzzle: puzzle)
-        puzzle.pieces[pieceIndex].transform = transform
+        // Only apply transform if we have a valid ghost position
+        if let transform = uiState.ghostTransform,
+           let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) {
+            undoManager.saveState(puzzle: puzzle)
+            puzzle.pieces[pieceIndex].transform = transform
+            
+            // Update manipulation modes after confirming rotation
+            updateManipulationModes()
+            validate()
+            notifyPuzzleChanged()
+        }
         
-        // Clear manipulation state
+        // ALWAYS clear manipulation state, even if no valid transform
+        initialManipulationTransforms.removeValue(forKey: pieceId)  // Clear before setting to nil
         uiState.manipulatingPieceId = nil
         uiState.ghostTransform = nil
         uiState.showSnapIndicator = false
-        
-        validate()
-        notifyPuzzleChanged()
     }
     
     /// Handle sliding gesture for a piece with single edge connection
     func handleSlide(pieceId: String, distance: Double) {
         guard let mode = pieceManipulationModes[pieceId],
-              let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else {
+              case .slidable(let edge, _, _) = mode,
+              let piece = puzzle.pieces.first(where: { $0.id == pieceId }) else {
             return
         }
         
-        switch mode {
-        case .slidable(let edge, let range, let snapPositions):
-            let piece = puzzle.pieces[pieceIndex]
-            
-            // Clamp distance to valid range
-            let clampedDistance = max(range.lowerBound, min(range.upperBound, distance))
-            
-            // Find nearest snap position
-            let normalizedDistance = (clampedDistance - range.lowerBound) / (range.upperBound - range.lowerBound)
-            let snappedPosition = snapPositions.min(by: {
-                abs($0 - normalizedDistance) < abs($1 - normalizedDistance)
-            }) ?? normalizedDistance
-            
-            // Convert back to actual distance
-            let snappedDistance = range.lowerBound + snappedPosition * (range.upperBound - range.lowerBound)
-            
-            // Calculate translation along edge vector
-            let translation = CGVector(
-                dx: edge.vector.dx * snappedDistance,
-                dy: edge.vector.dy * snappedDistance
-            )
-            
-            // Create new transform
-            var newTransform = piece.transform
-            newTransform.tx += translation.dx
-            newTransform.ty += translation.dy
-            
-            // Check for overlaps
-            let testPiece = TangramPiece(type: piece.type, transform: newTransform)
-            let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
-            
-            var hasOverlap = false
-            for other in otherPieces {
-                if validationService.hasAreaOverlap(pieceA: testPiece, pieceB: other) {
-                    hasOverlap = true
-                    break
-                }
-            }
-            
-            if !hasOverlap {
-                // Update ghost preview
-                uiState.ghostTransform = newTransform
-                uiState.showSnapIndicator = snapPositions.contains(snappedPosition)
-                
-                // Store as manipulating piece
-                uiState.manipulatingPieceId = pieceId
-            }
-            
-        default:
-            break
+        // Store initial transform if this is the first manipulation
+        if initialManipulationTransforms[pieceId] == nil {
+            initialManipulationTransforms[pieceId] = piece.transform
+        }
+        
+        // Get the initial transform (before any sliding in this gesture)
+        guard let initialTransform = initialManipulationTransforms[pieceId] else {
+            return
+        }
+        
+        // Create a piece with the initial transform to apply the slide to
+        var slidingPiece = piece
+        slidingPiece.transform = initialTransform
+        
+        // Get the connection for this piece
+        let connection = puzzle.connections.first { $0.involvesPiece(pieceId) }
+        let otherPieces = puzzle.pieces.filter { $0.id != pieceId }
+        
+        // Convert ManipulationMode.Edge to PieceTransformEngine.Edge
+        let engineEdge = PieceTransformEngine.Edge(
+            start: edge.start,
+            end: edge.end,
+            vector: edge.vector
+        )
+        
+        // Use unified transform engine - distance is the delta from the initial position
+        let result = transformEngine.calculateTransform(
+            for: slidingPiece,
+            operation: .slide(distance: distance, edge: engineEdge),
+            connection: connection,
+            otherPieces: otherPieces,
+            canvasSize: uiState.currentCanvasSize
+        )
+        
+        // Apply result to UI state (same as rotation)
+        if result.isValid {
+            uiState.ghostTransform = result.transform
+            uiState.showSnapIndicator = true
+            uiState.manipulatingPieceId = pieceId
+        } else {
+            // No preview for invalid positions
+            uiState.ghostTransform = nil
+            uiState.showSnapIndicator = false
+            uiState.manipulatingPieceId = pieceId
         }
     }
     
     /// Confirm the slide and apply it to the piece
     func confirmSlide() {
-        guard let pieceId = uiState.manipulatingPieceId,
-              let transform = uiState.ghostTransform,
-              let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) else {
-            return
+        guard let pieceId = uiState.manipulatingPieceId else {
+            return  // No piece being manipulated
         }
         
-        undoManager.saveState(puzzle: puzzle)
-        puzzle.pieces[pieceIndex].transform = transform
+        // Only apply transform if we have a valid ghost position
+        if let transform = uiState.ghostTransform,
+           let pieceIndex = puzzle.pieces.firstIndex(where: { $0.id == pieceId }) {
+            undoManager.saveState(puzzle: puzzle)
+            puzzle.pieces[pieceIndex].transform = transform
+            
+            // Update manipulation modes after confirming slide
+            updateManipulationModes()
+            validate()
+            notifyPuzzleChanged()
+        }
         
-        // Clear manipulation state
+        // ALWAYS clear manipulation state, even if no valid transform
+        initialManipulationTransforms.removeValue(forKey: pieceId)  // Clear before setting to nil
         uiState.manipulatingPieceId = nil
         uiState.ghostTransform = nil
         uiState.showSnapIndicator = false
-        
-        validate()
-        notifyPuzzleChanged()
     }
     
     /// Cancel any ongoing manipulation
     func cancelManipulation() {
+        if let pieceId = uiState.manipulatingPieceId {
+            initialManipulationTransforms.removeValue(forKey: pieceId)  // Clear initial transform
+        }
         uiState.manipulatingPieceId = nil
         uiState.ghostTransform = nil
         uiState.showSnapIndicator = false

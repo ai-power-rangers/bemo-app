@@ -12,7 +12,7 @@
 import SwiftUI
 
 struct PuzzleSelectionView: View {
-    let viewModel: PuzzleSelectionViewModel
+    @Bindable var viewModel: PuzzleSelectionViewModel
     
     private let columns = [
         GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)
@@ -46,114 +46,116 @@ struct PuzzleSelectionView: View {
     
     private var headerView: some View {
         VStack(spacing: 12) {
-            HStack {
-                // Title
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Puzzle Library")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                    
-                    Text("\(viewModel.filteredPuzzles.count) puzzles available")
-                        .font(.caption)
+            headerTitleRow
+            searchBar
+            filterChips
+        }
+    }
+    
+    private var headerTitleRow: some View {
+        HStack {
+            // Title
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Puzzle Library")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                
+                Text("\(viewModel.filteredPuzzles.count) puzzles available")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            // View mode toggle
+            Picker("View", selection: $viewModel.isGridView) {
+                Image(systemName: "square.grid.2x2")
+                    .tag(true)
+                Image(systemName: "list.bullet")
+                    .tag(false)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 100)
+            
+            // Back to Lobby button
+            Button(action: {
+                print("DEBUG: Back to Lobby button tapped")
+                viewModel.backToLobby()
+            }) {
+                Label("Back to Lobby", systemImage: "arrow.left.circle.fill")
+                    .font(.body)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
+        }
+    }
+    
+    private var searchBar: some View {
+        HStack {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.secondary)
+            
+            TextField("Search puzzles...", text: $viewModel.searchText)
+                .textFieldStyle(.plain)
+            
+            if !viewModel.searchText.isEmpty {
+                Button(action: { viewModel.searchText = "" }) {
+                    Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.secondary)
                 }
-                
-                Spacer()
-                
-                // View mode toggle
-                Picker("View", selection: .init(
-                    get: { viewModel.isGridView },
-                    set: { viewModel.isGridView = $0 }
-                )) {
-                    Image(systemName: "square.grid.2x2")
-                        .tag(true)
-                    Image(systemName: "list.bullet")
-                        .tag(false)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 100)
-                
-                // Back to Lobby button
-                Button(action: {
-                    print("DEBUG: Back to Lobby button tapped")
-                    viewModel.backToLobby()
-                }) {
-                    Label("Back to Lobby", systemImage: "arrow.left.circle.fill")
-                        .font(.body)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
             }
-            
-            // Search bar
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                
-                TextField("Search puzzles...", text: .init(
-                    get: { viewModel.searchText },
-                    set: { viewModel.searchText = $0 }
-                ))
-                    .textFieldStyle(.plain)
-                
-                if !viewModel.searchText.isEmpty {
-                    Button(action: { viewModel.searchText = "" }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
+        }
+        .padding(8)
+        .background(Color(UIColor.secondarySystemBackground))
+        .cornerRadius(8)
+    }
+    
+    private var filterChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                // Category filter
+                Menu {
+                    Button("All Categories") {
+                        viewModel.selectedCategory = nil
                     }
+                    Divider()
+                    ForEach(viewModel.availableCategories, id: \.self) { category in
+                        Button(action: { viewModel.selectedCategory = category }) {
+                            Label(category.rawValue, systemImage: viewModel.categoryIcon(category))
+                        }
+                    }
+                } label: {
+                    filterChip(
+                        title: viewModel.selectedCategory?.rawValue ?? "Category",
+                        isSelected: viewModel.selectedCategory != nil
+                    )
                 }
-            }
-            .padding(8)
-            .background(Color(UIColor.secondarySystemBackground))
-            .cornerRadius(8)
-            
-            // Filter chips
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    // Category filter
-                    Menu {
-                        Button("All Categories") {
-                            viewModel.selectedCategory = nil
-                        }
-                        Divider()
-                        ForEach(viewModel.availableCategories, id: \.self) { category in
-                            Button(action: { viewModel.selectedCategory = category }) {
-                                Label(category.rawValue, systemImage: viewModel.categoryIcon(category))
-                            }
-                        }
-                    } label: {
-                        filterChip(
-                            title: viewModel.selectedCategory?.rawValue ?? "Category",
-                            isSelected: viewModel.selectedCategory != nil
-                        )
+                
+                // Difficulty filter
+                Menu {
+                    Button("All Difficulties") {
+                        viewModel.selectedDifficulty = nil
                     }
-                    
-                    // Difficulty filter
-                    Menu {
-                        Button("All Difficulties") {
-                            viewModel.selectedDifficulty = nil
+                    Divider()
+                    ForEach(viewModel.availableDifficulties, id: \.self) { difficulty in
+                        Button(action: { viewModel.selectedDifficulty = difficulty }) {
+                            Label(difficulty.displayName, systemImage: viewModel.difficultyIcon(difficulty))
                         }
-                        Divider()
-                        ForEach(viewModel.availableDifficulties, id: \.self) { difficulty in
-                            Button(action: { viewModel.selectedDifficulty = difficulty }) {
-                                Label(difficulty.displayName, systemImage: viewModel.difficultyIcon(difficulty))
-                            }
-                        }
-                    } label: {
-                        filterChip(
-                            title: viewModel.selectedDifficulty?.displayName ?? "Difficulty",
-                            isSelected: viewModel.selectedDifficulty != nil
-                        )
                     }
-                    
-                    if viewModel.selectedCategory != nil || viewModel.selectedDifficulty != nil {
-                        Button(action: viewModel.clearFilters) {
-                            Label("Clear", systemImage: "xmark")
-                                .font(.caption)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                } label: {
+                    filterChip(
+                        title: viewModel.selectedDifficulty?.displayName ?? "Difficulty",
+                        isSelected: viewModel.selectedDifficulty != nil
+                    )
+                }
+                
+                if viewModel.selectedCategory != nil || viewModel.selectedDifficulty != nil {
+                    Button(action: viewModel.clearFilters) {
+                        Label("Clear", systemImage: "xmark")
+                            .font(.caption)
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
             }
         }
