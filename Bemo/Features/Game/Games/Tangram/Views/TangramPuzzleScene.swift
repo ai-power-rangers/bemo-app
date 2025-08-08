@@ -410,6 +410,41 @@ class TangramPuzzleScene: SKScene {
         checkSnapPreview(for: selected)
     }
     
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = touches.first else { return }
+        let location = touch.location(in: self)
+        
+        // Check if we're rotating with the dial
+        if isShowingRotationDial, let dial = rotationDial {
+            // Calculate angle from dial center to touch point
+            let dialPos = dial.position
+            let angle = atan2(location.y - dialPos.y, location.x - dialPos.x)
+            dial.updateRotation(to: angle)
+            return
+        }
+        
+        // Normal piece dragging
+        guard let selected = selectedPiece else { return }
+        
+        // Cancel pending rotation if we're dragging
+        if pendingRotationPiece != nil {
+            let dragDistance = hypot(location.x - tapStartLocation.x, location.y - tapStartLocation.y)
+            if dragDistance > 10 {  // Threshold for drag detection
+                pendingRotationPiece = nil  // Cancel rotation dial
+            }
+        }
+        
+        // Drag the piece
+        let previousLocation = touch.previousLocation(in: self)
+        let deltaX = location.x - previousLocation.x
+        let deltaY = location.y - previousLocation.y
+        selected.position.x += deltaX
+        selected.position.y += deltaY
+        
+        // Check for snap preview
+        checkSnapPreview(for: selected)
+    }
+    
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = touches.first else { return }
         let location = touch.location(in: self)
@@ -778,6 +813,435 @@ class TangramPuzzleScene: SKScene {
         uiLayer.addChild(buttonContainer)
     }
     
+    // MARK: - UI Elements (Deprecated - UI now in SwiftUI toolbar)
+    
+    func setupUIElements(timerText: String, timerStarted: Bool, progress: Double, showHints: Bool) {
+        // UI elements are now handled by SwiftUI toolbar
+        // This method is kept for compatibility but does nothing
+    }
+    
+    // UI creation methods removed - now handled by SwiftUI
+    
+    // Timer display removed - now in SwiftUI toolbar
+    
+    private func createTimerDisplay(text: String, started: Bool) {
+        // Deprecated - timer is now in SwiftUI toolbar
+        // Method kept for compatibility but does nothing
+    }
+    
+    private func createProgressBar(progress: Double) {
+        // Progress bar background
+        let barWidth: CGFloat = 150
+        let barHeight: CGFloat = 8
+        
+        let progressBg = SKShapeNode(rectOf: CGSize(width: barWidth, height: barHeight), cornerRadius: 4)
+        progressBg.fillColor = SKColor.systemGray5
+        progressBg.strokeColor = SKColor.clear
+        // Position below safe area with extra padding for status bar
+        progressBg.position = CGPoint(x: size.width - 100, y: size.height - safeAreaTop - 60)
+        
+        // Progress fill
+        let fillWidth = barWidth * CGFloat(progress)
+        if fillWidth > 0 {
+            let fill = SKShapeNode(rectOf: CGSize(width: fillWidth, height: barHeight), cornerRadius: 4)
+            fill.fillColor = progress >= 1.0 ? SKColor.systemGreen : SKColor.systemBlue
+            fill.strokeColor = SKColor.clear
+            fill.position = CGPoint(x: -barWidth/2 + fillWidth/2, y: 0)
+            progressBg.addChild(fill)
+            self.progressFill = fill
+        }
+        
+        self.progressBar = progressBg
+        uiLayer.addChild(progressBg)
+    }
+    
+    private func createHintsButton(isActive: Bool) {
+        let buttonContainer = SKNode()
+        
+        // Button background
+        let buttonBg = SKShapeNode(circleOfRadius: 20)
+        buttonBg.fillColor = isActive ? SKColor.systemYellow : SKColor.systemGray3
+        buttonBg.strokeColor = SKColor.clear
+        buttonContainer.addChild(buttonBg)
+        
+        // Lightbulb icon (simplified)
+        let icon = SKLabelNode(text: "💡")
+        icon.fontSize = 20
+        icon.position = CGPoint(x: 0, y: -7)
+        buttonContainer.addChild(icon)
+        
+        buttonContainer.name = "hintsButton"
+        // Position below other UI elements
+        buttonContainer.position = CGPoint(x: size.width - 50, y: size.height - safeAreaTop - 120)
+        
+        self.hintsButton = buttonContainer
+        uiLayer.addChild(buttonContainer)
+    }
+    
+    func updateTimer(_ text: String, started: Bool) {
+        // Timer is now in SwiftUI toolbar
+    }
+    
+    func updateProgress(_ progress: Double) {
+        // Progress bar is now in SwiftUI overlay
+    }
+    
+    // MARK: - Structured Hint System
+    
+    private var hintGhostNode: SKNode?
+    private var hintPathNode: SKShapeNode?
+    private var currentHintAnimation: SKAction?
+    
+    func showStructuredHint(_ hint: TangramHintEngine.HintData) {
+        print("DEBUG: showStructuredHint called with hint type: \(hint.hintType)")
+        
+        // Cancel any pending cleanup
+        removeAction(forKey: "hintCleanup")
+        
+        // Clear existing hints
+        clearStructuredHint()
+        
+        // Get current piece location for animations
+        let currentPieceLocation = availablePieces[hint.targetPiece.rawValue]?.position ?? 
+                                   CGPoint(x: size.width * 0.5, y: size.height * 0.3)
+        print("DEBUG: Target piece: \(hint.targetPiece.rawValue), location: \(currentPieceLocation)")
+        
+        switch hint.hintType {
+        case .nudge:
+            showNudgeHint(hint)
+        case .rotation(let degrees):
+            showRotationHint(hint, degrees: degrees)
+        case .flip:
+            showFlipHint(hint)
+        case .position(_, let to):
+            // Always use current piece location as 'from'
+            showPositionHint(hint, from: currentPieceLocation, to: to)
+        case .fullSolution:
+            showFullSolutionHint(hint)
+        }
+        
+        // Auto-cleanup after hint animation - longer duration for better visibility
+        // Only cleanup for nudge hints, keep others visible longer
+        let cleanupDuration: TimeInterval = hint.hintType == .nudge ? 5.0 : 10.0
+        let cleanupDelay = SKAction.wait(forDuration: cleanupDuration)
+        let cleanup = SKAction.run { [weak self] in
+            print("DEBUG: Auto-cleanup after \(cleanupDuration) seconds")
+            self?.clearStructuredHint()
+        }
+        run(SKAction.sequence([cleanupDelay, cleanup]), withKey: "hintCleanup")
+    }
+    
+    private func clearStructuredHint() {
+        hintGhostNode?.removeAllActions()
+        hintGhostNode?.removeFromParent()
+        hintGhostNode = nil
+        
+        hintPathNode?.removeAllActions()
+        hintPathNode?.removeFromParent()
+        hintPathNode = nil
+    }
+    
+    private func createGhostPiece(for pieceType: TangramPieceType) -> SKNode {
+        let container = SKNode()
+        
+        // Create shape from piece geometry
+        let shape = createPieceShape(type: pieceType)
+        // Use the actual piece color with transparency
+        let pieceColor = TangramGameConstants.Colors.uiColor(for: pieceType)
+        shape.fillColor = pieceColor.withAlphaComponent(0.4)
+        shape.strokeColor = pieceColor
+        shape.lineWidth = 3  // Slightly thicker line for visibility
+        
+        container.addChild(shape)
+        return container
+    }
+    
+    private func showNudgeHint(_ hint: TangramHintEngine.HintData) {
+        // Find the actual piece and make it pulse
+        if let piece = availablePieces[hint.targetPiece.rawValue] {
+            let pulse = SKAction.sequence([
+                SKAction.scale(to: 1.1, duration: 0.3),
+                SKAction.scale(to: 1.0, duration: 0.3)
+            ])
+            // Create a glow effect using color blend
+            let glow = SKAction.sequence([
+                SKAction.colorize(with: .systemYellow, colorBlendFactor: 0.5, duration: 0.3),
+                SKAction.colorize(withColorBlendFactor: 0.0, duration: 0.3)
+            ])
+            piece.run(SKAction.repeat(SKAction.group([pulse, glow]), count: 3))
+        }
+    }
+    
+    private func showRotationHint(_ hint: TangramHintEngine.HintData, degrees: Double) {
+        let ghost = createGhostPiece(for: hint.targetPiece)
+        ghost.alpha = 0.3
+        ghost.zPosition = 150
+        
+        // Position at current piece location or default
+        if let currentPiece = availablePieces[hint.targetPiece.rawValue] {
+            ghost.position = currentPiece.position
+            ghost.zRotation = currentPiece.zRotation
+        } else {
+            ghost.position = CGPoint(x: size.width * 0.5, y: size.height * 0.3)
+        }
+        
+        // Create rotation indicator
+        let arc = createRotationArc(from: ghost.zRotation, to: CGFloat(degrees * .pi / 180))
+        ghost.addChild(arc)
+        
+        // Animate rotation
+        let fadeIn = SKAction.fadeAlpha(to: 0.5, duration: 0.3)
+        let wait = SKAction.wait(forDuration: 0.5)
+        let rotate = SKAction.rotate(toAngle: CGFloat(degrees * .pi / 180), duration: 1.5)
+        let pulse = SKAction.repeatForever(SKAction.sequence([
+            SKAction.fadeAlpha(to: 0.6, duration: 0.5),
+            SKAction.fadeAlpha(to: 0.3, duration: 0.5)
+        ]))
+        
+        ghost.run(SKAction.sequence([fadeIn, wait, rotate, pulse]))
+        effectsLayer.addChild(ghost)
+        hintGhostNode = ghost
+    }
+    
+    private func showFlipHint(_ hint: TangramHintEngine.HintData) {
+        let ghost = createGhostPiece(for: hint.targetPiece)
+        ghost.alpha = 0.3
+        ghost.zPosition = 150
+        
+        // Position at current piece location
+        if let currentPiece = availablePieces[hint.targetPiece.rawValue] {
+            ghost.position = currentPiece.position
+            ghost.zRotation = currentPiece.zRotation
+        }
+        
+        // Show flip animation
+        let fadeIn = SKAction.fadeAlpha(to: 0.5, duration: 0.3)
+        let flipAnimation = SKAction.scaleX(to: -1.0, duration: 0.8)
+        let pulse = SKAction.repeatForever(SKAction.sequence([
+            SKAction.fadeAlpha(to: 0.6, duration: 0.5),
+            SKAction.fadeAlpha(to: 0.3, duration: 0.5)
+        ]))
+        
+        ghost.run(SKAction.sequence([fadeIn, flipAnimation, pulse]))
+        effectsLayer.addChild(ghost)
+        hintGhostNode = ghost
+    }
+    
+    private func showPositionHint(_ hint: TangramHintEngine.HintData, from: CGPoint, to: CGPoint) {
+        // Convert target position from CoreGraphics to SpriteKit coordinates
+        let targetSKPosition = CGPoint(
+            x: to.x + puzzleLayer.position.x,
+            y: -to.y + puzzleLayer.position.y  // Flip Y and offset
+        )
+        
+        // Create ghost at target position
+        let targetGhost = createGhostPiece(for: hint.targetPiece)
+        targetGhost.position = targetSKPosition
+        targetGhost.alpha = 0.4
+        targetGhost.zPosition = 100
+        
+        // Apply target rotation (no negation needed - both use same convention)
+        let targetRotation = atan2(hint.targetTransform.b, hint.targetTransform.a)
+        targetGhost.zRotation = targetRotation
+        
+        // Create animated path
+        let path = UIBezierPath()
+        path.move(to: from)
+        
+        // Curved path for visual appeal (use converted position)
+        let controlPoint = CGPoint(
+            x: (from.x + targetSKPosition.x) / 2,
+            y: max(from.y, targetSKPosition.y) + 50
+        )
+        path.addQuadCurve(to: targetSKPosition, controlPoint: controlPoint)
+        
+        let pathNode = SKShapeNode(path: path.cgPath)
+        // Use piece color for path
+        let pieceColor = TangramGameConstants.Colors.uiColor(for: hint.targetPiece)
+        pathNode.strokeColor = pieceColor
+        pathNode.lineWidth = 2
+        pathNode.lineCap = .round
+        pathNode.alpha = 0
+        pathNode.zPosition = 99
+        
+        // Animate path drawing
+        let fadeInPath = SKAction.fadeIn(withDuration: 0.3)
+        pathNode.run(fadeInPath)
+        
+        // Pulse the target
+        let pulse = SKAction.repeatForever(SKAction.sequence([
+            SKAction.scale(to: 1.1, duration: 0.5),
+            SKAction.scale(to: 1.0, duration: 0.5)
+        ]))
+        targetGhost.run(pulse)
+        
+        effectsLayer.addChild(targetGhost)
+        effectsLayer.addChild(pathNode)
+        
+        hintGhostNode = targetGhost
+        hintPathNode = pathNode
+    }
+    
+    private func showFullSolutionHint(_ hint: TangramHintEngine.HintData) {
+        print("DEBUG: showFullSolutionHint called for piece: \(hint.targetPiece.rawValue)")
+        let ghost = createGhostPiece(for: hint.targetPiece)
+        ghost.alpha = 0.8  // Start visible for debugging
+        ghost.zPosition = 150
+        print("DEBUG: Created ghost piece")
+        
+        // Set initial position immediately
+        ghost.position = CGPoint(x: size.width * 0.5, y: size.height * 0.3)
+        print("DEBUG: Set initial ghost position: \(ghost.position)")
+        
+        var actions: [SKAction] = []
+        
+        // Build animation sequence from steps
+        for (index, step) in hint.animationSteps.enumerated() {
+            if index == 0 {
+                // Skip fade-in for debugging - already visible
+                // actions.append(SKAction.fadeAlpha(to: 0.5, duration: 0.3))
+            }
+            
+            // Create transform actions
+            // IMPORTANT: Convert from CoreGraphics to SpriteKit coordinates
+            // The hint transform is in CG coordinates, we need to flip Y and adjust for puzzle layer position
+            let cgPosition = CGPoint(x: step.transform.tx, y: step.transform.ty)
+            
+            // Convert to SpriteKit coordinates (flip Y) and add puzzle layer offset
+            let skPosition = CGPoint(
+                x: cgPosition.x + puzzleLayer.position.x,
+                y: -cgPosition.y + puzzleLayer.position.y  // Flip Y and offset
+            )
+            
+            print("DEBUG: Step \(index) - CG pos: \(cgPosition), SK pos: \(skPosition)")
+            
+            let moveAction = SKAction.move(to: skPosition, duration: step.duration)
+            let rotateAction = SKAction.rotate(toAngle: atan2(step.transform.b, step.transform.a), duration: step.duration)
+            
+            actions.append(SKAction.group([moveAction, rotateAction]))
+            
+            if index < hint.animationSteps.count - 1 {
+                actions.append(SKAction.wait(forDuration: 0.3))
+            }
+        }
+        
+        // Final pulse
+        actions.append(SKAction.repeatForever(SKAction.sequence([
+            SKAction.fadeAlpha(to: 0.6, duration: 0.5),
+            SKAction.fadeAlpha(to: 0.3, duration: 0.5)
+        ])))
+        
+        print("DEBUG: Animation steps count: \(hint.animationSteps.count)")
+        print("DEBUG: Running \(actions.count) animation actions")
+        
+        if actions.isEmpty {
+            print("DEBUG: WARNING - No animation actions! Creating fallback")
+            // Add a simple pulse as fallback if no actions
+            actions.append(SKAction.repeatForever(SKAction.sequence([
+                SKAction.scale(to: 1.1, duration: 0.5),
+                SKAction.scale(to: 1.0, duration: 0.5)
+            ])))
+        }
+        
+        ghost.run(SKAction.sequence(actions))
+        effectsLayer.addChild(ghost)
+        hintGhostNode = ghost
+        
+        print("DEBUG: Ghost added to effectsLayer")
+        print("DEBUG: Ghost position: \(ghost.position)")
+        print("DEBUG: Ghost alpha: \(ghost.alpha)")
+        print("DEBUG: Ghost zPosition: \(ghost.zPosition)")
+        print("DEBUG: EffectsLayer children count: \(effectsLayer.children.count)")
+        print("DEBUG: EffectsLayer zPosition: \(effectsLayer.zPosition)")
+        print("DEBUG: Scene size: \(size)")
+        
+        // Verify the ghost is actually in the scene
+        if ghost.scene != nil {
+            print("DEBUG: Ghost successfully added to scene")
+        } else {
+            print("DEBUG: ERROR - Ghost not in scene!")
+        }
+    }
+    
+    private func createRotationArc(from startAngle: CGFloat, to endAngle: CGFloat) -> SKShapeNode {
+        let radius: CGFloat = 60
+        let path = UIBezierPath(arcCenter: .zero,
+                               radius: radius,
+                               startAngle: startAngle,
+                               endAngle: endAngle,
+                               clockwise: endAngle > startAngle)
+        
+        let arc = SKShapeNode(path: path.cgPath)
+        arc.strokeColor = .systemYellow
+        arc.lineWidth = 2
+        arc.lineCap = .round
+        
+        // Add arrow at end
+        let arrowSize: CGFloat = 10
+        let arrowAngle = endAngle + (endAngle > startAngle ? -0.2 : 0.2)
+        let arrowTip = CGPoint(x: cos(endAngle) * radius, y: sin(endAngle) * radius)
+        
+        let arrowPath = UIBezierPath()
+        arrowPath.move(to: arrowTip)
+        arrowPath.addLine(to: CGPoint(
+            x: arrowTip.x - cos(arrowAngle) * arrowSize,
+            y: arrowTip.y - sin(arrowAngle) * arrowSize
+        ))
+        arrowPath.move(to: arrowTip)
+        arrowPath.addLine(to: CGPoint(
+            x: arrowTip.x - cos(arrowAngle - 0.5) * arrowSize,
+            y: arrowTip.y - sin(arrowAngle - 0.5) * arrowSize
+        ))
+        
+        let arrow = SKShapeNode(path: arrowPath.cgPath)
+        arrow.strokeColor = .systemYellow
+        arrow.lineWidth = 2
+        arc.addChild(arrow)
+        
+        return arc
+    }
+    
+    func updateCompletionState(_ isComplete: Bool) {
+        if isComplete {
+            // Replace back button with next button
+            backButton?.removeFromParent()
+            createNextButton()
+        }
+    }
+    
+    private func createNextButton() {
+        let buttonContainer = SKNode()
+        
+        // Create button background
+        let buttonBg = SKShapeNode(rectOf: CGSize(width: 100, height: 40), cornerRadius: 8)
+        buttonBg.fillColor = SKColor.systemGreen
+        buttonBg.strokeColor = SKColor.clear
+        buttonContainer.addChild(buttonBg)
+        
+        // Add "Next" text
+        let label = SKLabelNode(text: "Next")
+        label.fontSize = 16
+        label.fontName = "System-Medium"
+        label.fontColor = SKColor.white
+        label.position = CGPoint(x: -5, y: -6)
+        buttonContainer.addChild(label)
+        
+        // Add arrow icon
+        let arrow = SKLabelNode(text: "▶")
+        arrow.fontSize = 20
+        arrow.fontName = "System"
+        arrow.fontColor = SKColor.white
+        arrow.position = CGPoint(x: 25, y: -7)
+        buttonContainer.addChild(arrow)
+        
+        buttonContainer.name = "nextButton"
+        // Position below safe area with extra padding for status bar
+        buttonContainer.position = CGPoint(x: 70, y: size.height - safeAreaTop - 60)
+        
+        self.nextButton = buttonContainer
+        uiLayer.addChild(buttonContainer)
+    }
+    
     // MARK: - Helper Methods
     
     private func calculatePuzzleBounds(for pieces: [GamePuzzleData.TargetPiece]) -> CGRect {
@@ -847,6 +1311,42 @@ class TangramPuzzleScene: SKScene {
             uiLayer.addChild(dial)
             isShowingRotationDial = true
         }
+        
+        guard let pieceType = pieceType else { return }
+        
+        // Get the vertices
+        let normalizedVertices = TangramGameGeometry.normalizedVertices(for: pieceType)
+        let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
+        
+        // Flip vertices horizontally if needed
+        let finalVertices: [CGPoint]
+        if isFlipped {
+            // Flip X coordinates
+            finalVertices = scaledVertices.map { CGPoint(x: -$0.x, y: $0.y) }
+        } else {
+            finalVertices = scaledVertices
+        }
+        
+        // Create path from vertices
+        let path = UIBezierPath()
+        if let firstVertex = finalVertices.first {
+            path.move(to: firstVertex)
+            for vertex in finalVertices.dropFirst() {
+                path.addLine(to: vertex)
+            }
+            path.close()
+        }
+        
+        // Create new shape
+        let newShape = SKShapeNode(path: path.cgPath)
+        newShape.fillColor = TangramGameConstants.Colors.uiColor(for: pieceType)
+        newShape.strokeColor = newShape.fillColor.darker(by: 20)
+        newShape.lineWidth = 2
+        
+        self.shapeNode = newShape
+        addChild(newShape)
+        
+        print("  After: isFlipped = \(isFlipped), shape recreated with flipped geometry")
     }
     
     private func hideRotationDial(cancel: Bool = false) {

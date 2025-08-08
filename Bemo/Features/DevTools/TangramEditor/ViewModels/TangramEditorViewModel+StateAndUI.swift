@@ -339,6 +339,7 @@ extension TangramEditorViewModel {
                         }
                     }
                 } else {
+                    print("[DEBUG] Initial placement FAILED!")
                     uiState.previewPiece = nil
                     uiState.previewTransform = nil
                 }

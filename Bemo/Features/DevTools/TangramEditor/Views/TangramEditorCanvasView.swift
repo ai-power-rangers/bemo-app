@@ -113,6 +113,7 @@ struct TangramEditorCanvasView: View {
             } else {
             }
             }
+            }
         }
         .alert("Placement Error", isPresented: $viewModel.uiState.showErrorAlert) {
             Button("OK") { 
