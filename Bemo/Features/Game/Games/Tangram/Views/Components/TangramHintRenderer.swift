@@ -161,7 +161,7 @@ class TangramHintRenderer {
     
     private func createHintNode(for pieceType: TangramPieceType) -> SKShapeNode {
         // Get piece vertices
-        let vertices = TangramGameGeometry.getVertices(for: pieceType)
+        let vertices = TangramGameGeometry.normalizedVertices(for: pieceType)
         
         // Create path
         let path = CGMutablePath()

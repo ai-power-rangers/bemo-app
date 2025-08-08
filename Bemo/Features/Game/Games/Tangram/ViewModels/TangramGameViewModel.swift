@@ -72,7 +72,7 @@ class TangramGameViewModel {
         self.supabaseService = container.supabaseService
         
         // Load puzzles using container's services
-        Task { [weak self] @MainActor in
+        Task { @MainActor [weak self] in
             guard let self = self else { return }
             if let managementService = container.puzzleManagementService {
                 // Use cached puzzles for instant loading!
@@ -233,7 +233,7 @@ class TangramGameViewModel {
             hintDismissTask?.cancel()
             
             // Auto-dismiss hint after 3 seconds
-            hintDismissTask = Task { [weak self] @MainActor in
+            hintDismissTask = Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
                 guard !Task.isCancelled else { return }
                 self?.clearHint()
@@ -270,7 +270,7 @@ class TangramGameViewModel {
         elapsedTime = 0
         
         // Start timer task
-        timerTask = Task { [weak self] @MainActor in
+        timerTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self = self, self.timerStarted else { break }
                 try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second
@@ -353,7 +353,7 @@ class TangramGameViewModel {
         showPlacementCelebration = true
         
         // Hide after a short delay
-        Task { [weak self] in
+        Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
             await MainActor.run {
                 self?.showPlacementCelebration = false
@@ -629,7 +629,7 @@ class TangramGameViewModel {
     }
     
     private func startGameSession(puzzleId: String, puzzleName: String, difficulty: Int) {
-        Task { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self = self,
                   let supabase = self.supabaseService,
                   let childId = self.currentChildProfileId else {
@@ -665,7 +665,7 @@ class TangramGameViewModel {
     }
     
     private func endGameSession(completed: Bool) {
-        Task { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self = self,
                   let supabase = self.supabaseService,
                   let sessionId = self.currentSessionId else {
@@ -696,7 +696,7 @@ class TangramGameViewModel {
     }
     
     private func trackHintUsage(hint: TangramHintEngine.HintData) {
-        Task { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self = self,
                   let supabase = self.supabaseService,
                   let childId = self.currentChildProfileId,
@@ -737,7 +737,7 @@ class TangramGameViewModel {
     }
     
     private func trackPuzzleCompletion() {
-        Task { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self = self,
                   let supabase = self.supabaseService,
                   let childId = self.currentChildProfileId,

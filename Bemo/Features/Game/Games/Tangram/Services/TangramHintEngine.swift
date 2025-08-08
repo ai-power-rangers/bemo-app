@@ -76,6 +76,13 @@ class TangramHintEngine {
         case arrow
     }
     
+    enum FrustrationLevel: Int {
+        case none = 0
+        case low = 1
+        case medium = 2
+        case high = 3
+    }
+    
     // MARK: - Constants
     
     private let stuckThreshold: TimeInterval = 30.0  // 30 seconds without progress
@@ -502,4 +509,48 @@ class TangramHintEngine {
     
     /// Extracts rotation angle from CGAffineTransform with robust floating-point handling
     /// Handles cases where sin/cos values have floating-point precision errors (e.g., 180° rotations)
+    
+    // MARK: - Protocol Conformance
+    
+    /// Generates appropriate hint based on game state (HintProviding protocol)
+    func generateHint(gameState: PuzzleGameState, lastMovedPiece: TangramPieceType?) -> HintData {
+        // Use existing determineNextHint logic, but return a default hint if none found
+        if let hint = determineNextHint(
+            puzzle: gameState.targetPuzzle,
+            placedPieces: [],  // Could be extended to track placed pieces in game state
+            lastMovedPiece: lastMovedPiece,
+            timeSinceLastProgress: 0,
+            previousHints: []
+        ) {
+            return hint
+        }
+        
+        // Return a default hint for the first piece
+        return createHintForFirstPiece(gameState.targetPuzzle) ?? HintData(
+            targetPiece: .square,
+            currentTransform: nil,
+            targetTransform: .identity,
+            hintType: .nudge,
+            animationSteps: [],
+            difficulty: .easy,
+            reason: .userRequested
+        )
+    }
+    
+    /// Calculates frustration level based on game state (HintProviding protocol)
+    func calculateFrustrationLevel(gameState: PuzzleGameState) -> FrustrationLevel {
+        // Determine frustration based on hints used and time elapsed
+        let hintsUsed = gameState.hintsUsed
+        
+        switch hintsUsed {
+        case 0:
+            return .none
+        case 1...2:
+            return .low
+        case 3...5:
+            return .medium
+        default:
+            return .high
+        }
+    }
 }

@@ -12,13 +12,14 @@
 import Foundation
 import CoreGraphics
 
+@MainActor
 class PiecePlacementService {
     
     private let transformEngine: PieceTransformEngine
     private let connectionService: ConnectionService
     
-    init(transformEngine: PieceTransformEngine = PieceTransformEngine(),
-         connectionService: ConnectionService = ConnectionService()) {
+    init(transformEngine: PieceTransformEngine,
+         connectionService: ConnectionService) {
         self.transformEngine = transformEngine
         self.connectionService = connectionService
     }
@@ -68,14 +69,14 @@ class PiecePlacementService {
         // For now, we'll use the coordinate system alignment since transform engine
         // expects different connection format
         
-        // Use TangramCoordinateSystem for multi-point alignment
+        // Use TangramEditorCoordinateSystem for multi-point alignment
         // This maintains compatibility while we transition
-        let transform = TangramCoordinateSystem.calculateAlignment(
-            for: type,
+        let transform = TangramEditorCoordinateSystem.calculateAlignmentTransform(
+            pieceType: type,
+            baseRotation: rotation * .pi / 180,
             connections: connections.map { conn in
                 (canvas: conn.canvasPoint, piece: conn.piecePoint)
             },
-            baseRotation: rotation * .pi / 180,
             existingPieces: existingPieces
         )
         
@@ -135,6 +136,6 @@ class PiecePlacementService {
     
     /// Get connection points for a piece - delegates to coordinate system
     func getConnectionPoints(for piece: TangramPiece, scale: CGFloat = 1) -> [ConnectionPoint] {
-        return TangramCoordinateSystem.getConnectionPoints(for: piece)
+        return TangramEditorCoordinateSystem.getConnectionPoints(for: piece)
     }
 }

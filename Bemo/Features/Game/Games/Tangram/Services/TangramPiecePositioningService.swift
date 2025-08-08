@@ -168,7 +168,7 @@ class TangramPiecePositioningService {
     /// Gets the base vertices for a piece type
     private func getPieceVertices(for pieceType: TangramPieceType) -> [CGPoint] {
         // Use the geometry data from TangramGameGeometry
-        return TangramGameGeometry.getVertices(for: pieceType)
+        return TangramGameGeometry.normalizedVertices(for: pieceType)
     }
     
     // MARK: - Transform Helpers
@@ -204,5 +204,38 @@ class TangramPiecePositioningService {
     /// Applies relative position to a piece
     func applyRelativePosition(basePosition: CGPoint, offset: CGVector) -> CGPoint {
         return CGPoint(x: basePosition.x + offset.dx, y: basePosition.y + offset.dy)
+    }
+}
+
+// MARK: - Protocol Conformance
+
+extension TangramPiecePositioningService {
+    func calculateLayout(for pieces: [TangramPieceType], in bounds: CGRect) -> [TangramPieceType: CGPoint] {
+        var result: [TangramPieceType: CGPoint] = [:]
+        
+        // Use existing grid arrangement logic
+        let positions = arrangeInGrid(
+            pieceCount: pieces.count,
+            containerSize: CGSize(width: bounds.width, height: bounds.height),
+            padding: 20
+        )
+        
+        for (index, piece) in pieces.enumerated() {
+            if let position = positions[index] {
+                // Adjust position relative to bounds origin
+                let adjustedPosition = CGPoint(
+                    x: bounds.origin.x + position.x,
+                    y: bounds.origin.y + position.y
+                )
+                result[piece] = adjustedPosition
+            }
+        }
+        
+        return result
+    }
+    
+    func snapToGrid(_ position: CGPoint, gridSize: CGFloat) -> CGPoint {
+        // Use existing alignToGrid method
+        return alignToGrid(position: position, gridSize: gridSize)
     }
 }

@@ -121,12 +121,12 @@ struct PuzzleSelectionView: View {
                     Divider()
                     ForEach(viewModel.availableCategories, id: \.self) { category in
                         Button(action: { viewModel.selectedCategory = category }) {
-                            Label(category.rawValue, systemImage: viewModel.categoryIcon(category))
+                            Label(category.capitalized, systemImage: viewModel.categoryIcon(category))
                         }
                     }
                 } label: {
                     filterChip(
-                        title: viewModel.selectedCategory?.rawValue ?? "Category",
+                        title: viewModel.selectedCategory?.capitalized ?? "Category",
                         isSelected: viewModel.selectedCategory != nil
                     )
                 }
@@ -139,12 +139,12 @@ struct PuzzleSelectionView: View {
                     Divider()
                     ForEach(viewModel.availableDifficulties, id: \.self) { difficulty in
                         Button(action: { viewModel.selectedDifficulty = difficulty }) {
-                            Label(difficulty.displayName, systemImage: viewModel.difficultyIcon(difficulty))
+                            Label(difficultyDisplayName(difficulty), systemImage: viewModel.difficultyIcon(difficulty))
                         }
                     }
                 } label: {
                     filterChip(
-                        title: viewModel.selectedDifficulty?.displayName ?? "Difficulty",
+                        title: viewModel.selectedDifficulty.map { difficultyDisplayName($0) } ?? "Difficulty",
                         isSelected: viewModel.selectedDifficulty != nil
                     )
                 }
@@ -241,12 +241,25 @@ struct PuzzleSelectionView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+    
+    // MARK: - Helper Functions
+    
+    private func difficultyDisplayName(_ difficulty: Int) -> String {
+        switch difficulty {
+        case 1: return "Beginner"
+        case 2: return "Easy"
+        case 3: return "Medium"
+        case 4: return "Hard"
+        case 5: return "Expert"
+        default: return "Level \(difficulty)"
+        }
+    }
 }
 
 // MARK: - Puzzle Card View
 
 struct TangramPuzzleCard: View {
-    let puzzle: TangramPuzzle
+    let puzzle: GamePuzzleData
     let thumbnail: Image?
     let color: Color
     let difficultyColor: Color
@@ -303,16 +316,16 @@ struct TangramPuzzleCard: View {
                         // Difficulty stars
                         HStack(spacing: 2) {
                             ForEach(0..<5) { index in
-                                Image(systemName: index < puzzle.difficulty.rawValue ? "star.fill" : "star")
+                                Image(systemName: index < puzzle.difficulty ? "star.fill" : "star")
                                     .font(.system(size: 10))
-                                    .foregroundColor(index < puzzle.difficulty.rawValue ? difficultyColor : .gray.opacity(0.3))
+                                    .foregroundColor(index < puzzle.difficulty ? difficultyColor : .gray.opacity(0.3))
                             }
                         }
                         
                         Spacer()
                         
                         // Category badge
-                        Text(puzzle.category.rawValue)
+                        Text(puzzle.category)
                             .font(.system(size: 10))
                             .fontWeight(.medium)
                             .padding(.horizontal, 8)
@@ -341,12 +354,23 @@ struct TangramPuzzleCard: View {
 // MARK: - Puzzle Row View
 
 struct PuzzleRowView: View {
-    let puzzle: TangramPuzzle
+    let puzzle: GamePuzzleData
     let thumbnail: Image?
     let color: Color
     let difficultyColor: Color
     let categoryIcon: String
     let onTap: () -> Void
+    
+    private func difficultyDisplayName(_ difficulty: Int) -> String {
+        switch difficulty {
+        case 1: return "Beginner"
+        case 2: return "Easy"
+        case 3: return "Medium"
+        case 4: return "Hard"
+        case 5: return "Expert"
+        default: return "Unknown"
+        }
+    }
     
     var body: some View {
         Button(action: onTap) {
@@ -383,7 +407,7 @@ struct PuzzleRowView: View {
                         Text("•")
                             .foregroundColor(.secondary)
                         
-                        Label(puzzle.difficulty.displayName, systemImage: "star.fill")
+                        Label(difficultyDisplayName(puzzle.difficulty), systemImage: "star.fill")
                             .font(.caption)
                             .foregroundColor(difficultyColor)
                     }

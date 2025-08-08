@@ -156,7 +156,7 @@ class GameLobbyViewModel {
         
         // Add developer tools only if user is a developer
         if developerService.isDeveloper {
-            let tangramEditorTool = TangramEditorGame(puzzleManagementService: puzzleManagementService)
+            let tangramEditorTool = TangramEditorTool(puzzleManagementService: puzzleManagementService)
             
             availableGames.append(
                 GameItem(

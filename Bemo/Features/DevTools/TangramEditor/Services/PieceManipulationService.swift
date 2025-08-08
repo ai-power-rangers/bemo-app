@@ -54,7 +54,7 @@ class PieceManipulationService {
                     return .fixed
                 }
                 
-                let otherWorldVertices = TangramCoordinateSystem.getWorldVertices(for: otherPiece)
+                let otherWorldVertices = TangramEditorCoordinateSystem.getWorldVertices(for: otherPiece)
                 guard otherVertexIndex < otherWorldVertices.count else {
                     return .fixed
                 }
@@ -85,8 +85,8 @@ class PieceManipulationService {
                 }
                 
                 // Get world vertices for both pieces
-                let worldVerticesA = TangramCoordinateSystem.getWorldVertices(for: pieceA)
-                let worldVerticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
+                let worldVerticesA = TangramEditorCoordinateSystem.getWorldVertices(for: pieceA)
+                let worldVerticesB = TangramEditorCoordinateSystem.getWorldVertices(for: pieceB)
                 
                 // Calculate both edge lengths
                 let edgeDefA = edgesA[edgeA]
@@ -158,7 +158,7 @@ class PieceManipulationService {
                     return .fixed
                 }
                 
-                let worldVerticesB = TangramCoordinateSystem.getWorldVertices(for: edgePiece)
+                let worldVerticesB = TangramEditorCoordinateSystem.getWorldVertices(for: edgePiece)
                 let edgesB = TangramGeometry.edges(for: edgePiece.type)
                 
                 guard edge < edgesB.count else {
@@ -170,7 +170,7 @@ class PieceManipulationService {
                 let edgeEnd = worldVerticesB[edgeDef.endVertex]
                 
                 // Get current vertex position on the edge for rotation pivot
-                let worldVerticesA = TangramCoordinateSystem.getWorldVertices(for: piece)
+                let worldVerticesA = TangramEditorCoordinateSystem.getWorldVertices(for: piece)
                 guard vertex < worldVerticesA.count else {
                     return .fixed
                 }

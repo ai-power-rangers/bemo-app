@@ -58,12 +58,58 @@ class TangramEditorStateMachine {
     // MARK: - State Transition Rules
     
     private func isValidTransition(from: EditorState, to: EditorState, puzzle: TangramPuzzle) -> Bool {
-        // Build transition table for clarity
-        let transition = StateTransition(from: from, to: to)
-        
-        // Check if transition is in allowed set
-        return allowedTransitions.contains(transition) || 
-               isConditionalTransitionValid(from: from, to: to, puzzle: puzzle)
+        // Use pattern matching for state transitions
+        switch (from, to) {
+        // First piece workflow
+        case (.selectingFirstPiece, .manipulatingFirstPiece):
+            return true
+        case (.manipulatingFirstPiece, .manipulatingFirstPiece):
+            return true // Updates
+        case (.manipulatingFirstPiece, .selectingNextPiece):
+            return true
+        case (.manipulatingFirstPiece, .selectingFirstPiece):
+            return true
+            
+        // Subsequent pieces workflow
+        case (.selectingNextPiece, .selectingCanvasConnections):
+            return true
+        case (.selectingNextPiece, .pieceSelected):
+            return true
+        case (.selectingCanvasConnections, .selectingPendingConnections):
+            return true
+        case (.selectingPendingConnections, .manipulatingPendingPiece):
+            return true
+        case (.selectingPendingConnections, .previewingPlacement):
+            return true
+        case (.selectingPendingConnections, .selectingNextPiece):
+            return true
+        case (.manipulatingPendingPiece, .manipulatingPendingPiece):
+            return true // Updates
+        case (.manipulatingPendingPiece, .previewingPlacement):
+            return true
+        case (.manipulatingPendingPiece, .selectingNextPiece):
+            return true
+        case (.previewingPlacement, .selectingNextPiece):
+            return true
+        case (.previewingPlacement, .idle):
+            return true
+            
+        // Editing existing pieces
+        case (.pieceSelected, .manipulatingExistingPiece):
+            return true
+        case (.pieceSelected, .idle):
+            return true
+        case (.manipulatingExistingPiece, .idle):
+            return true
+            
+        // General transitions
+        case (.idle, .pieceSelected):
+            return true
+            
+        // Check conditional transitions
+        default:
+            return isConditionalTransitionValid(from: from, to: to, puzzle: puzzle)
+        }
     }
     
     private func isConditionalTransitionValid(from: EditorState, to: EditorState, puzzle: TangramPuzzle) -> Bool {
@@ -91,39 +137,8 @@ class TangramEditorStateMachine {
     
     // MARK: - Transition Table
     
-    private struct StateTransition: Hashable {
-        let from: EditorState
-        let to: EditorState
-    }
-    
-    private let allowedTransitions: Set<StateTransition> = [
-        // First piece workflow
-        StateTransition(from: .selectingFirstPiece, to: .manipulatingFirstPiece),
-        StateTransition(from: .manipulatingFirstPiece, to: .manipulatingFirstPiece), // Updates
-        StateTransition(from: .manipulatingFirstPiece, to: .selectingNextPiece),
-        StateTransition(from: .manipulatingFirstPiece, to: .selectingFirstPiece),
-        
-        // Subsequent pieces workflow
-        StateTransition(from: .selectingNextPiece, to: .selectingCanvasConnections),
-        StateTransition(from: .selectingNextPiece, to: .pieceSelected),
-        StateTransition(from: .selectingCanvasConnections, to: .selectingPendingConnections),
-        StateTransition(from: .selectingPendingConnections, to: .manipulatingPendingPiece),
-        StateTransition(from: .selectingPendingConnections, to: .previewingPlacement),
-        StateTransition(from: .selectingPendingConnections, to: .selectingNextPiece),
-        StateTransition(from: .manipulatingPendingPiece, to: .manipulatingPendingPiece), // Updates
-        StateTransition(from: .manipulatingPendingPiece, to: .previewingPlacement),
-        StateTransition(from: .manipulatingPendingPiece, to: .selectingNextPiece),
-        StateTransition(from: .previewingPlacement, to: .selectingNextPiece),
-        StateTransition(from: .previewingPlacement, to: .idle),
-        
-        // Editing existing pieces
-        StateTransition(from: .pieceSelected, to: .manipulatingExistingPiece),
-        StateTransition(from: .pieceSelected, to: .idle),
-        StateTransition(from: .manipulatingExistingPiece, to: .idle),
-        
-        // General transitions
-        StateTransition(from: .idle, to: .pieceSelected),
-    ]
+    // Transitions are handled via pattern matching in isValidTransition method
+    // This provides better type safety with associated values in EditorState
 }
 
 // MARK: - EditorState Definition

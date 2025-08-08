@@ -5,9 +5,9 @@
 //  Service for loading and managing Tangram puzzles for gameplay
 //
 
-// WHAT: Loads bundled tangram puzzles and provides them for gameplay selection
-// ARCHITECTURE: Service in MVVM-S pattern, reuses TangramEditor's persistence infrastructure
-// USAGE: Injected into PuzzleSelectionViewModel to provide available puzzles
+// WHAT: Loads puzzles for gameplay using PuzzleManagementService
+// ARCHITECTURE: Service in MVVM-S pattern, uses shared PuzzleManagementService
+// USAGE: Injected into game components to provide available puzzles
 
 import SwiftUI
 import Observation
@@ -17,28 +17,30 @@ class PuzzleLibraryService {
     
     // MARK: - Observable State
     
-    private(set) var availablePuzzles: [TangramPuzzle] = []
+    private(set) var availablePuzzles: [GamePuzzleData] = []
     private(set) var isLoading = false
     private(set) var loadError: String?
     
     // MARK: - Dependencies
     
-    private let persistenceService: PuzzlePersistenceService
+    private let puzzleManagementService: PuzzleManagementService?
+    private let databaseLoader: TangramDatabaseLoader
     
     // MARK: - Computed Properties
     
-    var categories: [PuzzleCategory] {
-        Array(Set(availablePuzzles.map { $0.category })).sorted { $0.rawValue < $1.rawValue }
+    var categories: [String] {
+        Array(Set(availablePuzzles.map { $0.category })).sorted()
     }
     
-    var difficulties: [PuzzleDifficulty] {
-        Array(Set(availablePuzzles.map { $0.difficulty })).sorted { $0.rawValue < $1.rawValue }
+    var difficulties: [Int] {
+        Array(Set(availablePuzzles.map { $0.difficulty })).sorted()
     }
     
     // MARK: - Initialization
     
-    init(supabaseService: SupabaseService? = nil) {
-        self.persistenceService = PuzzlePersistenceService(supabaseService: supabaseService)
+    init(puzzleManagementService: PuzzleManagementService? = nil, supabaseService: SupabaseService? = nil) {
+        self.puzzleManagementService = puzzleManagementService
+        self.databaseLoader = TangramDatabaseLoader(supabaseService: supabaseService)
         loadPuzzles()
     }
     
@@ -50,21 +52,26 @@ class PuzzleLibraryService {
         
         Task {
             do {
-                // Load all puzzles (bundled and user)
-                let allPuzzles = try await persistenceService.loadAllPuzzles()
-                
-                await MainActor.run {
-                    // Use all loaded puzzles
-                    self.availablePuzzles = allPuzzles
-                    self.isLoading = false
+                // Try to use cached puzzles first
+                if let managementService = puzzleManagementService {
+                    let puzzles = await managementService.getTangramPuzzles()
+                    await MainActor.run {
+                        self.availablePuzzles = puzzles
+                        self.isLoading = false
+                    }
+                } else {
+                    // Fallback to direct database loading
+                    let puzzles = try await databaseLoader.loadOfficialPuzzles()
+                    await MainActor.run {
+                        self.availablePuzzles = puzzles
+                        self.isLoading = false
+                    }
                 }
             } catch {
                 await MainActor.run {
                     self.loadError = "Failed to load puzzles: \(error.localizedDescription)"
                     self.isLoading = false
-                    
-                    // Load some default puzzles as fallback
-                    self.availablePuzzles = createFallbackPuzzles()
+                    self.availablePuzzles = []
                 }
             }
         }
@@ -73,10 +80,10 @@ class PuzzleLibraryService {
     // MARK: - Puzzle Filtering
     
     func puzzles(
-        category: PuzzleCategory? = nil,
-        difficulty: PuzzleDifficulty? = nil,
+        category: String? = nil,
+        difficulty: Int? = nil,
         searchText: String = ""
-    ) -> [TangramPuzzle] {
+    ) -> [GamePuzzleData] {
         var filtered = availablePuzzles
         
         if let category = category {
@@ -98,104 +105,34 @@ class PuzzleLibraryService {
     
     // MARK: - Thumbnail Management
     
-    func thumbnailImage(for puzzle: TangramPuzzle) -> Image? {
-        if let thumbnailData = persistenceService.loadThumbnail(for: puzzle.id),
-           let uiImage = UIImage(data: thumbnailData) {
-            return Image(uiImage: uiImage)
-        }
+    func thumbnailImage(for puzzle: GamePuzzleData) -> Image? {
+        // For now, return nil - thumbnails would need to be stored separately
+        // or retrieved from a service
         return nil
     }
     
     
-    // MARK: - Fallback Data
+}
+
+// MARK: - Protocol Conformance
+
+extension PuzzleLibraryService: PuzzleLibraryProviding {
+    func loadPuzzles() async throws -> [GamePuzzleData] {
+        // Use puzzle management service or database loader
+        if let managementService = puzzleManagementService {
+            return await managementService.getTangramPuzzles()
+        } else {
+            return try await databaseLoader.loadOfficialPuzzles()
+        }
+    }
     
-    private func createFallbackPuzzles() -> [TangramPuzzle] {
-        // Create a few basic puzzles as fallback if loading fails
-        var puzzles: [TangramPuzzle] = []
-        
-        // Create a simple square puzzle
-        var squarePuzzle = TangramPuzzle(
-            name: "Basic Square",
-            category: .geometric,
-            difficulty: .beginner
-        )
-        
-        // Add pieces forming a square pattern
-        squarePuzzle.pieces = [
-            TangramPiece(
-                type: .largeTriangle1,
-                transform: CGAffineTransform(translationX: 200, y: 200).rotated(by: 0),
-            ),
-            TangramPiece(
-                type: .largeTriangle2,
-                transform: CGAffineTransform(translationX: 400, y: 200).rotated(by: .pi/2),
-            ),
-            TangramPiece(
-                type: .mediumTriangle,
-                transform: CGAffineTransform(translationX: 300, y: 300).rotated(by: .pi/4),
-            ),
-            TangramPiece(
-                type: .smallTriangle1,
-                transform: CGAffineTransform(translationX: 200, y: 400).rotated(by: -.pi/4),
-            ),
-            TangramPiece(
-                type: .smallTriangle2,
-                transform: CGAffineTransform(translationX: 400, y: 400).rotated(by: .pi * 3/4),
-            ),
-            TangramPiece(
-                type: .square,
-                transform: CGAffineTransform(translationX: 300, y: 200),
-            ),
-            TangramPiece(
-                type: .parallelogram,
-                transform: CGAffineTransform(translationX: 300, y: 400),
-            )
-        ]
-        puzzles.append(squarePuzzle)
-        
-        // Create a simple house puzzle
-        var housePuzzle = TangramPuzzle(
-            name: "Simple House",
-            category: .objects,
-            difficulty: .easy
-        )
-        
-        // House shape with roof
-        housePuzzle.pieces = [
-            // Roof (two large triangles)
-            TangramPiece(
-                type: .largeTriangle1,
-                transform: CGAffineTransform(translationX: 250, y: 150).rotated(by: -.pi/4),
-            ),
-            TangramPiece(
-                type: .largeTriangle2,
-                transform: CGAffineTransform(translationX: 350, y: 150).rotated(by: .pi/4),
-            ),
-            // Walls (square and parallelogram)
-            TangramPiece(
-                type: .square,
-                transform: CGAffineTransform(translationX: 250, y: 300),
-            ),
-            TangramPiece(
-                type: .parallelogram,
-                transform: CGAffineTransform(translationX: 350, y: 300),
-            ),
-            // Door/windows (small triangles and medium)
-            TangramPiece(
-                type: .mediumTriangle,
-                transform: CGAffineTransform(translationX: 300, y: 250),
-            ),
-            TangramPiece(
-                type: .smallTriangle1,
-                transform: CGAffineTransform(translationX: 250, y: 350),
-            ),
-            TangramPiece(
-                type: .smallTriangle2,
-                transform: CGAffineTransform(translationX: 350, y: 350),
-            )
-        ]
-        puzzles.append(housePuzzle)
-        
-        return puzzles
+    func savePuzzle(_ puzzle: GamePuzzleData) async throws {
+        // Game doesn't save puzzles - that's only done in the editor
+        throw NSError(domain: "PuzzleLibraryService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Saving puzzles is not supported in the game"])
+    }
+    
+    func deletePuzzle(id: String) async throws {
+        // Game doesn't delete puzzles - that's only done in the editor  
+        throw NSError(domain: "PuzzleLibraryService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Deleting puzzles is not supported in the game"])
     }
 }

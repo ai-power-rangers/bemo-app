@@ -19,14 +19,11 @@ class TangramGameplayService {
     // MARK: - Properties
     
     private let pieceValidator: TangramPieceValidator
-    private let geometryUtilities: TangramGeometryUtilities
     
     // MARK: - Initialization
     
-    init(pieceValidator: TangramPieceValidator = TangramPieceValidator(),
-         geometryUtilities: TangramGeometryUtilities = TangramGeometryUtilities()) {
+    init(pieceValidator: TangramPieceValidator = TangramPieceValidator()) {
         self.pieceValidator = pieceValidator
-        self.geometryUtilities = geometryUtilities
     }
     
     // MARK: - Validation Logic

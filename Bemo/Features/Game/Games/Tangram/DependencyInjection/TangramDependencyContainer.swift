@@ -63,8 +63,7 @@ class TangramDependencyContainer {
         // Initialize core services
         self.pieceValidator = TangramPieceValidator()
         self.gameplayService = TangramGameplayService(
-            pieceValidator: pieceValidator,
-            geometryUtilities: geometryUtilities
+            pieceValidator: pieceValidator
         )
         self.positioningService = TangramPiecePositioningService()
         self.hintEngine = TangramHintEngine()
@@ -94,8 +93,9 @@ class TangramDependencyContainer {
             onPuzzleSelected: { puzzle in
                 // Convert TangramPuzzle to GamePuzzleData if needed
                 if let tangramPuzzle = puzzle as? TangramPuzzle {
-                    let gamePuzzleData = self.dataConverter.convertFromCodable(tangramPuzzle)
-                    onPuzzleSelected(gamePuzzleData as Any)
+                    if let gamePuzzleData = self.dataConverter.convertFromCodable(tangramPuzzle) {
+                        onPuzzleSelected(gamePuzzleData)
+                    }
                 } else {
                     onPuzzleSelected(puzzle)
                 }

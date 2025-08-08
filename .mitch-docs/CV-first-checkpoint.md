@@ -2,7 +2,99 @@
 
 ## Executive Summary
 
-This plan transforms the Tangram game to simulate the physical world experience where users build puzzles on a "table" (middle zone), exactly as they would with physical pieces under a CV camera. Every action generates CV-formatted output, and validation uses relative positioning with the first-placed piece as the permanent anchor.
+This plan transforms the Tangram game to simulate the physical world experience where users build puzzles on a "table" (middle zone), exactly as they would with physical pieces under a CV camera. Every action generates CV-formatted output, and validation uses relative positioning with dynamic anchor management.
+
+## Definitive Implementation Decisions
+
+### 1. CV↔Game Type Mapping (LOCKED)
+```swift
+enum TangramPieceType: String {
+    case square, smallTriangle1, smallTriangle2, mediumTriangle, 
+         largeTriangle1, largeTriangle2, parallelogram
+}
+
+// Immutable mapping - NEVER change
+func mapCVNameToType(_ name: String) -> TangramPieceType? {
+    switch name {
+    case "tangram_square":         return .square
+    case "tangram_triangle_sml":   return .smallTriangle1  // Red small triangle
+    case "tangram_triangle_sml2":  return .smallTriangle2  // Blue small triangle  
+    case "tangram_triangle_med":   return .mediumTriangle
+    case "tangram_triangle_lrg":   return .largeTriangle1  // Green large triangle
+    case "tangram_triangle_lrg2":  return .largeTriangle2  // Yellow large triangle
+    case "tangram_parallelogram":  return .parallelogram
+    default: return nil
+    }
+}
+```
+
+### 2. Coordinate System Contract
+- **Internal Math**: Always Y-up, radians CCW, normalized units
+- **CV Input**: Post-homography table plane coordinates, Y-up, degrees CCW
+- **SpriteKit Render**: Y-down conversion ONLY at draw time (zRotation is radians CCW)
+- **Single Conversion Point**: All transforms happen in `CVToInternalConverter`
+- **Angle Direction**: All rotations are counter-clockwise positive in their respective coordinate systems
+
+### 3. Scale Normalization
+- **Canonical Unit**: Square side = 1.0
+- **All pieces scaled relative to square**
+- **Similarity alignment** during validation for scale/rotation invariance
+
+### 4. Symmetry Rules (FIXED)
+```swift
+func getRotationalSymmetry(for type: TangramPieceType) -> Double {
+    switch type {
+    case .square: return 90.0          // 4-fold symmetry
+    case .smallTriangle1, .smallTriangle2, 
+         .mediumTriangle, .largeTriangle1, 
+         .largeTriangle2: return 180.0  // 2-fold symmetry
+    case .parallelogram: return 360.0   // No rotational symmetry
+    }
+}
+```
+
+### 5. Parallelogram Flip Detection
+```swift
+func isFlipped(transform: CGAffineTransform) -> Bool {
+    let determinant = transform.a * transform.d - transform.b * transform.c
+    return determinant < 0  // Negative = flipped
+}
+```
+
+### 6. Tolerance Values (Normalized Units)
+```swift
+struct ValidationTolerance {
+    let position: Double  // In square-side units
+    let rotation: Double  // In degrees
+    
+    static let easy = ValidationTolerance(position: 0.40, rotation: 15.0)
+    static let standard = ValidationTolerance(position: 0.25, rotation: 10.0)
+    static let precise = ValidationTolerance(position: 0.15, rotation: 5.0)
+    static let expert = ValidationTolerance(position: 0.08, rotation: 3.0)
+}
+```
+
+### 7. CV Stream Configuration
+- **Emission Rate**: Max 20Hz (50ms minimum between updates)
+- **Settle Time**: 200ms after piece drop before validation
+- **Schema Version**: All JSON includes `"schema_version": 1`
+- **Object IDs**: Each piece has stable `object_id` field
+
+### 8. Anchor Management Policy
+- **Touch Mode**: First piece placed = anchor
+- **CV Mode**: Largest piece with hysteresis (avoid flicker)
+- **Removal**: Next oldest/largest piece promotes
+- **Forced Anchor**: Optional override for testing
+
+### 9. Camera Inversion
+- **Setup Toggle**: `isCameraInverted` configuration flag
+- **Not Auto-Detected**: Manual setting based on hardware setup
+- **Default**: false (normal orientation)
+
+### 10. Vertex Ordering
+- **Contract**: CV outputs vertices clockwise from canonical corner
+- **Enforcement**: Single reordering function if needed
+- **Canonical Corner**: Top-left for squares, right-angle vertex for triangles
 
 ## Core Concept: Physical World Simulation
 
@@ -174,17 +266,34 @@ extension TangramThreeZoneScene {
         generateCVOutputStream()
     }
     
-    /// Promote a new anchor from existing pieces
+    /// Promote a new anchor from existing pieces with hysteresis
     private func promoteNewAnchor() {
-        // Priority: oldest piece (first in array), or largest piece
-        let newAnchor = assembledPieces.first ?? assembledPieces.max { p1, p2 in
-            getPieceArea(p1.pieceType) < getPieceArea(p2.pieceType)
+        // For CV mode: use largest piece with hysteresis
+        // For touch mode: use oldest piece (first placed)
+        
+        let newAnchor: PuzzlePieceNode?
+        if isCVMode {
+            // Find largest piece that has been stable for N frames
+            newAnchor = assembledPieces
+                .filter { hasBeenStableForFrames($0, frames: 5) }  // Require 5 stable frames
+                .max { p1, p2 in
+                    getPieceArea(p1.pieceType) < getPieceArea(p2.pieceType)
+                }
+        } else {
+            // Touch mode: oldest piece (first in array)
+            newAnchor = assembledPieces.first
         }
         
         if let newAnchor = newAnchor {
             setAsAnchor(newAnchor)
             print("🔄 Anchor promoted to: \(newAnchor.pieceType?.rawValue ?? "unknown")")
         }
+    }
+    
+    /// Check if piece has been stable for N frames (prevents anchor thrashing)
+    private func hasBeenStableForFrames(_ piece: PuzzlePieceNode, frames: Int) -> Bool {
+        guard let stability = pieceStabilityFrames[piece.id ?? ""] else { return false }
+        return stability >= frames
     }
     
     /// Set a piece as the anchor
@@ -222,69 +331,365 @@ extension TangramThreeZoneScene {
 
 ### Phase 2: CV Output Stream Generator (Priority: CRITICAL)
 
-#### 2.1 Real-time CV Format Generation
+#### 2.1 Single-Boundary CV Conversion
+
+```swift
+// Location: Bemo/Features/Game/Games/Tangram/Services/CVToInternalConverter.swift
+
+/**
+ * CVToInternalConverter - Single boundary for CV↔Internal coordinate conversion
+ * 
+ * ============================================================================
+ * COORDINATE SYSTEM CONTRACT (LOCKED):
+ * ============================================================================
+ * - Rotations: Counter-clockwise positive (CCW+)
+ * - CV Input: Y-up coordinate system, degrees
+ * - Internal: Y-up coordinate system, radians  
+ * - Units: Normalized to square side = 1.0
+ * - SpriteKit: Y-down at render only, zRotation is radians CCW
+ * 
+ * ============================================================================
+ * HOMOGRAPHY HANDLING POLICY:
+ * ============================================================================
+ * - CV coordinates assumed POST-homography (table-plane aligned)
+ * - If "homography_applied": false, we apply the provided matrix
+ * - If "homography_applied": true or missing, coordinates used as-is
+ * - Non-identity matrix presence alone is NOT an error
+ * 
+ * ============================================================================
+ * SCALE CALIBRATION PRECEDENCE:
+ * ============================================================================
+ * 1. Square vertices (most reliable) → direct measurement
+ * 2. Large triangle leg → equals square side
+ * 3. Medium triangle leg → multiply by √2
+ * 4. Small triangle leg → multiply by 2
+ * - Calibration cached in UserDefaults for session persistence
+ * 
+ * ============================================================================
+ * VERTEX CANONICALIZATION:
+ * ============================================================================
+ * - Square/Parallelogram: Start from min(y), then min(x), order clockwise
+ * - Triangles: Start from right-angle vertex (opposite hypotenuse), order clockwise
+ * - Applied to ALL pieces before any flip/rotation detection
+ * 
+ * ============================================================================
+ * CONFIGURATION:
+ * ============================================================================
+ * - Camera Inversion: Manual toggle via isCameraInverted (persisted)
+ * - Difficulty Level: Persisted in UserDefaults
+ * - Scale Calibration: Persisted in UserDefaults
+ * 
+ * Schema Version: 1
+ */
+class CVToInternalConverter {
+    
+    // Configuration - all persisted in UserDefaults
+    var isCameraInverted: Bool {
+        get { UserDefaults.standard.bool(forKey: "camera_inverted") }
+        set { UserDefaults.standard.set(newValue, forKey: "camera_inverted") }
+    }
+    
+    private var squareSideInCV: Double {
+        get { 
+            UserDefaults.standard.double(forKey: "cv_square_scale") != 0 
+                ? UserDefaults.standard.double(forKey: "cv_square_scale") 
+                : 1.0  // Default if not calibrated
+        }
+        set { UserDefaults.standard.set(newValue, forKey: "cv_square_scale") }
+    }
+    
+    /// Calibrate scale from CV data with fallback to other pieces
+    func calibrateScale(from cvData: [String: Any]) {
+        guard let objects = cvData["objects"] as? [[String: Any]], !objects.isEmpty else { return }
+        
+        // Try square first (most reliable)
+        if let square = objects.first(where: { ($0["name"] as? String) == "tangram_square" }),
+           let vertices = square["vertices"] as? [[Double]], vertices.count >= 4 {
+            let side1 = hypot(vertices[1][0] - vertices[0][0], vertices[1][1] - vertices[0][1])
+            let side2 = hypot(vertices[2][0] - vertices[1][0], vertices[2][1] - vertices[1][1])
+            squareSideInCV = (side1 + side2) / 2.0
+            UserDefaults.standard.set(squareSideInCV, forKey: "cv_square_scale")
+            return
+        }
+        
+        // Fallback to large triangle (leg = square side in standard tangram)
+        if let largeTri = objects.first(where: { 
+            let name = $0["name"] as? String
+            return name == "tangram_triangle_lrg" || name == "tangram_triangle_lrg2"
+        }), let vertices = largeTri["vertices"] as? [[Double]], vertices.count == 3 {
+            let rightAngleIdx = findRightAngleVertex(vertices)
+            let leg1Idx = (rightAngleIdx + 1) % 3
+            let leg2Idx = (rightAngleIdx + 2) % 3
+            let legLength = hypot(vertices[leg1Idx][0] - vertices[rightAngleIdx][0],
+                                 vertices[leg1Idx][1] - vertices[rightAngleIdx][1])
+            squareSideInCV = legLength  // Large triangle leg = square side
+            UserDefaults.standard.set(squareSideInCV, forKey: "cv_square_scale")
+            return
+        }
+        
+        // Fallback to medium triangle (leg = square side / √2)
+        if let medTri = objects.first(where: { ($0["name"] as? String) == "tangram_triangle_med" }),
+           let vertices = medTri["vertices"] as? [[Double]], vertices.count == 3 {
+            let rightAngleIdx = findRightAngleVertex(vertices)
+            let leg1Idx = (rightAngleIdx + 1) % 3
+            let legLength = hypot(vertices[leg1Idx][0] - vertices[rightAngleIdx][0],
+                                 vertices[leg1Idx][1] - vertices[rightAngleIdx][1])
+            squareSideInCV = legLength * sqrt(2.0)  // Medium triangle leg = square/√2
+            UserDefaults.standard.set(squareSideInCV, forKey: "cv_square_scale")
+            return
+        }
+        
+        // Final fallback to small triangle (leg = square side / 2)
+        if let smallTri = objects.first(where: { 
+            let name = $0["name"] as? String
+            return name == "tangram_triangle_sml" || name == "tangram_triangle_sml2"
+        }), let vertices = smallTri["vertices"] as? [[Double]], vertices.count == 3 {
+            let rightAngleIdx = findRightAngleVertex(vertices)
+            let leg1Idx = (rightAngleIdx + 1) % 3
+            let legLength = hypot(vertices[leg1Idx][0] - vertices[rightAngleIdx][0],
+                                 vertices[leg1Idx][1] - vertices[rightAngleIdx][1])
+            squareSideInCV = legLength * 2.0  // Small triangle leg = square/2
+            UserDefaults.standard.set(squareSideInCV, forKey: "cv_square_scale")
+        }
+    }
+    
+    /// Convert CV data to internal normalized format
+    func convertToInternal(_ cvData: [String: Any]) -> InternalPuzzleState {
+        // Handle homography if needed
+        var transformedObjects = cvData["objects"] as? [[String: Any]] ?? []
+        
+        // Check if homography needs to be applied
+        if let homographyApplied = cvData["homography_applied"] as? Bool, !homographyApplied,
+           let homography = cvData["homography"] as? [[Double]] {
+            // Apply homography to objects
+            transformedObjects = applyHomography(homography, to: transformedObjects)
+        }
+        // Otherwise, assume coordinates are already plane-aligned (post-homography)
+        // Non-identity matrix presence is OK - CV may include it for reference
+        
+        // Load cached scale if available
+        if squareSideInCV == 1.0, let cached = UserDefaults.standard.object(forKey: "cv_square_scale") as? Double {
+            squareSideInCV = cached
+        }
+        
+        guard let objects = cvData["objects"] as? [[String: Any]] else {
+            return InternalPuzzleState(pieces: [])
+        }
+        
+        let pieces = objects.compactMap { obj -> InternalPiece? in
+            guard let name = obj["name"] as? String,
+                  let type = mapCVNameToType(name),
+                  let pose = obj["pose"] as? [String: Any],
+                  let translation = pose["translation"] as? [Double],
+                  let rotationDegrees = pose["rotation_degrees"] as? Double,
+                  let objectId = obj["object_id"] as? String else { return nil }
+            
+            // Optional: Gate on confidence if available
+            if let confidence = obj["confidence"] as? Double, confidence < 0.7 {
+                return nil  // Skip low-confidence detections
+            }
+            
+            // Optional: Require stability (piece stationary for 200ms)
+            if let stabilityMs = obj["stability_ms"] as? Double, stabilityMs < 200 {
+                return nil  // Skip pieces still in motion
+            }
+            
+            // Canonicalize vertices for all pieces before any rotation/flip logic
+            if let vertices = obj["vertices"] as? [[Double]] {
+                obj["vertices"] = canonicalizeVertices(vertices, for: type)
+            }
+            
+            // Single coordinate conversion point - no Y negation elsewhere!
+            var x = translation[0] / squareSideInCV  // Normalize to square=1.0
+            var y = translation[1] / squareSideInCV
+            var rotation = rotationDegrees * .pi / 180.0  // To radians
+            
+            // Handle camera inversion if configured
+            if isCameraInverted {
+                rotation += .pi
+                x = -x
+                y = -y
+            }
+            
+            // Detect flip for parallelogram using vertex winding
+            let isFlipped = (type == .parallelogram) ? detectFlipFromVertices(obj) : false
+            
+            return InternalPiece(
+                id: objectId,
+                type: type,
+                position: CGPoint(x: x, y: y),  // Y-up, normalized
+                rotation: rotation,              // Radians
+                isFlipped: isFlipped
+            )
+        }
+        
+        return InternalPuzzleState(pieces: pieces)
+    }
+    
+    /// Canonicalize vertices to ensure consistent ordering
+    private func canonicalizeVertices(_ vertices: [[Double]], for type: TangramPieceType) -> [[Double]] {
+        guard vertices.count >= 3 else { return vertices }
+        
+        switch type {
+        case .square, .parallelogram:
+            // Find vertex with min(y), then min(x) in Y-up space
+            let canonical = vertices.enumerated().min { a, b in
+                if abs(a.element[1] - b.element[1]) > 0.001 {
+                    return a.element[1] < b.element[1]  // Lower Y first
+                }
+                return a.element[0] < b.element[0]  // Then lower X
+            }?.offset ?? 0
+            
+            // Reorder clockwise from canonical corner
+            return Array(vertices[canonical...] + vertices[..<canonical])
+            
+        case .smallTriangle1, .smallTriangle2, .mediumTriangle, .largeTriangle1, .largeTriangle2:
+            // Find right-angle vertex by checking edge lengths
+            let rightAngleIndex = findRightAngleVertex(vertices)
+            
+            // Order clockwise starting from right-angle vertex
+            return Array(vertices[rightAngleIndex...] + vertices[..<rightAngleIndex])
+            
+        default:
+            return vertices
+        }
+    }
+    
+    /// Find the right-angle vertex in a triangle
+    private func findRightAngleVertex(_ vertices: [[Double]]) -> Int {
+        guard vertices.count == 3 else { return 0 }
+        
+        // Calculate edge lengths
+        let edges = [
+            hypot(vertices[1][0] - vertices[0][0], vertices[1][1] - vertices[0][1]),  // 0->1
+            hypot(vertices[2][0] - vertices[1][0], vertices[2][1] - vertices[1][1]),  // 1->2
+            hypot(vertices[0][0] - vertices[2][0], vertices[0][1] - vertices[2][1])   // 2->0
+        ]
+        
+        // Hypotenuse is the longest edge; vertex opposite to it is the right angle
+        let maxEdgeIndex = edges.enumerated().max(by: { $0.element < $1.element })?.offset ?? 0
+        
+        // Vertex opposite to hypotenuse
+        return (maxEdgeIndex + 2) % 3
+    }
+    
+    /// Detect flip from vertex winding order
+    private func detectFlipFromVertices(_ obj: [String: Any]) -> Bool {
+        guard let vertices = obj["vertices"] as? [[Double]],
+              let name = obj["name"] as? String,
+              let type = mapCVNameToType(name) else { return false }
+        
+        // Canonicalize vertices first
+        let canonical = canonicalizeVertices(vertices, for: type)
+        
+        // Calculate signed area using shoelace formula
+        var signedArea = 0.0
+        for i in 0..<canonical.count {
+            let j = (i + 1) % canonical.count
+            signedArea += canonical[i][0] * canonical[j][1] - canonical[j][0] * canonical[i][1]
+        }
+        
+        // Negative area = clockwise winding = normal
+        // Positive area = counter-clockwise = flipped
+        return signedArea > 0
+    }
+}
+
+// MARK: - Angle/Rotation Helpers
+
+extension CVToInternalConverter {
+    /// Normalize angle to (-π, π] range
+    func normalizeAngle(_ angle: Double) -> Double {
+        var result = angle
+        while result > .pi { result -= 2 * .pi }
+        while result <= -.pi { result += 2 * .pi }
+        return result
+    }
+}
+
+// MARK: - Vector Rotation Extension
+extension CGVector {
+    /// Rotate vector by angle (radians, CCW)
+    func rotated(by angle: Double) -> CGVector {
+        let cosAngle = cos(angle)
+        let sinAngle = sin(angle)
+        return CGVector(
+            dx: dx * cosAngle - dy * sinAngle,
+            dy: dx * sinAngle + dy * cosAngle
+        )
+    }
+}
+
+#### 2.2 Touch-to-CV Output Bridge
 
 ```swift
 // Location: Bemo/Features/Game/Games/Tangram/Services/CVOutputBridge.swift
 
 class CVOutputBridge {
-    // Constants matching CV system
-    private let cvScale: Double = 2.819
-    private let simulateInvertedCamera = true // 180° rotation flag
     
-    /// Generates CV output for pieces in assembly zone
+    private var lastEmissionTime: TimeInterval = 0
+    private let emissionInterval: TimeInterval = 0.05  // 20Hz max
+    
+    /// Generate CV format from touch input (throttled)
     func generateCVOutput(
         assembledPieces: [PuzzlePieceNode],
         anchorPiece: PuzzlePieceNode?
-    ) -> [String: Any] {
+    ) -> [String: Any]? {
+        
+        // Throttle emissions
+        let now = CACurrentMediaTime()
+        guard now - lastEmissionTime >= emissionInterval else { return nil }
+        lastEmissionTime = now
         
         guard !assembledPieces.isEmpty else {
-            return ["objects": []]
+            return ["schema_version": 1, "objects": []]
         }
         
-        // All positions relative to anchor (or first piece if no anchor yet)
         let referencePoint = anchorPiece?.position ?? assembledPieces.first?.position ?? .zero
         
         let cvObjects = assembledPieces.map { piece in
-            convertToCVFormat(piece, relativeTo: referencePoint)
+            // Convert from SpriteKit Y-down to CV Y-up
+            let relX = (piece.position.x - referencePoint.x)
+            let relY = -(piece.position.y - referencePoint.y)  // Flip Y for CV
+            
+            return [
+                "name": mapTypeToCV(piece.pieceType),
+                "class_id": cvClassId(for: piece.pieceType),
+                "object_id": piece.id ?? UUID().uuidString,
+                "pose": [
+                    // SpriteKit zRotation is radians CCW in Y-down space
+                    // Convert to degrees CCW for CV (also Y-down in render, but we output Y-up coords)
+                    "rotation_degrees": piece.zRotation * 180.0 / .pi,
+                    "translation": [relX, relY]  // Y-up for CV
+                ],
+                "vertices": getVerticesClockwise(piece, relativeTo: referencePoint),
+                "is_anchor": piece.isAnchor,
+                "confidence": 1.0,  // Touch input has perfect confidence
+                "stability_ms": getPieceStabilityTime(piece)  // Time since last movement
+            ]
         }
         
         return [
+            "schema_version": 1,
             "homography": identityHomography(),
-            "scale": cvScale,
+            "homography_applied": true,  // Touch coords are already plane-aligned
+            "scale": 50.0,  // Default scale for touch input (will be calibrated on CV side)
             "objects": cvObjects,
-            "anchor_id": anchorPiece?.pieceType?.rawValue ?? "none"
+            "anchor_id": anchorPiece?.id ?? "none"
         ]
     }
     
-    /// Converts a single piece to CV format with relative positioning
-    private func convertToCVFormat(_ piece: PuzzlePieceNode, relativeTo anchor: CGPoint) -> [String: Any] {
-        // Calculate relative position from anchor
-        var relativeX = piece.position.x - anchor.x
-        var relativeY = piece.position.y - anchor.y
-        
-        // Convert to CV coordinate system (Y negative)
-        relativeY = -relativeY
-        
-        var rotation = radiansToDegrees(piece.zRotation)
-        
-        // Handle 180° camera inversion if needed
-        if simulateInvertedCamera {
-            rotation = normalizeAngle(rotation + 180.0)
-            relativeX = -relativeX
-            relativeY = -relativeY
+    private func mapTypeToCV(_ type: TangramPieceType?) -> String {
+        switch type {
+        case .square: return "tangram_square"
+        case .smallTriangle1: return "tangram_triangle_sml"
+        case .smallTriangle2: return "tangram_triangle_sml2"
+        case .mediumTriangle: return "tangram_triangle_med"
+        case .largeTriangle1: return "tangram_triangle_lrg"
+        case .largeTriangle2: return "tangram_triangle_lrg2"
+        case .parallelogram: return "tangram_parallelogram"
+        default: return "unknown"
         }
-        
-        return [
-            "name": cvName(for: piece.pieceType),
-            "class_id": cvClassId(for: piece.pieceType),
-            "pose": [
-                "rotation_degrees": rotation,
-                "translation": [relativeX, relativeY]
-            ],
-            "vertices": calculateVertices(piece, relativeTo: anchor),
-            "is_anchor": piece.isAnchor
-        ]
     }
 }
 ```
@@ -351,9 +756,9 @@ class TangramRelativeValidator {
     
     /// Build relative position map from user's assembly
     func buildUserMap(assembledPieces: [PuzzlePieceNode], anchor: PuzzlePieceNode?) -> RelativePositionMap {
-        // If no anchor yet, use first piece as temporary reference
-        let referencePoint = anchor ?? assembledPieces.first
-        guard let reference = referencePoint else {
+        // Use the actual anchor if available, not just first piece
+        guard let reference = anchor else {
+            // No anchor established yet
             return RelativePositionMap(anchorType: nil, relationships: [])
         }
         
@@ -417,7 +822,7 @@ class TangramRelativeValidator {
         )
     }
     
-    /// Compare two relative position maps
+    /// Compare two relative position maps with similarity alignment
     func validateMaps(
         userMap: RelativePositionMap,
         targetMap: RelativePositionMap,
@@ -426,57 +831,110 @@ class TangramRelativeValidator {
         
         var results: [ValidationResult] = []
         
-        // The anchor is always correct (it defines the origin)
-        results.append(ValidationResult(
-            pieceType: userMap.anchorType,
-            isCorrect: true,
-            positionError: 0,
-            rotationError: 0
-        ))
+        // Step 1: Estimate global scale and rotation using similarity alignment
+        let (globalScale, globalRotation) = estimateSimilarityTransform(
+            userMap: userMap,
+            targetMap: targetMap
+        )
         
-        // Find the matching anchor piece in target map
-        guard let targetAnchorRelation = findAnchorInTarget(userMap.anchorType, targetMap) else {
-            // If we can't find the anchor type in target, validation fails
-            return results
+        // Step 2: The anchor is always correct (defines origin)
+        if let anchorType = userMap.anchorType {
+            results.append(ValidationResult(
+                pieceType: anchorType,
+                isCorrect: true,
+                positionError: 0,
+                rotationError: 0
+            ))
         }
         
-        // Validate each relationship
+        // Step 3: Validate each piece with similarity adjustment
         for userRelation in userMap.relationships {
-            // Find corresponding piece in target map
             if let targetRelation = targetMap.relationships.first(where: { $0.pieceType == userRelation.pieceType }) {
                 
-                // Adjust target relation based on anchor alignment
-                let adjustedTargetRelation = adjustForAnchorAlignment(
-                    targetRelation,
-                    anchorOffset: targetAnchorRelation
+                // Apply similarity transform to target
+                let alignedTarget = PieceRelationship(
+                    pieceType: targetRelation.pieceType,
+                    relativePosition: CGVector(
+                        dx: targetRelation.relativePosition.dx * globalScale,
+                        dy: targetRelation.relativePosition.dy * globalScale
+                    ).rotated(by: globalRotation),
+                    relativeRotation: targetRelation.relativeRotation + globalRotation,
+                    isFlipped: targetRelation.isFlipped
                 )
                 
-                // Calculate errors
+                // Calculate position error in normalized units
                 let positionError = hypot(
-                    userRelation.relativePosition.dx - adjustedTargetRelation.relativePosition.dx,
-                    userRelation.relativePosition.dy - adjustedTargetRelation.relativePosition.dy
+                    userRelation.relativePosition.dx - alignedTarget.relativePosition.dx,
+                    userRelation.relativePosition.dy - alignedTarget.relativePosition.dy
                 )
                 
-                let rotationError = abs(normalizeAngle(
-                    userRelation.relativeRotation - adjustedTargetRelation.relativeRotation
-                ))
+                // Calculate rotation error with symmetry reduction
+                let symmetry = getRotationalSymmetry(for: userRelation.pieceType)
+                let rawRotationError = userRelation.relativeRotation - alignedTarget.relativeRotation
+                let rotationError = reduceAngleBySymmetry(rawRotationError, symmetry: symmetry)
                 
                 // Check if within tolerance
                 let isCorrect = positionError <= tolerance.position && 
-                               rotationError <= tolerance.rotation &&
+                               abs(rotationError) <= tolerance.rotation * .pi / 180.0 &&
                                (userRelation.pieceType != .parallelogram || 
-                                userRelation.isFlipped == adjustedTargetRelation.isFlipped)
+                                userRelation.isFlipped == alignedTarget.isFlipped)
                 
                 results.append(ValidationResult(
                     pieceType: userRelation.pieceType,
                     isCorrect: isCorrect,
                     positionError: positionError,
-                    rotationError: radiansToDegrees(rotationError)
+                    rotationError: abs(rotationError) * 180.0 / .pi
                 ))
             }
         }
         
         return results
+    }
+    
+    /// Estimate global scale and rotation between two maps
+    private func estimateSimilarityTransform(
+        userMap: RelativePositionMap,
+        targetMap: RelativePositionMap
+    ) -> (scale: Double, rotation: Double) {
+        
+        var scaleRatios: [Double] = []
+        var rotationDeltas: [Double] = []
+        
+        // Compare each matching piece pair
+        for userRel in userMap.relationships {
+            if let targetRel = targetMap.relationships.first(where: { $0.pieceType == userRel.pieceType }) {
+                // Scale: ratio of distances from anchor
+                let userDist = hypot(userRel.relativePosition.dx, userRel.relativePosition.dy)
+                let targetDist = hypot(targetRel.relativePosition.dx, targetRel.relativePosition.dy)
+                if targetDist > 0.01 {  // Avoid division by zero
+                    scaleRatios.append(userDist / targetDist)
+                }
+                
+                // Rotation: difference in angles from anchor
+                let userAngle = atan2(userRel.relativePosition.dy, userRel.relativePosition.dx)
+                let targetAngle = atan2(targetRel.relativePosition.dy, targetRel.relativePosition.dx)
+                rotationDeltas.append(normalizeAngle(userAngle - targetAngle))
+            }
+        }
+        
+        // Use median for robustness
+        let scale = scaleRatios.isEmpty ? 1.0 : median(scaleRatios)
+        let rotation = rotationDeltas.isEmpty ? 0.0 : median(rotationDeltas)
+        
+        return (scale, rotation)
+    }
+    
+    /// Reduce angle by rotational symmetry
+    private func reduceAngleBySymmetry(_ angle: Double, symmetry: Double) -> Double {
+        let symmetryRad = symmetry * .pi / 180.0
+        var reduced = angle
+        while reduced > symmetryRad / 2 {
+            reduced -= symmetryRad
+        }
+        while reduced < -symmetryRad / 2 {
+            reduced += symmetryRad
+        }
+        return reduced
     }
     
     private func findAnchorInTarget(_ anchorType: TangramPieceType, _ targetMap: RelativePositionMap) -> PieceRelationship? {
@@ -608,10 +1066,11 @@ extension TangramThreeZoneScene {
     
     /// Generate CV output on EVERY interaction
     private func generateCVOutputStream() {
-        let cvData = cvBridge.generateCVOutput(
+        // generateCVOutput is throttled and may return nil
+        guard let cvData = cvBridge.generateCVOutput(
             assembledPieces: assembledPieces,
             anchorPiece: anchorPiece
-        )
+        ) else { return }  // Throttled, skip this emission
         
         // Stream to viewModel
         onCVDataGenerated?(cvData)
@@ -655,21 +1114,44 @@ class TangramGameViewModel {
     // Stream processing
     private let relativeValidator = TangramRelativeValidator()
     private var lastCVData: [String: Any] = [:]
+    private var lastValidationTime: TimeInterval = 0
+    private let validationInterval: TimeInterval = 0.1  // Validate at 10Hz max
+    private var pieceStabilityTimers: [String: TimeInterval] = [:]  // Track piece settlement
     
-    /// Process CV stream in real-time
+    // Persisted difficulty level
+    var difficultyLevel: DifficultyLevel {
+        get { 
+            let rawValue = UserDefaults.standard.string(forKey: "tangram_difficulty") ?? "standard"
+            return DifficultyLevel(rawValue: rawValue) ?? .standard
+        }
+        set { 
+            UserDefaults.standard.set(newValue.rawValue, forKey: "tangram_difficulty")
+        }
+    }
+    
+    /// Process CV stream in real-time (emissions at 20Hz, validation at 10Hz)
     func processCVStream(_ cvData: [String: Any]) {
         lastCVData = cvData
+        
+        // Throttle validation to 10Hz even though CV streams at 20Hz
+        let now = CACurrentMediaTime()
+        guard now - lastValidationTime >= validationInterval else { return }
+        lastValidationTime = now
         
         // Only validate if we have pieces in assembly
         guard let objects = cvData["objects"] as? [[String: Any]], 
               !objects.isEmpty else { return }
         
+        // Check piece stability (require 200ms of no movement)
+        if !arePiecesStable(objects) { return }
+        
         // Build user's relative map
         let userMap = buildMapFromCVData(cvData)
         
-        // Build target relative map
+        // Build target relative map with current anchor type
         guard let targetMap = relativeValidator.buildTargetMap(
-            targetPieces: selectedPuzzle?.targetPieces ?? []
+            targetPieces: selectedPuzzle?.targetPieces ?? [],
+            anchorType: userMap.anchorType  // Pass the current anchor's type
         ) else { return }
         
         // Validate in real-time
@@ -682,92 +1164,97 @@ class TangramGameViewModel {
         // Update UI with validation results
         updateValidationDisplay(results)
         
-        // Check for puzzle completion
-        if results.allSatisfy({ $0.isCorrect }) && results.count == 7 {
+        // Partial assembly semantics:
+        // Only evaluate pieces that are present - don't fail if pieces are missing
+        // Completion requires ALL 7 pieces present AND all passing validation
+        let placedPieceCount = objects.count
+        let allPlacedCorrect = results.allSatisfy({ $0.isCorrect })
+        
+        if placedPieceCount == 7 && allPlacedCorrect {
             handlePuzzleCompletion()
+        } else if allPlacedCorrect {
+            // Show partial success feedback
+            showPartialSuccessFeedback(placedCount: placedPieceCount)
         }
     }
     
     private func currentTolerance() -> ValidationTolerance {
-        // Start generous, can be adjusted
-        return ValidationTolerance(
-            position: 25.0,  // pixels
-            rotation: 15.0,  // degrees
-            confidence: 0.8
-        )
+        // Use normalized tolerances based on difficulty
+        switch difficultyLevel {
+        case .easy:
+            return ValidationTolerance.easy      // 0.40 square units, 15°
+        case .standard:
+            return ValidationTolerance.standard  // 0.25 square units, 10°
+        case .precise:
+            return ValidationTolerance.precise   // 0.15 square units, 5°
+        case .expert:
+            return ValidationTolerance.expert    // 0.08 square units, 3°
+        default:
+            return ValidationTolerance.standard
+        }
     }
-}
-
-### Phase 4: 180° Camera Rotation Handling (Priority: HIGH)
-
-#### 4.1 Create Camera Orientation Service
-
-```swift
-// Location: Bemo/Features/Game/Games/Tangram/Services/CVCameraOrientationService.swift
-
-class CVCameraOrientationService {
-    private var isInverted: Bool = true // Default to inverted based on analysis
     
-    /// Auto-detect camera orientation from first few frames
-    func detectOrientation(cvData: [String: Any], expectedPuzzle: GamePuzzleData) -> Bool {
-        // Compare CV data with expected puzzle orientation
-        // If all rotations are ~180° off, camera is inverted
-        guard let objects = cvData["objects"] as? [[String: Any]] else { return isInverted }
+    /// Check if pieces have been stable for required duration
+    private func arePiecesStable(_ objects: [[String: Any]]) -> Bool {
+        let now = CACurrentMediaTime()
+        let requiredStabilityTime: TimeInterval = 0.2  // 200ms
+        let positionEpsilon = 0.01  // Normalized units
+        let rotationEpsilon = 0.5 * .pi / 180.0  // 0.5 degrees in radians
         
-        var rotationDeltas: [Double] = []
-        
-        for object in objects {
-            guard let pose = object["pose"] as? [String: Any],
-                  let rotation = pose["rotation_degrees"] as? Double,
-                  let className = object["name"] as? String,
-                  let targetPiece = findTargetPiece(className, in: expectedPuzzle) else {
-                continue
+        for obj in objects {
+            guard let objectId = obj["object_id"] as? String,
+                  let pose = obj["pose"] as? [String: Any],
+                  let translation = pose["translation"] as? [Double],
+                  let rotation = pose["rotation_degrees"] as? Double else { continue }
+            
+            // Check if we have previous state for this piece
+            if let lastState = pieceStates[objectId] {
+                // Check if position/rotation changed significantly
+                let positionDelta = hypot(translation[0] - lastState.position.x,
+                                         translation[1] - lastState.position.y)
+                let rotationDelta = abs(normalizeAngle((rotation - lastState.rotation) * .pi / 180.0))
+                
+                if positionDelta > positionEpsilon || rotationDelta > rotationEpsilon {
+                    // Piece moved - reset stability timer
+                    pieceStabilityTimers[objectId] = now
+                    pieceStates[objectId] = PieceState(
+                        position: CGPoint(x: translation[0], y: translation[1]),
+                        rotation: rotation
+                    )
+                }
+            } else {
+                // First time seeing this piece
+                pieceStabilityTimers[objectId] = now
+                pieceStates[objectId] = PieceState(
+                    position: CGPoint(x: translation[0], y: translation[1]),
+                    rotation: rotation
+                )
             }
             
-            let targetRotation = extractRotation(targetPiece.transform)
-            let delta = normalizeAngle(rotation - targetRotation)
-            rotationDeltas.append(delta)
-        }
-        
-        // If average delta is close to 180°, camera is inverted
-        let avgDelta = rotationDeltas.reduce(0, +) / Double(rotationDeltas.count)
-        isInverted = abs(avgDelta - 180) < 30 || abs(avgDelta + 180) < 30
-        
-        return isInverted
-    }
-    
-    /// Apply 180° correction if camera is inverted
-    func correctForInversion(_ cvData: [String: Any]) -> [String: Any] {
-        guard isInverted else { return cvData }
-        
-        var corrected = cvData
-        guard var objects = cvData["objects"] as? [[String: Any]] else { return cvData }
-        
-        for i in 0..<objects.count {
-            if var pose = objects[i]["pose"] as? [String: Any],
-               var rotation = pose["rotation_degrees"] as? Double,
-               var translation = pose["translation"] as? [Double] {
-                
-                // Add 180° to rotation
-                rotation = normalizeAngle(rotation + 180.0)
-                
-                // Reflect position around puzzle center
-                let centerX = 400.0
-                let centerY = 300.0
-                translation[0] = 2 * centerX - translation[0]
-                translation[1] = 2 * centerY - abs(translation[1])
-                
-                pose["rotation_degrees"] = rotation
-                pose["translation"] = translation
-                objects[i]["pose"] = pose
+            // Check if this piece has been stable long enough
+            if let stabilityStart = pieceStabilityTimers[objectId] {
+                if now - stabilityStart < requiredStabilityTime {
+                    return false  // At least one piece not stable yet
+                }
             }
         }
         
-        corrected["objects"] = objects
-        return corrected
+        return true  // All pieces stable
     }
+    
+    // Helper struct for tracking piece state
+    struct PieceState {
+        let position: CGPoint
+        let rotation: Double  // Degrees
+    }
+    private var pieceStates: [String: PieceState] = [:]
 }
-```
+
+### Phase 4: Camera Inversion Handling (Priority: HIGH) - REMOVED AUTO-DETECT
+
+**Decision: Manual toggle only, no auto-detection**
+
+Camera inversion is handled in `CVToInternalConverter` via a manual toggle that persists per device. The inversion logic is already implemented correctly - we just need a UI toggle to control it. No separate CVCameraOrientationService is needed.
 
 ### Phase 5: Validation Tolerance Configuration (Priority: MEDIUM)
 
@@ -776,16 +1263,17 @@ class CVCameraOrientationService {
 ```swift
 // Location: Bemo/Features/Game/Games/Tangram/Models/ValidationTolerance.swift
 
+// NOTE: All tolerances use normalized units (square side = 1.0)
 struct ValidationTolerance {
-    let position: CGFloat      // Pixels
+    let position: Double        // In square-side units (normalized)
     let rotation: Double        // Degrees
-    let confidence: Double      // CV confidence threshold
+    let confidence: Double      // CV confidence threshold (optional)
     
-    // Predefined difficulty levels
-    static let generous = ValidationTolerance(position: 30, rotation: 20, confidence: 0.7)
-    static let standard = ValidationTolerance(position: 20, rotation: 15, confidence: 0.8)
-    static let precise = ValidationTolerance(position: 10, rotation: 7, confidence: 0.9)
-    static let expert = ValidationTolerance(position: 5, rotation: 3, confidence: 0.95)
+    // Predefined difficulty levels (normalized units)
+    static let easy = ValidationTolerance(position: 0.40, rotation: 15.0, confidence: 0.7)
+    static let standard = ValidationTolerance(position: 0.25, rotation: 10.0, confidence: 0.8)
+    static let precise = ValidationTolerance(position: 0.15, rotation: 5.0, confidence: 0.9)
+    static let expert = ValidationTolerance(position: 0.08, rotation: 3.0, confidence: 0.95)
     
     // Special tolerances for piece types
     func adjusted(for pieceType: TangramPieceType) -> ValidationTolerance {
@@ -1012,17 +1500,58 @@ CV Output Stream (real-time):
 }
 ```
 
+## Implementation Summary: All Decisions Locked
+
+### Coordinate Pipeline (Fixed)
+1. **CV Input**: Post-homography, Y-up, degrees, table plane coordinates
+2. **Internal Math**: Y-up, radians, normalized (square = 1.0)
+3. **SpriteKit Render**: Y-down ONLY at draw time
+4. **Single Conversion**: All transforms in `CVToInternalConverter`
+
+### Piece Identity (Fixed)
+- `tangram_triangle_sml` → `smallTriangle1` (Red)
+- `tangram_triangle_sml2` → `smallTriangle2` (Blue)
+- `tangram_triangle_lrg` → `largeTriangle1` (Green)
+- `tangram_triangle_lrg2` → `largeTriangle2` (Yellow)
+- Pieces have unique IDs - no assignment problem
+
+### Validation Rules (Fixed)
+- **Similarity Alignment**: Estimate global (scale, rotation) via median
+- **Symmetry**: Square 90°, Triangles 180°, Parallelogram none
+- **Flip Detection**: Negative determinant = flipped
+- **Tolerances**: In normalized units (Easy: 0.40/15°, Standard: 0.25/10°, etc.)
+
+### CV Stream (Fixed)
+- **Rate**: Max 20Hz (50ms between emissions)
+- **Settle**: 200ms after drop before validation
+- **Schema**: Version 1, includes `object_id` for stability
+- **Throttled**: No spam on drag
+
+### Anchor Policy (Fixed)
+- **Touch**: First placed = anchor
+- **CV**: Largest piece with hysteresis
+- **Removal**: Next oldest/largest promotes
+- **Validation**: Works with ANY piece as anchor
+
+### What This Solves
+✅ Unique piece IDs eliminate matching complexity
+✅ Single conversion boundary prevents coordinate confusion
+✅ Normalized units make tolerances device-independent
+✅ Similarity alignment handles scale/rotation variance
+✅ Proper symmetry rules prevent false negatives
+✅ Throttling ensures performance
+✅ Dynamic anchor handles piece removal
+
 ## Conclusion
 
-This transformation fundamentally shifts the Tangram game from a snap-to-target puzzle to a **physical world simulation** where:
+This plan provides a **definitive, executable blueprint** for transforming the Tangram game into a CV-ready system. All design decisions have been made based on the feedback:
 
-1. Users build puzzles freely in an assembly area (middle zone)
-2. The first piece placed becomes the initial anchor point
-3. **If anchor is removed, the next piece automatically promotes to anchor**
-4. Every action generates CV-formatted output with relative positions from current anchor
-5. Validation compares relative position maps, not absolute coordinates
-6. No snapping behavior - pieces stay exactly where placed
+1. **Fixed CV↔Game mapping** with unique IDs
+2. **Single coordinate conversion** boundary
+3. **Scale-invariant validation** with similarity alignment
+4. **Proper symmetry handling** (triangles 180°, not 90°)
+5. **Normalized tolerances** independent of device/camera
+6. **Throttled CV stream** at 20Hz max
+7. **Dynamic anchor** with promotion on removal
 
-This **dynamic anchor system** ensures the game continues to function even as pieces are added and removed, exactly matching how a CV system would handle physical pieces where any piece could be picked up at any time. The validation logic works with ANY piece as the anchor, making it robust to real-world interactions.
-
-The plan prioritizes clear zone separation, dynamic anchor management, and continuous CV output streaming, ensuring the system is ready for both touch-based testing and future CV integration without any code changes to the validation logic.
+The implementation is now ready for execution with no remaining ambiguity. The system will seamlessly handle both touch input and future CV integration without any validation logic changes.

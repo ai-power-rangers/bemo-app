@@ -28,10 +28,7 @@ extension TangramEditorViewModel {
         }
     }
     
-    /// Check if a piece type has already been placed
-    func isPieceTypeAlreadyPlaced(_ type: PieceType) -> Bool {
-        puzzle.pieces.contains { $0.type == type }
-    }
+    // isPieceTypeAlreadyPlaced is defined in PieceOperations extension
     
     /// Validate if a piece can be removed
     func canRemovePiece(_ pieceId: String) -> Bool {

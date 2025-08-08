@@ -49,8 +49,8 @@ class ConnectionService {
             }
             
             // Use centralized coordinate system for vertex positions
-            let worldVerticesA = TangramCoordinateSystem.getWorldVertices(for: pieceA)
-            let worldVerticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
+            let worldVerticesA = TangramEditorCoordinateSystem.getWorldVertices(for: pieceA)
+            let worldVerticesB = TangramEditorCoordinateSystem.getWorldVertices(for: pieceB)
             
             guard vertexA < worldVerticesA.count, vertexB < worldVerticesB.count else { 
                 return nil 
@@ -84,8 +84,8 @@ class ConnectionService {
             }
             
             // Use centralized coordinate system for edge positions
-            let worldVerticesA = TangramCoordinateSystem.getWorldVertices(for: pieceA)
-            let worldVerticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
+            let worldVerticesA = TangramEditorCoordinateSystem.getWorldVertices(for: pieceA)
+            let worldVerticesB = TangramEditorCoordinateSystem.getWorldVertices(for: pieceB)
             
             let edgeStartA = worldVerticesA[edgesA[edgeA].startVertex]
             let edgeEndA = worldVerticesA[edgesA[edgeA].endVertex]
@@ -122,8 +122,8 @@ class ConnectionService {
             }
             
             // Use centralized coordinate system for vertex and edge positions
-            let worldVerticesA = TangramCoordinateSystem.getWorldVertices(for: pieceA)
-            let worldVerticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
+            let worldVerticesA = TangramEditorCoordinateSystem.getWorldVertices(for: pieceA)
+            let worldVerticesB = TangramEditorCoordinateSystem.getWorldVertices(for: pieceB)
             let edgesB = TangramGeometry.edges(for: pieceB.type)
             
             guard vertex < worldVerticesA.count, edge < edgesB.count else {
@@ -237,8 +237,8 @@ class ConnectionService {
         }
         
         // Use centralized coordinate system for world vertices
-        let verticesA = TangramCoordinateSystem.getWorldVertices(for: pieceA)
-        let verticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
+        let verticesA = TangramEditorCoordinateSystem.getWorldVertices(for: pieceA)
+        let verticesB = TangramEditorCoordinateSystem.getWorldVertices(for: pieceB)
         
         let tolerance: CGFloat = 1e-5
         

@@ -17,20 +17,20 @@ class PuzzleSelectionViewModel {
     
     // MARK: - Observable State
     
-    var selectedCategory: PuzzleCategory?
-    var selectedDifficulty: PuzzleDifficulty?
+    var selectedCategory: String?
+    var selectedDifficulty: Int?
     var searchText: String = ""
     var isGridView: Bool = true
     
     // MARK: - Dependencies
     
     private let libraryService: PuzzleLibraryService
-    private let onPuzzleSelected: (TangramPuzzle) -> Void
+    private let onPuzzleSelected: (GamePuzzleData) -> Void
     private let onBackToLobby: (() -> Void)?
     
     // MARK: - Computed Properties
     
-    var filteredPuzzles: [TangramPuzzle] {
+    var filteredPuzzles: [GamePuzzleData] {
         libraryService.puzzles(
             category: selectedCategory,
             difficulty: selectedDifficulty,
@@ -38,11 +38,11 @@ class PuzzleSelectionViewModel {
         )
     }
     
-    var availableCategories: [PuzzleCategory] {
+    var availableCategories: [String] {
         libraryService.categories
     }
     
-    var availableDifficulties: [PuzzleDifficulty] {
+    var availableDifficulties: [Int] {
         libraryService.difficulties
     }
     
@@ -58,7 +58,7 @@ class PuzzleSelectionViewModel {
     
     init(
         libraryService: PuzzleLibraryService,
-        onPuzzleSelected: @escaping (TangramPuzzle) -> Void,
+        onPuzzleSelected: @escaping (GamePuzzleData) -> Void,
         onBackToLobby: (() -> Void)? = nil
     ) {
         self.libraryService = libraryService
@@ -68,7 +68,7 @@ class PuzzleSelectionViewModel {
     
     // MARK: - Actions
     
-    func selectPuzzle(_ puzzle: TangramPuzzle) {
+    func selectPuzzle(_ puzzle: GamePuzzleData) {
         print("DEBUG: PuzzleSelectionViewModel.selectPuzzle called")
         onPuzzleSelected(puzzle)
     }
@@ -88,81 +88,85 @@ class PuzzleSelectionViewModel {
         onBackToLobby?()
     }
     
-    func thumbnailImage(for puzzle: TangramPuzzle) -> Image? {
+    func thumbnailImage(for puzzle: GamePuzzleData) -> Image? {
         return libraryService.thumbnailImage(for: puzzle)
     }
     
-    func thumbnailColor(for puzzle: TangramPuzzle) -> Color {
+    func thumbnailColor(for puzzle: GamePuzzleData) -> Color {
         // UI logic belongs in ViewModel, not in service
         switch puzzle.category {
-        case .animals:
+        case "animals":
             return .green
-        case .geometric:
+        case "geometric":
             return .blue
-        case .objects:
+        case "objects":
             return .orange
-        case .people:
+        case "people":
             return .purple
-        case .letters:
+        case "letters":
             return .red
-        case .numbers:
+        case "numbers":
             return .cyan
-        case .abstract:
+        case "abstract":
             return .pink
-        case .custom:
+        default:
             return .gray
         }
     }
     
     // MARK: - Display Helpers
     
-    func difficultyColor(_ difficulty: PuzzleDifficulty) -> Color {
+    func difficultyColor(_ difficulty: Int) -> Color {
         switch difficulty {
-        case .beginner:
+        case 1:
             return .teal
-        case .easy:
+        case 2:
             return .green
-        case .medium:
+        case 3:
             return .orange
-        case .hard:
+        case 4:
             return .red
-        case .expert:
+        case 5:
             return .purple
+        default:
+            return .gray
         }
     }
     
-    func difficultyIcon(_ difficulty: PuzzleDifficulty) -> String {
+    func difficultyIcon(_ difficulty: Int) -> String {
         switch difficulty {
-        case .beginner:
+        case 1:
             return "star.circle.fill"
-        case .easy:
+        case 2:
             return "1.circle.fill"
-        case .medium:
+        case 3:
             return "2.circle.fill"
-        case .hard:
+        case 4:
             return "3.circle.fill"
-        case .expert:
+        case 5:
             return "4.circle.fill"
+        default:
+            return "questionmark.circle.fill"
         }
     }
     
-    func categoryIcon(_ category: PuzzleCategory) -> String {
+    func categoryIcon(_ category: String) -> String {
         switch category {
-        case .animals:
+        case "animals":
             return "pawprint.fill"
-        case .geometric:
+        case "geometric":
             return "square.on.square"
-        case .objects:
+        case "objects":
             return "cube.fill"
-        case .people:
+        case "people":
             return "person.fill"
-        case .letters:
+        case "letters":
             return "textformat"
-        case .numbers:
+        case "numbers":
             return "number"
-        case .abstract:
+        case "abstract":
             return "sparkles"
-        case .custom:
+        default:
             return "star.fill"
         }
     }

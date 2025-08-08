@@ -293,7 +293,7 @@ class PieceTransformEngine {
            piece.id == vertexPieceId {
             // The rotating piece has a vertex that must stay on the stationary edge
             if let edgePiece = otherPieces.first(where: { $0.id == edgePieceId }) {
-                let edgeVertices = TangramCoordinateSystem.getWorldVertices(for: edgePiece)
+                let edgeVertices = TangramEditorCoordinateSystem.getWorldVertices(for: edgePiece)
                 let edges = TangramGeometry.edges(for: edgePiece.type)
                 
                 if edgeIndex < edges.count {
@@ -350,7 +350,7 @@ class PieceTransformEngine {
             
             // Get the connection point (vertex on stationary piece)
             if let stationaryPiece = otherPieces.first(where: { $0.id == stationaryId }) {
-                let vertices = TangramCoordinateSystem.getWorldVertices(for: stationaryPiece)
+                let vertices = TangramEditorCoordinateSystem.getWorldVertices(for: stationaryPiece)
                 let stationaryVertex = (stationaryId == pieceAId) ? vertexA : vertexB
                 let connectionPoint = vertices[stationaryVertex]
                 return (stationaryId, rotatingId, connectionPoint)
@@ -367,7 +367,7 @@ class PieceTransformEngine {
                 let stationaryId = edgePieceId
                 
                 // Get the current position of the vertex (which is the pivot point)
-                let vertexPieceVertices = TangramCoordinateSystem.getWorldVertices(for: piece)
+                let vertexPieceVertices = TangramEditorCoordinateSystem.getWorldVertices(for: piece)
                 let connectionPoint = vertexPieceVertices[vertex]
                 return (stationaryId, rotatingId, connectionPoint)
                 
@@ -494,7 +494,7 @@ class PieceTransformEngine {
         var finalTransform = piece.transform
         
         // Get current edge midpoint in world space
-        let currentVertices = TangramCoordinateSystem.getWorldVertices(for: piece)
+        let currentVertices = TangramEditorCoordinateSystem.getWorldVertices(for: piece)
         let edges = TangramGeometry.edges(for: piece.type)
         
         if let slidingEdgeIndex = slidingEdgeInfo.edgeIndex,
@@ -562,7 +562,7 @@ class PieceTransformEngine {
     ) -> (CGAffineTransform, SnapInfo?) {
         
         // Get current piece center
-        let vertices = TangramCoordinateSystem.getWorldVertices(for: piece)
+        let vertices = TangramEditorCoordinateSystem.getWorldVertices(for: piece)
         var centerX: CGFloat = 0
         var centerY: CGFloat = 0
         for vertex in vertices {
@@ -635,7 +635,7 @@ class PieceTransformEngine {
         }
         
         // Check 3: Canvas bounds (warning only, not blocking)
-        let vertices = TangramCoordinateSystem.getWorldVertices(for: testPiece)
+        let vertices = TangramEditorCoordinateSystem.getWorldVertices(for: testPiece)
         let inBounds = vertices.allSatisfy { vertex in
             vertex.x >= -50 && vertex.x <= canvasSize.width + 50 &&
             vertex.y >= -50 && vertex.y <= canvasSize.height + 50
@@ -654,8 +654,8 @@ class PieceTransformEngine {
     // MARK: - Overlap Detection
     
     static func hasAreaOverlap(_ pieceA: TangramPiece, _ pieceB: TangramPiece) -> Bool {
-        let verticesA = TangramCoordinateSystem.getWorldVertices(for: pieceA)
-        let verticesB = TangramCoordinateSystem.getWorldVertices(for: pieceB)
+        let verticesA = TangramEditorCoordinateSystem.getWorldVertices(for: pieceA)
+        let verticesB = TangramEditorCoordinateSystem.getWorldVertices(for: pieceB)
         
         // Use Separating Axis Theorem (SAT)
         let axes = getAxes(vertices: verticesA) + getAxes(vertices: verticesB)
@@ -765,8 +765,8 @@ class PieceTransformEngine {
                 $0.id == (piece.id == pieceAId ? pieceBId : pieceAId) 
             }) else { return false }
             
-            let verticesThis = TangramCoordinateSystem.getWorldVertices(for: piece)
-            let verticesOther = TangramCoordinateSystem.getWorldVertices(for: otherPiece)
+            let verticesThis = TangramEditorCoordinateSystem.getWorldVertices(for: piece)
+            let verticesOther = TangramEditorCoordinateSystem.getWorldVertices(for: otherPiece)
             
             let thisVertex = piece.id == pieceAId ? vertexA : vertexB
             let otherVertex = piece.id == pieceAId ? vertexB : vertexA
@@ -791,11 +791,11 @@ class PieceTransformEngine {
                     return false
                 }
                 
-                let vertices = TangramCoordinateSystem.getWorldVertices(for: piece)
+                let vertices = TangramEditorCoordinateSystem.getWorldVertices(for: piece)
                 guard vertex < vertices.count else { return false }
                 let vertexPoint = vertices[vertex]
                 
-                let edgeVertices = TangramCoordinateSystem.getWorldVertices(for: edgePiece)
+                let edgeVertices = TangramEditorCoordinateSystem.getWorldVertices(for: edgePiece)
                 let edges = TangramGeometry.edges(for: edgePiece.type)
                 guard edge < edges.count else { return false }
                 
@@ -815,11 +815,11 @@ class PieceTransformEngine {
                     return false
                 }
                 
-                let vertexPieceVertices = TangramCoordinateSystem.getWorldVertices(for: vertexPiece)
+                let vertexPieceVertices = TangramEditorCoordinateSystem.getWorldVertices(for: vertexPiece)
                 guard vertex < vertexPieceVertices.count else { return false }
                 let vertexPoint = vertexPieceVertices[vertex]
                 
-                let edgeVertices = TangramCoordinateSystem.getWorldVertices(for: piece)
+                let edgeVertices = TangramEditorCoordinateSystem.getWorldVertices(for: piece)
                 let edges = TangramGeometry.edges(for: piece.type)
                 guard edge < edges.count else { return false }
                 
@@ -840,8 +840,8 @@ class PieceTransformEngine {
                 $0.id == (piece.id == pieceAId ? pieceBId : pieceAId) 
             }) else { return false }
             
-            let verticesThis = TangramCoordinateSystem.getWorldVertices(for: piece)
-            let verticesOther = TangramCoordinateSystem.getWorldVertices(for: otherPiece)
+            let verticesThis = TangramEditorCoordinateSystem.getWorldVertices(for: piece)
+            let verticesOther = TangramEditorCoordinateSystem.getWorldVertices(for: otherPiece)
             
             let edgesThis = TangramGeometry.edges(for: piece.type)
             let edgesOther = TangramGeometry.edges(for: otherPiece.type)

@@ -37,7 +37,7 @@ struct PieceView: View {
                 .transformEffect(isGhost ? piece.transform : piece.transform)
                 .onAppear {
                     // Debug logging for piece transforms
-                    if !TangramCoordinateSystem.isValidTransform(piece.transform) {
+                    if !TangramEditorCoordinateSystem.isValidTransform(piece.transform) {
                     }
                 }
                 .modifier(ManipulationGestureModifier(
@@ -207,7 +207,7 @@ struct PieceView: View {
     }
     
     private func getPieceCenter() -> CGPoint {
-        let vertices = TangramCoordinateSystem.getWorldVertices(for: piece)
+        let vertices = TangramEditorCoordinateSystem.getWorldVertices(for: piece)
         let sumX = vertices.reduce(0) { $0 + $1.x }
         let sumY = vertices.reduce(0) { $0 + $1.y }
         return CGPoint(x: sumX / CGFloat(vertices.count), y: sumY / CGFloat(vertices.count))
@@ -272,7 +272,7 @@ struct PieceShape: Shape {
     
     func path(in rect: CGRect) -> Path {
         // Use centralized coordinate system for consistent scaling
-        let visualVertices = TangramCoordinateSystem.getVisualVertices(for: type)
+        let visualVertices = TangramEditorCoordinateSystem.getVisualVertices(for: type)
         var path = Path()
         
         if let first = visualVertices.first {

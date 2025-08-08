@@ -13,7 +13,7 @@ import Foundation
 import CoreGraphics
 
 /// Self-contained puzzle data for gameplay - no editor dependencies
-struct GamePuzzleData: Codable, Equatable {
+struct GamePuzzleData: Codable, Equatable, Identifiable {
     let id: String
     let name: String
     let category: String

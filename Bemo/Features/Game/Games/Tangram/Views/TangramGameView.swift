@@ -211,7 +211,6 @@ struct TangramGameView: View {
                     isPuzzleComplete: viewModel.currentPhase == .puzzleComplete,
                     showHints: viewModel.showHints,
                     currentHint: viewModel.currentHint,
-                    sceneService: viewModel.sceneService,  // Pass service from ViewModel
                     onPieceCompleted: { pieceType, isFlipped in
                         viewModel.handlePieceCompletion(pieceType: pieceType, isFlipped: isFlipped)
                     },
@@ -441,7 +440,7 @@ struct PuzzleThumbnailView: View {
     let action: () -> Void
     
     // Calculate badge for this puzzle
-    private func getBadge() -> GamePuzzleData.BadgeType? {
+    private func getBadge() -> TangramBadgeType? {
         // Find newest puzzle (would be based on created_at in production)
         // For now, use last puzzle in list as "newest"
         let isNewest = allPuzzles.last?.id == puzzle.id

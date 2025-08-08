@@ -78,9 +78,6 @@ protocol TangramDatabaseLoading {
     /// Loads official puzzles from database
     func loadOfficialPuzzles() async throws -> [GamePuzzleData]
     
-    /// Loads community puzzles
-    func loadCommunityPuzzles() async throws -> [GamePuzzleData]
-    
     /// Loads puzzle by ID
     func loadPuzzle(id: String) async throws -> GamePuzzleData?
 }
@@ -112,8 +109,6 @@ extension TangramPieceValidator: PieceValidating {}
 extension TangramGameplayService: TangramGameplayProviding {}
 
 extension TangramHintEngine: HintProviding {}
-
-extension PuzzleLibraryService: PuzzleLibraryProviding {}
 
 extension TangramDatabaseLoader: TangramDatabaseLoading {}
 

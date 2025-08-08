@@ -74,7 +74,7 @@ class PuzzlePieceNode: SKNode {
         }
         
         let shape = SKShapeNode(path: path.cgPath)
-        shape.fillColor = TangramGameConstants.Colors.uiColor(for: pieceType)
+        shape.fillColor = TangramColors.Sprite.uiColor(for: pieceType)
         shape.strokeColor = shape.fillColor.darker(by: 20)
         shape.lineWidth = 2
         
@@ -120,7 +120,7 @@ class PuzzlePieceNode: SKNode {
         
         // Create new shape
         let newShape = SKShapeNode(path: path.cgPath)
-        newShape.fillColor = TangramGameConstants.Colors.uiColor(for: pieceType)
+        newShape.fillColor = TangramColors.Sprite.uiColor(for: pieceType)
         newShape.strokeColor = newShape.fillColor.darker(by: 20)
         newShape.lineWidth = 2
         

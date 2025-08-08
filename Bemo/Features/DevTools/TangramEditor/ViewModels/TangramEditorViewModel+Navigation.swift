@@ -20,8 +20,12 @@ extension TangramEditorViewModel {
     func navigateToLibrary(saveChanges: Bool = false) {
         if saveChanges && hasUnsavedChanges {
             Task {
-                await savePuzzle()
-                uiState.navigationState = .library
+                do {
+                    try await save()
+                    uiState.navigationState = .library
+                } catch {
+                    handleError(.saveFailed(error.localizedDescription))
+                }
             }
         } else {
             uiState.navigationState = .library
@@ -181,7 +185,7 @@ extension TangramEditorViewModel {
             
         case .selectingPendingConnections(let type, _):
             if let pendingType = uiState.pendingPieceType ?? type as PieceType? {
-                let pendingPoints = getConnectionPointsForPendingPiece(type: pendingType)
+                let pendingPoints = getConnectionPointsForPendingPiece(type: pendingType, scale: TangramConstants.visualScale)
                 availableConnectionPoints = pendingPoints
             }
             uiState.selectedPendingPoints.removeAll()

@@ -15,8 +15,8 @@ class TangramEditorCoordinator {
     private let placementService: PiecePlacementService
     private let connectionService: ConnectionService
     
-    init(placementService: PiecePlacementService = PiecePlacementService(),
-         connectionService: ConnectionService = ConnectionService()) {
+    init(placementService: PiecePlacementService,
+         connectionService: ConnectionService) {
         self.placementService = placementService
         self.connectionService = connectionService
     }
@@ -91,11 +91,11 @@ class TangramEditorCoordinator {
         // Flip is now handled inside placeConnectedPiece, no need to apply here
         
         // Validate placement doesn't overlap using centralized coordinate system
-        let newVertices = TangramCoordinateSystem.getWorldVertices(for: newPiece)
+        let newVertices = TangramEditorCoordinateSystem.getWorldVertices(for: newPiece)
         
         
         for existingPiece in existingPieces {
-            let existingVertices = TangramCoordinateSystem.getWorldVertices(for: existingPiece)
+            let existingVertices = TangramEditorCoordinateSystem.getWorldVertices(for: existingPiece)
             
             
             // Use PieceTransformEngine's overlap detection
@@ -176,19 +176,9 @@ class TangramEditorCoordinator {
             return false
         }
         
-        // Get constraints for this piece
-        let constraints = getConstraintsForPiece(pieceId, in: puzzle)
-        
-        // Calculate final transform
-        let finalTransform = placementService.calculateConstrainedTransform(
-            for: pieceId,
-            targetTransform: targetTransform,
-            constraints: constraints,
-            pieces: puzzle.pieces
-        )
-        
-        // Apply transform
-        puzzle.pieces[pieceIndex].transform = finalTransform
+        // For now, directly apply the transform
+        // Future enhancement: validate against constraints using transformEngine
+        puzzle.pieces[pieceIndex].transform = targetTransform
         
         return true
     }

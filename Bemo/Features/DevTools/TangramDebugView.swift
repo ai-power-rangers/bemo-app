@@ -50,73 +50,15 @@ struct CVMockControlView: View {
             ScrollView {
                 VStack(spacing: 10) {
                     ForEach(pieceTypes, id: \.id) { pieceType in
-                        HStack {
-                            Text(pieceType.displayName)
-                                .frame(width: 120, alignment: .leading)
-                            
-                            VStack {
-                                HStack {
-                                    Text("X:")
-                                    TextField("X", value: .init(
-                                        get: { piecePositions[pieceType.rawValue]?.x ?? 0 },
-                                        set: { newValue in
-                                            piecePositions[pieceType.rawValue] = CGPoint(
-                                                x: newValue,
-                                                y: piecePositions[pieceType.rawValue]?.y ?? 0
-                                            )
-                                            updateMockPiece(pieceType)
-                                        }
-                                    ), format: .number)
-                                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                                    .frame(width: 60)
-                                    
-                                    Text("Y:")
-                                    TextField("Y", value: .init(
-                                        get: { piecePositions[pieceType.rawValue]?.y ?? 0 },
-                                        set: { newValue in
-                                            piecePositions[pieceType.rawValue] = CGPoint(
-                                                x: piecePositions[pieceType.rawValue]?.x ?? 0,
-                                                y: newValue
-                                            )
-                                            updateMockPiece(pieceType)
-                                        }
-                                    ), format: .number)
-                                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                                    .frame(width: 60)
-                                    
-                                    Text("R:")
-                                    TextField("Rotation", value: .init(
-                                        get: { pieceRotations[pieceType.rawValue] ?? 0 },
-                                        set: { newValue in
-                                            pieceRotations[pieceType.rawValue] = newValue
-                                            updateMockPiece(pieceType)
-                                        }
-                                    ), format: .number)
-                                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                                    .frame(width: 60)
-                                }
-                            }
-                            
-                            Button("Add") {
-                                addMockPiece(pieceType)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            
-                            Button("Remove") {
-                                removeMockPiece(pieceType)
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                        .padding(.horizontal)
+                        pieceControlRow(for: pieceType)
                     }
                 }
+                .padding()
             }
             
             HStack {
                 Button("Clear All") {
-                    mockPieces.removeAll()
-                    piecePositions.removeAll()
-                    pieceRotations.removeAll()
+                    clearAllMockPieces()
                 }
                 .buttonStyle(.bordered)
                 
@@ -127,6 +69,85 @@ struct CVMockControlView: View {
             }
             .padding()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(UIColor.systemBackground))
+    }
+    
+    @ViewBuilder
+    private func pieceControlRow(for pieceType: TangramPieceType) -> some View {
+        HStack {
+            Text(pieceType.displayName)
+                .frame(width: 120, alignment: .leading)
+            
+            VStack {
+                HStack {
+                    Text("X:")
+                    TextField("X", value: Binding<Double>(
+                        get: { 
+                            if let x = piecePositions[pieceType.rawValue]?.x {
+                                return Double(x)
+                            }
+                            return 0
+                        },
+                        set: { newValue in
+                            piecePositions[pieceType.rawValue] = CGPoint(
+                                x: CGFloat(newValue),
+                                y: piecePositions[pieceType.rawValue]?.y ?? 0
+                            )
+                            updateMockPiece(pieceType)
+                        }
+                    ), format: .number)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .frame(width: 60)
+                    
+                    Text("Y:")
+                    TextField("Y", value: Binding<Double>(
+                        get: { 
+                            if let y = piecePositions[pieceType.rawValue]?.y {
+                                return Double(y)
+                            }
+                            return 0
+                        },
+                        set: { newValue in
+                            piecePositions[pieceType.rawValue] = CGPoint(
+                                x: piecePositions[pieceType.rawValue]?.x ?? 0,
+                                y: CGFloat(newValue)
+                            )
+                            updateMockPiece(pieceType)
+                        }
+                    ), format: .number)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .frame(width: 60)
+                    
+                    Text("R:")
+                    TextField("Rotation", value: Binding<Double>(
+                        get: { pieceRotations[pieceType.rawValue] ?? 0 },
+                        set: { newValue in
+                            pieceRotations[pieceType.rawValue] = newValue
+                            updateMockPiece(pieceType)
+                        }
+                    ), format: .number)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .frame(width: 60)
+                }
+            }
+            
+            Button("Add") {
+                addMockPiece(pieceType)
+            }
+            .buttonStyle(.borderedProminent)
+            
+            Button("Remove") {
+                removeMockPiece(pieceType)
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+    
+    private func clearAllMockPieces() {
+        mockPieces.removeAll()
+        piecePositions.removeAll()
+        pieceRotations.removeAll()
     }
     
     private func updateMockPiece(_ pieceType: TangramPieceType) {
@@ -139,12 +160,11 @@ struct CVMockControlView: View {
                 pieceTypeId: pieceType.rawValue,
                 position: position,
                 rotation: rotation,
-                scale: 1.0,
+                velocity: CGVector(dx: 0, dy: 0),
+                isMoving: false,
                 confidence: 0.95,
                 timestamp: Date(),
-                frameNumber: 0,
-                velocity: CGVector(dx: 0, dy: 0),
-                isMoving: false
+                frameNumber: 0
             )
         }
     }
@@ -158,12 +178,11 @@ struct CVMockControlView: View {
             pieceTypeId: pieceType.rawValue,
             position: position,
             rotation: rotation,
-            scale: 1.0,
+            velocity: CGVector(dx: 0, dy: 0),
+            isMoving: false,
             confidence: 0.95,
             timestamp: Date(),
-            frameNumber: 0,
-            velocity: CGVector(dx: 0, dy: 0),
-            isMoving: false
+            frameNumber: 0
         )
         
         // Remove existing piece of same type
@@ -193,12 +212,11 @@ struct CVMockControlView: View {
                 pieceTypeId: pieceType.rawValue,
                 position: position,
                 rotation: rotation,
-                scale: 1.0,
+                velocity: CGVector(dx: 0, dy: 0),
+                isMoving: false,
                 confidence: 0.95,
                 timestamp: Date(),
-                frameNumber: 0,
-                velocity: CGVector(dx: 0, dy: 0),
-                isMoving: false
+                frameNumber: 0
             )
             
             mockPieces.append(mockPiece)

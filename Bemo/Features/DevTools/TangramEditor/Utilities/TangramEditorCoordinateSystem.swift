@@ -1,5 +1,5 @@
 //
-//  TangramCoordinateSystem.swift
+//  TangramEditorCoordinateSystem.swift
 //  Bemo
 //
 //  Centralized coordinate system management for Tangram Editor
@@ -14,7 +14,7 @@ import CoreGraphics
 
 /// Centralized coordinate system management for Tangram Editor
 /// Handles all transformations between normalized, visual, and world spaces
-class TangramCoordinateSystem {
+class TangramEditorCoordinateSystem {
     
     // MARK: - Constants
     

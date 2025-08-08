@@ -287,7 +287,7 @@ class TangramPuzzleScene: SKScene {
                     print("DEBUG: selectedPiece type: \(piece.pieceType?.rawValue ?? "nil")")
                 }
                 
-                if let dial = rotationDial, let piece = selectedPiece {
+                if rotationDial != nil, let piece = selectedPiece {
                     print("DEBUG: Flipping piece - current isFlipped: \(piece.isFlipped)")
                     print("DEBUG: Piece type: \(piece.pieceType?.rawValue ?? "unknown")")
                     piece.flip()
@@ -322,7 +322,7 @@ class TangramPuzzleScene: SKScene {
                         print("DEBUG: selectedPiece type: \(piece.pieceType?.rawValue ?? "nil")")
                     }
                     
-                    if let dial = rotationDial, let piece = selectedPiece {
+                    if rotationDial != nil, let piece = selectedPiece {
                         print("DEBUG: Flipping piece - current isFlipped: \(piece.isFlipped)")
                         print("DEBUG: Piece type: \(piece.pieceType?.rawValue ?? "unknown")")
                         piece.flip()
@@ -486,7 +486,7 @@ class TangramPuzzleScene: SKScene {
             #endif
             
             // Check if piece should be locked
-            if gameplayService.shouldLockPiece(validation) {
+            if gameplayService.shouldLockPiece(validation: validation) {
                 // Lock piece in place (don't move it)
                 lockPieceInPlace(piece: selected)
                 // Show success nudge
@@ -604,7 +604,7 @@ class TangramPuzzleScene: SKScene {
         
         if completedPieces.count == puzzle.targetPieces.count {
             effectsRenderer.updateAvailablePieces(availablePieces)
-            effectsRenderer.showPuzzleCompletionCelebration()
+            effectsRenderer.showPuzzleCompletionCelebration(availablePieces: availablePieces)
             onPuzzleCompleted?()
         }
     }
@@ -713,12 +713,26 @@ class TangramPuzzleScene: SKScene {
     // MARK: - Structured Hint System
     
     func showStructuredHint(_ hint: TangramHintEngine.HintData) {
-        hintRenderer.updateAvailablePieces(availablePieces)
-        hintRenderer.showStructuredHint(hint)
+        // Show hint based on type
+        let targetPosition = CGPoint(x: hint.targetTransform.tx, y: hint.targetTransform.ty)
+        let targetRotation = atan2(hint.targetTransform.b, hint.targetTransform.a)
+        
+        switch hint.hintType {
+        case .nudge:
+            hintRenderer.showHint(for: hint.targetPiece, at: targetPosition, rotation: targetRotation)
+        case .rotation:
+            hintRenderer.showRotationHint(at: targetPosition, targetRotation: targetRotation)
+        case .flip:
+            hintRenderer.showFlipHint(at: targetPosition)
+        case .position(let from, let to):
+            hintRenderer.showMovementHint(from: from, to: to)
+        case .fullSolution:
+            hintRenderer.showHint(for: hint.targetPiece, at: targetPosition, rotation: targetRotation)
+        }
     }
     
     private func clearStructuredHint() {
-        hintRenderer.clearStructuredHint()
+        hintRenderer.clearCurrentHint()
     }
     
     // Implementation has been moved to TangramHintRenderer
@@ -806,7 +820,7 @@ class TangramPuzzleScene: SKScene {
         }
         
         let shape = SKShapeNode(path: path.cgPath)
-        shape.fillColor = TangramGameConstants.Colors.uiColor(for: type)
+        shape.fillColor = TangramColors.Sprite.uiColor(for: type)
         shape.strokeColor = shape.fillColor.darker(by: 20)
         shape.lineWidth = 2
         

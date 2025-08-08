@@ -55,28 +55,9 @@ extension TangramEditorViewModel {
         }
     }
     
-    func loadPuzzle(from loadedPuzzle: TangramPuzzle) {
-        puzzle = loadedPuzzle
-        // Save original state for change detection
-        originalPuzzleData = try? JSONEncoder().encode(puzzle)
-        // Set state based on whether puzzle has pieces
-        stateManager.resetState(for: puzzle)
-        editorState = stateManager.currentState
-        validate()
-        notifyPuzzleChanged()
-        uiState.navigationState = .editor
-    }
+    // Use the loadPuzzle method from Navigation extension instead
     
-    func createNewPuzzle() {
-        reset()
-        puzzle = TangramPuzzle(name: "New Puzzle", category: .custom, difficulty: .medium)
-        // Save original state (empty puzzle)
-        originalPuzzleData = try? JSONEncoder().encode(puzzle)
-        // New puzzle should start in selectingFirstPiece state
-        stateManager.setInitialState(for: puzzle)
-        editorState = stateManager.currentState
-        uiState.navigationState = .editor
-    }
+    // Use the createNewPuzzle method from Navigation extension instead
     
     func deletePuzzle(_ puzzleToDelete: TangramPuzzle) async {
         do {
@@ -117,30 +98,7 @@ extension TangramEditorViewModel {
     }
     
     // MARK: - Navigation
-    
-    func requestQuit() {
-        // Exit the editor and return to the game lobby
-        delegate?.devToolDidRequestQuit()
-    }
-    
-    func navigateToLibrary(saveChanges: Bool = false) {
-        if saveChanges && !puzzle.pieces.isEmpty {
-            // Save the puzzle before navigating
-            Task {
-                do {
-                    try await save()
-                } catch {
-                }
-                uiState.navigationState = .library
-            }
-        } else {
-            // Clear the editor state when going back without saving
-            reset()
-            uiState.pendingPieceType = nil
-            uiState.pendingPieceRotation = 0
-            uiState.navigationState = .library
-        }
-    }
+    // Navigation methods are in TangramEditorViewModel+Navigation.swift
     
     // MARK: - Undo/Redo
     

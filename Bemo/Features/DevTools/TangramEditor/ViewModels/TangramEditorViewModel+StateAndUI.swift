@@ -84,19 +84,14 @@ extension TangramEditorViewModel {
         }
     }
     
-    func proceedToPendingPiece() {
-        // Transition to selecting pending piece connections
-        if !uiState.selectedCanvasPoints.isEmpty, let type = uiState.pendingPieceType {
-            _ = transitionToState(.selectingPendingConnections(pieceType: type, maxPoints: uiState.selectedCanvasPoints.count))
-        }
-    }
+    // proceedToPendingPiece is in Navigation extension
     
     func getConnectionPoints(for pieceId: String) -> [ConnectionPoint] {
         guard let piece = puzzle.pieces.first(where: { $0.id == pieceId }) else {
             return []
         }
         // Use centralized coordinate system directly for better performance
-        return TangramCoordinateSystem.getConnectionPoints(for: piece)
+        return TangramEditorCoordinateSystem.getConnectionPoints(for: piece)
     }
     
     // MARK: - Selection Management
@@ -106,7 +101,7 @@ extension TangramEditorViewModel {
         guard puzzle.pieces.first(where: { $0.id == id }) != nil else { return }
         
         // Transition to piece selected state
-        _ = transitionToState(.pieceSelected(id: id))
+        _ = transitionToState(.pieceSelected(pieceId: id))
         
         if uiState.editMode == .select {
             uiState.selectedPieceIds.insert(id)
@@ -131,9 +126,7 @@ extension TangramEditorViewModel {
     
     // MARK: - Validation
     
-    func validate() {
-        validationState = coordinator.validatePuzzle(puzzle)
-    }
+    // validate is in Validation extension
     
     // MARK: - UI State Methods
     
@@ -141,20 +134,9 @@ extension TangramEditorViewModel {
         uiState.showSettings.toggle()
     }
     
-    func requestSave() {
-        uiState.showSaveDialog = true
-    }
+    // requestSave is in Navigation extension
     
-    func reset() {
-        puzzle = TangramPuzzle(name: "New Puzzle")
-        uiState.selectedPieceIds.removeAll()
-        validationState = .unknown
-        uiState.editMode = .select
-        // Start in selectingFirstPiece for new empty puzzles
-        stateManager.setInitialState(for: puzzle)
-        editorState = stateManager.currentState
-        undoManager.clearHistory()
-    }
+    // reset is in Navigation extension
     
     func clearPuzzle() {
         undoManager.saveState(puzzle: puzzle)
@@ -179,7 +161,7 @@ extension TangramEditorViewModel {
         }
         
         // Use centralized coordinate system to get current center
-        guard let currentCenter = TangramCoordinateSystem.getCenter(of: puzzle.pieces) else {
+        guard let currentCenter = TangramEditorCoordinateSystem.getCenter(of: puzzle.pieces) else {
             return
         }
         
@@ -449,29 +431,7 @@ extension TangramEditorViewModel {
         }
     }
     
-    /// Setup when entering new state (called after state transitions)
-    func setupNewState() {
-        switch editorState {
-        case .selectingFirstPiece:
-            clearSelectionState()
-        case .selectingNextPiece:
-            // Clear all pending state when starting to select a new piece
-            uiState.pendingPieceType = nil
-            uiState.pendingPieceRotation = 0
-            uiState.previewPiece = nil
-            uiState.previewTransform = nil
-            uiState.selectedCanvasPoints.removeAll()
-            uiState.selectedPendingPoints.removeAll()
-            uiState.selectedPieceIds.removeAll()  // Clear selected pieces when adding new piece
-            availableConnectionPoints.removeAll()
-        case .selectingCanvasConnections:
-            // Clear piece selection when starting to connect new pieces
-            uiState.selectedPieceIds.removeAll()
-            updateAvailableConnectionPoints()
-        default:
-            break
-        }
-    }
+    // setupNewState is defined in Navigation extension
 }
 
 // MARK: - Extension for PlacementError
