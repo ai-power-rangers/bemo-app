@@ -144,6 +144,12 @@ class GameLobbyViewModel {
             puzzleManagementService: puzzleManagementService
         )
         
+        // CV-ready version of Tangram for testing
+        let tangramCVGame = TangramCVGame(
+            supabaseService: supabaseService,
+            puzzleManagementService: puzzleManagementService
+        )
+        
         // Start with regular games
         availableGames = [
             GameItem(
@@ -151,12 +157,18 @@ class GameLobbyViewModel {
                 iconName: "square.on.square",
                 color: .blue,
                 badge: nil
+            ),
+            GameItem(
+                game: tangramCVGame,
+                iconName: "camera.viewfinder",
+                color: .green,
+                badge: "CV"
             )
         ]
         
         // Add developer tools only if user is a developer
         if developerService.isDeveloper {
-            let tangramEditorTool = TangramEditorGame(puzzleManagementService: puzzleManagementService)
+            let tangramEditorTool = TangramEditorTool(puzzleManagementService: puzzleManagementService)
             
             availableGames.append(
                 GameItem(
@@ -195,7 +207,7 @@ class GameLobbyViewModel {
     
     func isGameUnlocked(_ game: Game) -> Bool {
         // Check if the player meets the requirements for this game
-        guard let currentUserProfile = profileService.currentProfile else {
+        guard let _ = profileService.currentProfile else {
             return false // No profiles exist, no games unlocked
         }
         

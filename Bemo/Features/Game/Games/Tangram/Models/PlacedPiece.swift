@@ -128,10 +128,10 @@ extension PlacedPiece {
         }
     }
     
-    var distanceFromCenter: Double {
-        // Distance from canvas center - assumes a 600x600 canvas
-        // TODO: Pass actual canvas size if needed for more accuracy
-        let canvasSize = CGSize(width: 600, height: 600)
+    /// Calculates distance from the center of the canvas
+    /// - Parameter canvasSize: The size of the canvas. Defaults to standard 600x600 if not provided
+    /// - Returns: Distance from center in pixels
+    func distanceFromCenter(canvasSize: CGSize = CGSize(width: 600, height: 600)) -> Double {
         let centerX = canvasSize.width / 2
         let centerY = canvasSize.height / 2
         let dx = position.x - centerX
