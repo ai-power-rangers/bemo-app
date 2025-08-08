@@ -14,11 +14,15 @@ import SpriteKit
 
 struct TangramGameView: View {
     @State private var viewModel: TangramGameViewModel
-    @State private var mockPieces: [RecognizedPiece] = []
-    @State private var showCVMock = false
     @State private var searchText = ""
     @State private var selectedCategory: String? = nil
     @State private var selectedDifficulty: Int? = nil
+    
+    #if DEBUG
+    // Debug-only properties for CV mocking
+    @State private var mockPieces: [RecognizedPiece] = []
+    @State private var showCVMock = false
+    #endif
     
     init(viewModel: TangramGameViewModel) {
         self._viewModel = State(initialValue: viewModel)
@@ -207,6 +211,7 @@ struct TangramGameView: View {
                     isPuzzleComplete: viewModel.currentPhase == .puzzleComplete,
                     showHints: viewModel.showHints,
                     currentHint: viewModel.currentHint,
+                    sceneService: viewModel.sceneService,  // Pass service from ViewModel
                     onPieceCompleted: { pieceType, isFlipped in
                         viewModel.handlePieceCompletion(pieceType: pieceType, isFlipped: isFlipped)
                     },

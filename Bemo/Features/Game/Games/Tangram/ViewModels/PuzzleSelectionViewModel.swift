@@ -93,7 +93,25 @@ class PuzzleSelectionViewModel {
     }
     
     func thumbnailColor(for puzzle: TangramPuzzle) -> Color {
-        return libraryService.thumbnailColor(for: puzzle)
+        // UI logic belongs in ViewModel, not in service
+        switch puzzle.category {
+        case .animals:
+            return .green
+        case .geometric:
+            return .blue
+        case .objects:
+            return .orange
+        case .people:
+            return .purple
+        case .letters:
+            return .red
+        case .numbers:
+            return .cyan
+        case .abstract:
+            return .pink
+        case .custom:
+            return .gray
+        }
     }
     
     // MARK: - Display Helpers

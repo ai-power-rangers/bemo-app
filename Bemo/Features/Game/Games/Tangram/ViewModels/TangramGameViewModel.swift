@@ -48,15 +48,15 @@ class TangramGameViewModel {
     var lastMovedPiece: TangramPieceType?
     var lastProgressTime = Date()
     var isShowingHintAnimation: Bool = false
+    private var hintDismissTask: Task<Void, Never>?
     
     // MARK: - Dependencies
     
     private weak var delegate: GameDelegate?
-    private let databaseLoader: TangramDatabaseLoader
-    private let puzzleLibraryService: PuzzleLibraryService
-    private let hintEngine = TangramHintEngine()
+    private let container: TangramDependencyContainer
     private let supabaseService: SupabaseService?
     var availablePuzzles: [GamePuzzleData] = []
+    
     
     // MARK: - Metrics Tracking
     
@@ -66,28 +66,39 @@ class TangramGameViewModel {
     
     // MARK: - Initialization
     
-    init(delegate: GameDelegate, supabaseService: SupabaseService? = nil, puzzleManagementService: PuzzleManagementService? = nil) {
+    init(delegate: GameDelegate, container: TangramDependencyContainer) {
         self.delegate = delegate
-        self.supabaseService = supabaseService
-        self.databaseLoader = TangramDatabaseLoader(supabaseService: supabaseService)
-        self.puzzleLibraryService = PuzzleLibraryService(supabaseService: supabaseService)
+        self.container = container
+        self.supabaseService = container.supabaseService
         
-        // Load puzzles - prefer cached puzzles from PuzzleManagementService
-        Task { @MainActor in
-            if let managementService = puzzleManagementService {
+        // Load puzzles using container's services
+        Task { [weak self] @MainActor in
+            guard let self = self else { return }
+            if let managementService = container.puzzleManagementService {
                 // Use cached puzzles for instant loading!
                 let puzzles = await managementService.getTangramPuzzles()
                 self.availablePuzzles = puzzles
             } else {
                 // Fallback to direct database loading
                 do {
-                    let puzzles = try await self.databaseLoader.loadOfficialPuzzles()
+                    let puzzles = try await self.container.databaseLoader.loadOfficialPuzzles()
                     self.availablePuzzles = puzzles
                 } catch {
+                    #if DEBUG
                     print("Failed to load puzzles: \(error)")
+                    #endif
                 }
             }
         }
+    }
+    
+    // Alternative init for backward compatibility
+    convenience init(delegate: GameDelegate, supabaseService: SupabaseService? = nil, puzzleManagementService: PuzzleManagementService? = nil) {
+        let container = TangramDependencyContainer(
+            supabaseService: supabaseService,
+            puzzleManagementService: puzzleManagementService
+        )
+        self.init(delegate: delegate, container: container)
     }
     
     // MARK: - Game Actions
@@ -101,10 +112,15 @@ class TangramGameViewModel {
             gamePuzzleData = puzzle
         } else if let dictionary = puzzleData as? [String: Any] {
             // Convert from dictionary
-            gamePuzzleData = PuzzleDataConverter.convertFromDatabase(dictionary)
+            switch container.dataConverter.convertFromDatabase(dictionary) {
+            case .success(let puzzle):
+                gamePuzzleData = puzzle
+            case .failure:
+                gamePuzzleData = nil
+            }
         } else if let codableData = puzzleData as? Decodable {
             // Convert from codable
-            gamePuzzleData = PuzzleDataConverter.convertFromCodable(codableData)
+            gamePuzzleData = container.dataConverter.convertFromCodable(codableData)
         }
         
         guard let puzzle = gamePuzzleData else {
@@ -140,6 +156,9 @@ class TangramGameViewModel {
     
     func exitToSelection() {
         stopTimer()
+        
+        // Clear any active hints
+        clearHint()
         
         // End game session if active
         endGameSession(completed: false)
@@ -179,7 +198,7 @@ class TangramGameViewModel {
         
         // Get intelligent hint
         print("DEBUG: Calling hintEngine.determineNextHint")
-        let hint = hintEngine.determineNextHint(
+        let hint = container.hintEngine.determineNextHint(
             puzzle: puzzle,
             placedPieces: placedPieces,
             lastMovedPiece: lastMovedPiece,
@@ -209,6 +228,16 @@ class TangramGameViewModel {
             // Show animation
             isShowingHintAnimation = true
             showHints = true
+            
+            // Cancel any existing dismiss task
+            hintDismissTask?.cancel()
+            
+            // Auto-dismiss hint after 3 seconds
+            hintDismissTask = Task { [weak self] @MainActor in
+                try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
+                guard !Task.isCancelled else { return }
+                self?.clearHint()
+            }
             
             // Notify delegate
             delegate?.gameDidRequestHint()
@@ -241,11 +270,12 @@ class TangramGameViewModel {
         elapsedTime = 0
         
         // Start timer task
-        timerTask = Task { @MainActor in
-            while !Task.isCancelled && timerStarted {
+        timerTask = Task { [weak self] @MainActor in
+            while !Task.isCancelled {
+                guard let self = self, self.timerStarted else { break }
                 try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second
-                if timerStarted {
-                    elapsedTime += 0.1
+                if self.timerStarted {
+                    self.elapsedTime += 0.1
                 }
             }
         }
@@ -275,6 +305,10 @@ class TangramGameViewModel {
         
         // Check if piece is already placed - convert String to TangramPieceType
         guard let tangramPieceType = TangramPieceType(rawValue: pieceType) else { return }
+        
+        // Notify that this piece is being interacted with
+        onPieceMoved(tangramPieceType)
+        
         let alreadyPlaced = placedPieces.contains { $0.pieceType == tangramPieceType }
         
         if alreadyPlaced {
@@ -284,7 +318,7 @@ class TangramGameViewModel {
             // Create a perfectly placed piece
             // Extract position from transform (tx, ty) and rotation from transform matrix
             let position = CGPoint(x: targetPiece.transform.tx, y: targetPiece.transform.ty)
-            let rotation = atan2(targetPiece.transform.b, targetPiece.transform.a) * 180.0 / .pi
+            let rotation = TangramGeometryUtilities.extractRotation(from: targetPiece.transform) * 180.0 / .pi
             
             let mockPiece = RecognizedPiece(
                 id: "touch_\(pieceType)_\(UUID().uuidString.prefix(8))",
@@ -319,10 +353,10 @@ class TangramGameViewModel {
         showPlacementCelebration = true
         
         // Hide after a short delay
-        Task {
+        Task { [weak self] in
             try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
             await MainActor.run {
-                showPlacementCelebration = false
+                self?.showPlacementCelebration = false
             }
         }
     }
@@ -397,6 +431,26 @@ class TangramGameViewModel {
     func processCVInput(_ pieces: [PlacedPiece]) {
         guard currentPhase == .playingPuzzle else { return }
         
+        // Check if any hinted piece is being moved
+        if let hint = currentHint {
+            // Check if the hinted piece is now moving or has changed position
+            if let hintedPiece = pieces.first(where: { $0.pieceType == hint.targetPiece }) {
+                if hintedPiece.isMoving {
+                    // Piece is being moved, clear the hint
+                    clearHint()
+                } else if let previousPiece = placedPieces.first(where: { $0.pieceType == hint.targetPiece }) {
+                    // Check if position changed significantly
+                    let positionDiff = hypot(
+                        hintedPiece.position.x - previousPiece.position.x,
+                        hintedPiece.position.y - previousPiece.position.y
+                    )
+                    if positionDiff > 5 { // Movement threshold
+                        clearHint()
+                    }
+                }
+            }
+        }
+        
         // Update placed pieces
         placedPieces = pieces
         
@@ -442,7 +496,7 @@ class TangramGameViewModel {
                     return p1.area > p2.area
                 }
                 // Then by distance from center (closer to center first)
-                return p1.distanceFromCenter < p2.distanceFromCenter
+                return p1.distanceFromCenter(canvasSize: canvasSize) < p2.distanceFromCenter(canvasSize: canvasSize)
             }
             .first
     }
@@ -478,6 +532,11 @@ class TangramGameViewModel {
     
     func onPieceMoved(_ pieceType: TangramPieceType) {
         lastMovedPiece = pieceType
+        
+        // Clear hint if user is moving the piece that the hint is for
+        if let hint = currentHint, hint.targetPiece == pieceType {
+            clearHint()
+        }
     }
     
     func onPieceValidated(_ pieceType: TangramPieceType, isCorrect: Bool) {
@@ -489,6 +548,14 @@ class TangramGameViewModel {
     
     func clearHintAnimation() {
         isShowingHintAnimation = false
+    }
+    
+    func clearHint() {
+        currentHint = nil
+        isShowingHintAnimation = false
+        showHints = false
+        hintDismissTask?.cancel()
+        hintDismissTask = nil
     }
     
     // MARK: - Progress Management (Phase 3)
@@ -533,6 +600,9 @@ class TangramGameViewModel {
     // MARK: - Game State Management
     
     func resetGame() {
+        // Clear any active hints
+        clearHint()
+        
         currentPhase = .selectingPuzzle
         selectedPuzzle = nil
         gameState = nil
@@ -559,10 +629,13 @@ class TangramGameViewModel {
     }
     
     private func startGameSession(puzzleId: String, puzzleName: String, difficulty: Int) {
-        Task {
-            guard let supabase = supabaseService,
-                  let childId = currentChildProfileId else {
+        Task { [weak self] in
+            guard let self = self,
+                  let supabase = self.supabaseService,
+                  let childId = self.currentChildProfileId else {
+                #if DEBUG
                 print("Warning: Cannot start game session - missing supabase service or child ID")
+                #endif
                 return
             }
             
@@ -592,9 +665,10 @@ class TangramGameViewModel {
     }
     
     private func endGameSession(completed: Bool) {
-        Task {
-            guard let supabase = supabaseService,
-                  let sessionId = currentSessionId else {
+        Task { [weak self] in
+            guard let self = self,
+                  let supabase = self.supabaseService,
+                  let sessionId = self.currentSessionId else {
                 return
             }
             
@@ -622,10 +696,11 @@ class TangramGameViewModel {
     }
     
     private func trackHintUsage(hint: TangramHintEngine.HintData) {
-        Task {
-            guard let supabase = supabaseService,
-                  let childId = currentChildProfileId,
-                  let puzzle = selectedPuzzle,
+        Task { [weak self] in
+            guard let self = self,
+                  let supabase = self.supabaseService,
+                  let childId = self.currentChildProfileId,
+                  let puzzle = self.selectedPuzzle,
                   let progress = gameProgress else {
                 return
             }
@@ -662,10 +737,11 @@ class TangramGameViewModel {
     }
     
     private func trackPuzzleCompletion() {
-        Task {
-            guard let supabase = supabaseService,
-                  let childId = currentChildProfileId,
-                  let puzzle = selectedPuzzle,
+        Task { [weak self] in
+            guard let self = self,
+                  let supabase = self.supabaseService,
+                  let childId = self.currentChildProfileId,
+                  let puzzle = self.selectedPuzzle,
                   let progress = gameProgress else {
                 return
             }
@@ -698,4 +774,5 @@ class TangramGameViewModel {
             }
         }
     }
+    
 }

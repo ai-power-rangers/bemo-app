@@ -50,18 +50,26 @@ class TangramDatabaseLoader {
                     puzzleDict = dict
                 }
                 
-                if let puzzleDict = puzzleDict,
-                   var gamePuzzle = PuzzleDataConverter.convertFromDatabase(puzzleDict) {
-                    // Override with DTO's actual database values
-                    gamePuzzle = GamePuzzleData(
-                        id: gamePuzzle.id,
-                        name: dto.name,
-                        category: dto.category,
-                        difficulty: dto.difficulty,
-                        targetPieces: gamePuzzle.targetPieces
-                    )
-                    puzzles.append(gamePuzzle)
-                    print("Loaded puzzle: \(gamePuzzle.name) with difficulty: \(gamePuzzle.difficulty)")
+                if let puzzleDict = puzzleDict {
+                    switch PuzzleDataConverter.convertFromDatabase(puzzleDict) {
+                    case .success(var gamePuzzle):
+                        // Override with DTO's actual database values
+                        gamePuzzle = GamePuzzleData(
+                            id: gamePuzzle.id,
+                            name: dto.name,
+                            category: dto.category,
+                            difficulty: dto.difficulty,
+                            targetPieces: gamePuzzle.targetPieces
+                        )
+                        puzzles.append(gamePuzzle)
+                        #if DEBUG
+                        print("Loaded puzzle: \(gamePuzzle.name) with difficulty: \(gamePuzzle.difficulty)")
+                        #endif
+                    case .failure(let error):
+                        #if DEBUG
+                        print("Failed to convert puzzle: \(error)")
+                        #endif
+                    }
                 }
             }
             
@@ -102,7 +110,12 @@ class TangramDatabaseLoader {
                     }
                     
                     if let puzzleDict = puzzleDict {
-                        return PuzzleDataConverter.convertFromDatabase(puzzleDict)
+                        switch PuzzleDataConverter.convertFromDatabase(puzzleDict) {
+                        case .success(let puzzle):
+                            return puzzle
+                        case .failure:
+                            return nil
+                        }
                     }
                 }
             }
@@ -142,9 +155,14 @@ class TangramDatabaseLoader {
                     puzzleDict = dict
                 }
                 
-                if let puzzleDict = puzzleDict,
-                   let gamePuzzle = PuzzleDataConverter.convertFromDatabase(puzzleDict) {
-                    puzzles.append(gamePuzzle)
+                if let puzzleDict = puzzleDict {
+                    switch PuzzleDataConverter.convertFromDatabase(puzzleDict) {
+                    case .success(let gamePuzzle):
+                        puzzles.append(gamePuzzle)
+                    case .failure:
+                        // Silently skip invalid puzzles
+                        continue
+                    }
                 }
             }
             

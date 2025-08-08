@@ -106,27 +106,6 @@ class PuzzleLibraryService {
         return nil
     }
     
-    func thumbnailColor(for puzzle: TangramPuzzle) -> Color {
-        // Return a color based on category
-        switch puzzle.category {
-        case .animals:
-            return .green
-        case .geometric:
-            return .blue
-        case .objects:
-            return .orange
-        case .people:
-            return .purple
-        case .letters:
-            return .red
-        case .numbers:
-            return .cyan
-        case .abstract:
-            return .pink
-        case .custom:
-            return .gray
-        }
-    }
     
     // MARK: - Fallback Data
     

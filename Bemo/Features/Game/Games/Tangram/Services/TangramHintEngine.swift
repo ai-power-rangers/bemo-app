@@ -264,7 +264,7 @@ class TangramHintEngine {
         )
         
         // Check rotation using proper validator
-        let targetRotationRad = atan2(target.transform.b, target.transform.a)
+        let targetRotationRad = CGFloat(TangramGeometryUtilities.extractRotation(from: target.transform))
         let currentRotationRad = current.rotation * .pi / 180
         
         // Get flip state from placed piece
@@ -367,7 +367,7 @@ class TangramHintEngine {
             
         case .fullSolution:
             // Complete sequence: show rotation, flip if needed, then position
-            let targetRotation = atan2(targetTransform.b, targetTransform.a)
+            let targetRotation = CGFloat(TangramGeometryUtilities.extractRotation(from: targetTransform))
             
             // Step 1: Show piece appearing
             steps.append(AnimationStep(
@@ -400,9 +400,20 @@ class TangramHintEngine {
     }
     
     private func findUnplacedPieces(_ puzzle: GamePuzzleData, _ placedPieces: [PlacedPiece]) -> [TangramPieceType] {
-        let placedTypes = Set(placedPieces.map { $0.pieceType })
+        // Only consider pieces that are correctly placed as "done"
+        // This ensures hints are given for:
+        // 1. Pieces not placed at all
+        // 2. Pieces placed incorrectly
+        let correctlyPlacedTypes = Set(
+            placedPieces
+                .filter { $0.validationState == .correct }
+                .map { $0.pieceType }
+        )
+        
         let allTypes = Set(puzzle.targetPieces.map { $0.pieceType })
-        return Array(allTypes.subtracting(placedTypes))
+        
+        // Return pieces that still need to be placed correctly
+        return Array(allTypes.subtracting(correctlyPlacedTypes))
     }
     
     private func selectEasiestPiece(_ pieces: [TangramPieceType]) -> TangramPieceType? {
@@ -445,23 +456,50 @@ class TangramHintEngine {
     }
     
     private func getDefaultStartPosition(for pieceType: TangramPieceType) -> CGPoint {
-        // Default positions for pieces at bottom of screen
-        // These would typically be where pieces start in the game
-        switch pieceType {
-        case .smallTriangle1:
-            return CGPoint(x: 100, y: 100)
-        case .smallTriangle2:
-            return CGPoint(x: 200, y: 100)
-        case .mediumTriangle:
-            return CGPoint(x: 300, y: 100)
-        case .square:
-            return CGPoint(x: 400, y: 100)
-        case .largeTriangle1:
-            return CGPoint(x: 150, y: 150)
-        case .largeTriangle2:
-            return CGPoint(x: 350, y: 150)
-        case .parallelogram:
-            return CGPoint(x: 250, y: 150)
+        // Default positions matching the actual piece layout in TangramPuzzleScene
+        // Pieces are arranged in a 3x3 grid at the bottom 35% of screen
+        // Using typical screen dimensions for consistent hints
+        let screenWidth: CGFloat = 390  // iPhone standard width
+        let screenHeight: CGFloat = 844  // iPhone standard height
+        
+        let pieceSize: CGFloat = 80
+        let margin: CGFloat = 40
+        let minX = pieceSize + margin  // 120
+        let maxX = screenWidth - pieceSize - margin  // 270
+        let maxY = screenHeight * 0.35  // ~295 (bottom 35% of screen)
+        
+        // Map pieces to their typical grid positions (index order)
+        let pieceOrder: [TangramPieceType] = [
+            .smallTriangle1,   // index 0: col 0, row 0
+            .smallTriangle2,   // index 1: col 1, row 0
+            .mediumTriangle,   // index 2: col 2, row 0
+            .square,           // index 3: col 0, row 1
+            .largeTriangle1,   // index 4: col 1, row 1
+            .largeTriangle2,   // index 5: col 2, row 1
+            .parallelogram     // index 6: col 0, row 2
+        ]
+        
+        guard let index = pieceOrder.firstIndex(of: pieceType) else {
+            // Fallback to center-bottom if piece not found
+            return CGPoint(x: screenWidth / 2, y: 150)
         }
+        
+        let cols = 3
+        let rows = 3
+        let col = index % cols
+        let row = index / cols
+        
+        // Calculate position matching the scene's layout logic
+        let xRange = maxX - minX  // 150
+        let yRange = maxY - pieceSize  // ~175
+        
+        let x = minX + (xRange / CGFloat(cols)) * (CGFloat(col) + 0.5)
+        let y = pieceSize + (yRange / CGFloat(rows)) * (CGFloat(row) + 0.5)
+        
+        // Return in CoreGraphics coordinates (will be converted to SpriteKit in scene)
+        return CGPoint(x: x, y: screenHeight - y)  // Flip Y for CoreGraphics
     }
+    
+    /// Extracts rotation angle from CGAffineTransform with robust floating-point handling
+    /// Handles cases where sin/cos values have floating-point precision errors (e.g., 180° rotations)
 }

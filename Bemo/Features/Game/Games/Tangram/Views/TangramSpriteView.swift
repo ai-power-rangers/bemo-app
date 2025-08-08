@@ -21,6 +21,7 @@ struct TangramSpriteView: View {
     let isPuzzleComplete: Bool
     let showHints: Bool
     let currentHint: TangramHintEngine.HintData?
+    let sceneService: TangramSceneService  // Service injected from ViewModel
     let onPieceCompleted: (String, Bool) -> Void  // pieceType and isFlipped
     let onPuzzleCompleted: () -> Void
     let onBackPressed: () -> Void
@@ -97,6 +98,7 @@ struct TangramSpriteView: View {
         tangramScene.scaleMode = .resizeFill
         tangramScene.safeAreaTop = safeAreaTop  // Pass safe area to scene
         tangramScene.puzzle = puzzle
+        tangramScene.sceneService = sceneService  // Inject service from ViewModel
         tangramScene.onPieceCompleted = onPieceCompleted
         tangramScene.onPuzzleCompleted = onPuzzleCompleted
         tangramScene.onBackPressed = onBackPressed
