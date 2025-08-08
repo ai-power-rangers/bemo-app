@@ -67,7 +67,10 @@ class PuzzleManagementService {
     func getTangramPuzzles() async -> [GamePuzzleData] {
         // Check if cache needs refresh
         if shouldRefreshTangramCache() {
+            print("[PuzzleManagement] Cache expired, refreshing from database...")
             await syncTangramPuzzles()
+        } else {
+            print("[PuzzleManagement] Using cached puzzles: \(tangramPuzzlesCache.count) puzzles")
         }
         return tangramPuzzlesCache
     }
@@ -223,24 +226,33 @@ class PuzzleManagementService {
     /// Update a single puzzle in the cache without full refresh
     /// More efficient for single puzzle edits
     func updateSinglePuzzle(_ puzzleId: String) async {
-        guard let supabase = supabaseService else { return }
+        print("[PuzzleManagement] updateSinglePuzzle called for: \(puzzleId)")
+        guard let supabase = supabaseService else { 
+            print("[PuzzleManagement] No Supabase service - cannot update puzzle")
+            return 
+        }
         
         do {
             // Load just this puzzle from database
             let loader = TangramDatabaseLoader(supabaseService: supabase)
             if let updatedPuzzle = try await loader.loadPuzzle(id: puzzleId) {
+                print("[PuzzleManagement] Loaded updated puzzle from database: \(updatedPuzzle.name)")
                 // Update in cache
                 await MainActor.run {
                     // Remove old version if exists
+                    let oldCount = tangramPuzzlesCache.count
                     tangramPuzzlesCache.removeAll { $0.id == puzzleId }
                     // Add updated version
                     tangramPuzzlesCache.append(updatedPuzzle)
+                    print("[PuzzleManagement] Cache updated: \(oldCount) -> \(tangramPuzzlesCache.count) puzzles")
                     // Update local cache file
                     Task {
                         await savePuzzlesToLocalCache(tangramPuzzlesCache, type: "tangram")
                     }
                 }
-                print("[PuzzleManagement] Updated single puzzle in cache: \(updatedPuzzle.name)")
+                print("[PuzzleManagement] Successfully updated single puzzle in cache: \(updatedPuzzle.name)")
+            } else {
+                print("[PuzzleManagement] Warning: Puzzle not found in database: \(puzzleId)")
             }
         } catch {
             print("[PuzzleManagement] Failed to update single puzzle: \(error)")
@@ -251,24 +263,34 @@ class PuzzleManagementService {
     
     /// Add a new puzzle to the cache without full refresh
     func addNewPuzzle(_ puzzleId: String) async {
-        guard let supabase = supabaseService else { return }
+        print("[PuzzleManagement] addNewPuzzle called for: \(puzzleId)")
+        guard let supabase = supabaseService else { 
+            print("[PuzzleManagement] No Supabase service - cannot add puzzle")
+            return 
+        }
         
         do {
             // Load the new puzzle from database
             let loader = TangramDatabaseLoader(supabaseService: supabase)
             if let newPuzzle = try await loader.loadPuzzle(id: puzzleId) {
+                print("[PuzzleManagement] Loaded new puzzle from database: \(newPuzzle.name)")
                 // Add to cache
                 await MainActor.run {
                     // Check if already exists (shouldn't happen for new)
                     if !tangramPuzzlesCache.contains(where: { $0.id == puzzleId }) {
                         tangramPuzzlesCache.append(newPuzzle)
+                        print("[PuzzleManagement] Added puzzle to cache. Total puzzles: \(tangramPuzzlesCache.count)")
                         // Update local cache file
                         Task {
                             await savePuzzlesToLocalCache(tangramPuzzlesCache, type: "tangram")
                         }
+                    } else {
+                        print("[PuzzleManagement] Warning: Puzzle already exists in cache: \(puzzleId)")
                     }
                 }
-                print("[PuzzleManagement] Added new puzzle to cache: \(newPuzzle.name)")
+                print("[PuzzleManagement] Successfully added new puzzle to cache: \(newPuzzle.name)")
+            } else {
+                print("[PuzzleManagement] Warning: New puzzle not found in database: \(puzzleId)")
             }
         } catch {
             print("[PuzzleManagement] Failed to add new puzzle: \(error)")

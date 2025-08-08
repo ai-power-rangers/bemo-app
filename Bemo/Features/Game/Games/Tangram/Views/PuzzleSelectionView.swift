@@ -121,12 +121,12 @@ struct PuzzleSelectionView: View {
                     Divider()
                     ForEach(viewModel.availableCategories, id: \.self) { category in
                         Button(action: { viewModel.selectedCategory = category }) {
-                            Label(category.rawValue, systemImage: viewModel.categoryIcon(category))
+                            Label(category.capitalized, systemImage: viewModel.categoryIcon(category))
                         }
                     }
                 } label: {
                     filterChip(
-                        title: viewModel.selectedCategory?.rawValue ?? "Category",
+                        title: viewModel.selectedCategory?.capitalized ?? "Category",
                         isSelected: viewModel.selectedCategory != nil
                     )
                 }
@@ -139,12 +139,12 @@ struct PuzzleSelectionView: View {
                     Divider()
                     ForEach(viewModel.availableDifficulties, id: \.self) { difficulty in
                         Button(action: { viewModel.selectedDifficulty = difficulty }) {
-                            Label(difficulty.displayName, systemImage: viewModel.difficultyIcon(difficulty))
+                            Label(difficultyDisplayName(difficulty), systemImage: viewModel.difficultyIcon(difficulty))
                         }
                     }
                 } label: {
                     filterChip(
-                        title: viewModel.selectedDifficulty?.displayName ?? "Difficulty",
+                        title: viewModel.selectedDifficulty.map { difficultyDisplayName($0) } ?? "Difficulty",
                         isSelected: viewModel.selectedDifficulty != nil
                     )
                 }
@@ -183,10 +183,8 @@ struct PuzzleSelectionView: View {
                     ForEach(viewModel.filteredPuzzles) { puzzle in
                         TangramPuzzleCard(
                             puzzle: puzzle,
-                            thumbnail: viewModel.thumbnailImage(for: puzzle),
-                            color: viewModel.thumbnailColor(for: puzzle),
-                            difficultyColor: viewModel.difficultyColor(puzzle.difficulty),
-                            onTap: { viewModel.selectPuzzle(puzzle) }
+                            allPuzzles: viewModel.filteredPuzzles,
+                            action: { viewModel.selectPuzzle(puzzle) }
                         )
                     }
                 }
@@ -241,112 +239,44 @@ struct PuzzleSelectionView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-}
-
-// MARK: - Puzzle Card View
-
-struct TangramPuzzleCard: View {
-    let puzzle: TangramPuzzle
-    let thumbnail: Image?
-    let color: Color
-    let difficultyColor: Color
-    let onTap: () -> Void
     
-    @State private var isHovered = false
+    // MARK: - Helper Functions
     
-    var body: some View {
-        Button(action: {
-            print("DEBUG: Puzzle card tapped: \(puzzle.name)")
-            onTap()
-        }) {
-            VStack(spacing: 0) {
-                // Thumbnail area
-                ZStack {
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [color.opacity(0.15), color.opacity(0.05)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(height: 150)
-                    
-                    if let thumbnail = thumbnail {
-                        thumbnail
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxHeight: 120)
-                    } else {
-                        VStack(spacing: 8) {
-                            Image(systemName: "puzzlepiece.fill")
-                                .font(.system(size: 50))
-                                .foregroundColor(color)
-                            Text(puzzle.name)
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 8)
-                        }
-                    }
-                }
-                
-                // Info section
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(puzzle.name)
-                        .font(.system(.body, design: .rounded))
-                        .fontWeight(.semibold)
-                        .lineLimit(1)
-                        .foregroundColor(.primary)
-                    
-                    HStack {
-                        // Difficulty stars
-                        HStack(spacing: 2) {
-                            ForEach(0..<5) { index in
-                                Image(systemName: index < puzzle.difficulty.rawValue ? "star.fill" : "star")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(index < puzzle.difficulty.rawValue ? difficultyColor : .gray.opacity(0.3))
-                            }
-                        }
-                        
-                        Spacer()
-                        
-                        // Category badge
-                        Text(puzzle.category.rawValue)
-                            .font(.system(size: 10))
-                            .fontWeight(.medium)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(color.opacity(0.2))
-                            .foregroundColor(color)
-                            .cornerRadius(6)
-                    }
-                }
-                .padding(12)
-                .background(Color(UIColor.systemBackground))
-            }
-            .background(Color(UIColor.secondarySystemBackground))
-            .cornerRadius(16)
-            .shadow(color: .black.opacity(isHovered ? 0.15 : 0.05), radius: isHovered ? 8 : 4, y: 2)
-            .scaleEffect(isHovered ? 1.02 : 1.0)
-            .animation(.easeInOut(duration: 0.2), value: isHovered)
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            isHovered = hovering
+    private func difficultyDisplayName(_ difficulty: Int) -> String {
+        switch difficulty {
+        case 1: return "Beginner"
+        case 2: return "Easy"
+        case 3: return "Medium"
+        case 4: return "Hard"
+        case 5: return "Expert"
+        default: return "Level \(difficulty)"
         }
     }
 }
 
+// MARK: - Puzzle Card View
+// Using TangramPuzzleCard from TangramPuzzleCard.swift - removed duplicate
+
 // MARK: - Puzzle Row View
 
 struct PuzzleRowView: View {
-    let puzzle: TangramPuzzle
+    let puzzle: GamePuzzleData
     let thumbnail: Image?
     let color: Color
     let difficultyColor: Color
     let categoryIcon: String
     let onTap: () -> Void
+    
+    private func difficultyDisplayName(_ difficulty: Int) -> String {
+        switch difficulty {
+        case 1: return "Beginner"
+        case 2: return "Easy"
+        case 3: return "Medium"
+        case 4: return "Hard"
+        case 5: return "Expert"
+        default: return "Unknown"
+        }
+    }
     
     var body: some View {
         Button(action: onTap) {
@@ -383,7 +313,7 @@ struct PuzzleRowView: View {
                         Text("•")
                             .foregroundColor(.secondary)
                         
-                        Label(puzzle.difficulty.displayName, systemImage: "star.fill")
+                        Label(difficultyDisplayName(puzzle.difficulty), systemImage: "star.fill")
                             .font(.caption)
                             .foregroundColor(difficultyColor)
                     }

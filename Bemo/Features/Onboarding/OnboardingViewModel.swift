@@ -92,7 +92,9 @@ class OnboardingViewModel {
                     authenticationError = .notHandled
                 case .unknown:
                     authenticationError = .unknown
-                @unknown default:
+                case .notInteractive:
+                    authenticationError = .unknown
+                default:
                     authenticationError = .unknown
                 }
             } else {
