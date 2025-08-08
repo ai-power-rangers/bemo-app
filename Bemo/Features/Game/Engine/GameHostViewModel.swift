@@ -109,7 +109,7 @@ class GameHostViewModel {
         cvService.stopSession()
         
         // Save game state
-        if let gameState = game.saveState() {
+        if let _ = game.saveState() {
             // TODO: Persist game state
             print("Game state saved")
         }
@@ -166,7 +166,7 @@ class GameHostViewModel {
         case .noAction:
             // No action needed
             break
-        case .specialAchievement(name: let name, bonusXP: let bonusXP):
+        case .specialAchievement(name: _, bonusXP: let bonusXP):
             totalSessionXP += bonusXP
             break
         case .hintUsed:

@@ -52,6 +52,8 @@ enum TangramColors {
     }
 }
 
+// Color extension is already defined in Theme.swift
+
 // MARK: - UIColor Extension for Hex Support (for SpriteKit)
 
 extension UIColor {
@@ -78,5 +80,16 @@ extension UIColor {
             blue: CGFloat(b) / 255,
             alpha: CGFloat(a) / 255
         )
+    }
+    
+    func darker(by percentage: CGFloat = 30.0) -> UIColor {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        if self.getRed(&r, green: &g, blue: &b, alpha: &a) {
+            return UIColor(red: max(r - percentage/100, 0.0),
+                         green: max(g - percentage/100, 0.0),
+                         blue: max(b - percentage/100, 0.0),
+                         alpha: a)
+        }
+        return self
     }
 }

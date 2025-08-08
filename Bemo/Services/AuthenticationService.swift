@@ -150,7 +150,7 @@ class AuthenticationService: NSObject {
     }
     
     func refreshTokenIfNeeded() async {
-        guard let refreshToken = getToken(key: refreshTokenKey) else {
+        guard let _ = getToken(key: refreshTokenKey) else {
             await MainActor.run {
                 self.signOut()
             }
@@ -436,7 +436,9 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
                 authenticationError = .notHandled
             case .unknown:
                 authenticationError = .unknown
-            @unknown default:
+            case .notInteractive:
+                authenticationError = .unknown
+            default:
                 authenticationError = .unknown
             }
         } else {
@@ -478,7 +480,7 @@ struct AuthenticatedUser: Codable {
     // Custom encoding/decoding for PersonNameComponents
     enum CodingKeys: String, CodingKey {
         case id, appleUserIdentifier, email, accessToken
-        case fullNameData
+        case fullName
     }
     
     func encode(to encoder: Encoder) throws {
@@ -487,11 +489,7 @@ struct AuthenticatedUser: Codable {
         try container.encode(appleUserIdentifier, forKey: .appleUserIdentifier)
         try container.encodeIfPresent(email, forKey: .email)
         try container.encode(accessToken, forKey: .accessToken)
-        
-        if let fullName = fullName {
-            let fullNameData = try NSKeyedArchiver.archivedData(withRootObject: fullName, requiringSecureCoding: false)
-            try container.encode(fullNameData, forKey: .fullNameData)
-        }
+        try container.encodeIfPresent(fullName, forKey: .fullName)
     }
     
     init(from decoder: Decoder) throws {
@@ -500,12 +498,7 @@ struct AuthenticatedUser: Codable {
         appleUserIdentifier = try container.decode(String.self, forKey: .appleUserIdentifier)
         email = try container.decodeIfPresent(String.self, forKey: .email)
         accessToken = try container.decode(String.self, forKey: .accessToken)
-        
-        if let fullNameData = try container.decodeIfPresent(Data.self, forKey: .fullNameData) {
-            fullName = try NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(fullNameData) as? PersonNameComponents
-        } else {
-            fullName = nil
-        }
+        fullName = try container.decodeIfPresent(PersonNameComponents.self, forKey: .fullName)
     }
     
     init(id: String, appleUserIdentifier: String, email: String?, fullName: PersonNameComponents?, accessToken: String, nonce: String?) {

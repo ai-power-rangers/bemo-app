@@ -34,7 +34,7 @@ class AnalyticsService {
             return
         }
         
-        var config = PostHogConfig(
+        let config = PostHogConfig(
             apiKey: apiKey,
             host: configuration.postHogHost
         )

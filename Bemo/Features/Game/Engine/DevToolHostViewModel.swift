@@ -54,7 +54,7 @@ class DevToolHostViewModel {
     
     func endSession() {
         // Save dev tool state if needed
-        if let devToolState = devTool.saveState() {
+        if let _ = devTool.saveState() {
             // TODO: Persist dev tool state if needed
             print("Dev tool state saved")
         }

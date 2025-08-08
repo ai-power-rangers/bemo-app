@@ -13,7 +13,7 @@ import Foundation
 import CoreGraphics
 
 /// Self-contained puzzle data for gameplay - no editor dependencies
-struct GamePuzzleData: Codable, Equatable {
+struct GamePuzzleData: Codable, Equatable, Identifiable {
     let id: String
     let name: String
     let category: String
@@ -32,7 +32,40 @@ struct GamePuzzleData: Codable, Equatable {
         
         /// Computed rotation in degrees from transform
         var rotation: Double {
-            atan2(Double(transform.b), Double(transform.a)) * 180.0 / .pi
+            Self.extractRotation(from: transform) * 180.0 / .pi
+        }
+        
+        /// Extracts rotation angle from CGAffineTransform with robust floating-point handling
+        /// Handles cases where sin/cos values have floating-point precision errors (e.g., 180° rotations)
+        private static func extractRotation(from transform: CGAffineTransform) -> Double {
+            let a = Double(transform.a)
+            let b = Double(transform.b)
+            
+            // Handle floating-point precision errors for common angles
+            let epsilon: Double = 1e-10
+            
+            // Check for 180° rotation: a ≈ -1, b ≈ 0
+            if abs(a + 1) < epsilon && abs(b) < epsilon {
+                return .pi  // 180 degrees in radians
+            }
+            
+            // Check for 0° rotation: a ≈ 1, b ≈ 0
+            if abs(a - 1) < epsilon && abs(b) < epsilon {
+                return 0  // 0 degrees
+            }
+            
+            // Check for 90° rotation: a ≈ 0, b ≈ 1
+            if abs(a) < epsilon && abs(b - 1) < epsilon {
+                return .pi / 2  // 90 degrees
+            }
+            
+            // Check for -90° (270°) rotation: a ≈ 0, b ≈ -1
+            if abs(a) < epsilon && abs(b + 1) < epsilon {
+                return -.pi / 2  // -90 degrees
+            }
+            
+            // For all other cases, use standard atan2
+            return atan2(b, a)
         }
         
         /// Check if a placed piece matches this target within tolerances

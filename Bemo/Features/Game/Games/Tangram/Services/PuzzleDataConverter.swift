@@ -12,15 +12,22 @@
 import Foundation
 import CoreGraphics
 
+/// Error types for puzzle data conversion
+enum PuzzleDataConverterError: Error {
+    case missingRequiredFields(fields: [String])
+    case invalidPieceType(type: String)
+    case missingTransformData
+    case invalidDataFormat
+}
+
 /// Converts puzzle data from various sources to GamePuzzleData format
 enum PuzzleDataConverter {
     
     /// Convert from database JSON/Dictionary format
-    static func convertFromDatabase(_ data: [String: Any]) -> GamePuzzleData? {
+    static func convertFromDatabase(_ data: [String: Any]) -> Result<GamePuzzleData, PuzzleDataConverterError> {
         guard let id = data["id"] as? String,
               let name = data["name"] as? String else {
-            print("Warning: Missing required puzzle fields")
-            return nil
+            return .failure(.missingRequiredFields(fields: ["id", "name"]))
         }
         
         // Category and difficulty might be nested or as raw values
@@ -32,8 +39,7 @@ enum PuzzleDataConverter {
         
         // Parse pieces array
         guard let piecesData = data["pieces"] as? [[String: Any]] else {
-            print("Warning: No pieces data found")
-            return nil
+            return .failure(.missingRequiredFields(fields: ["pieces"]))
         }
         
         let targetPieces = piecesData.compactMap { pieceDict -> GamePuzzleData.TargetPiece? in
@@ -42,7 +48,10 @@ enum PuzzleDataConverter {
                               pieceDict["type"] as? String ?? ""
             
             guard let pieceType = TangramPieceType(rawValue: typeRawValue) else {
+                // Log error in debug builds only
+                #if DEBUG
                 print("Warning: Unknown piece type: \(typeRawValue)")
+                #endif
                 return nil
             }
             
@@ -63,7 +72,9 @@ enum PuzzleDataConverter {
             }
             
             guard let transform = transformDict else {
+                #if DEBUG
                 print("Warning: No transform data for piece")
+                #endif
                 return nil
             }
             
@@ -83,13 +94,17 @@ enum PuzzleDataConverter {
             )
         }
         
-        return GamePuzzleData(
+        guard !targetPieces.isEmpty else {
+            return .failure(.invalidDataFormat)
+        }
+        
+        return .success(GamePuzzleData(
             id: id,
             name: name,
             category: category,
             difficulty: difficulty,
             targetPieces: targetPieces
-        )
+        ))
     }
     
     /// Convert from Codable data (when we have proper types)
@@ -105,7 +120,12 @@ enum PuzzleDataConverter {
             }
         }
         
-        return convertFromDatabase(dict)
+        switch convertFromDatabase(dict) {
+        case .success(let puzzle):
+            return puzzle
+        case .failure:
+            return nil
+        }
     }
     
 }
