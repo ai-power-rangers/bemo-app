@@ -363,7 +363,7 @@ class TangramHintEngine {
                 ))
             }
             
-        case .position(let from, let to):
+        case .position(_, _):
             // Show movement from current to target
             steps.append(AnimationStep(
                 duration: 2.0,

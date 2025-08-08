@@ -234,7 +234,7 @@ extension TangramEditorViewModel {
                 }
                 
                 // Calculate placement - add debug for parallelogram issues
-                for (i, conn) in connections.enumerated() {
+                for (_, _) in connections.enumerated() {
                 }
                 
                 if let placedPiece = placementService.placeConnectedPiece(
@@ -244,7 +244,7 @@ extension TangramEditorViewModel {
                     connections: connections,
                     existingPieces: puzzle.pieces
                 ) {
-                    for conn in connections {
+                    for _ in connections {
                     }
                     
                     // Create a Connection object for validation based on the connection points

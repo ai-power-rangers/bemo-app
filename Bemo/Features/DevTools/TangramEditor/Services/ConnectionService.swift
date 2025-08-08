@@ -301,7 +301,7 @@ class ConnectionService {
             
         case .vertexToEdge(let pieceAId, let vertex, let pieceBId, let edge):
             guard vertex < verticesA.count,
-                  let pieceAObj = pieces.first(where: { $0.id == pieceAId }),
+                  let _ = pieces.first(where: { $0.id == pieceAId }),
                   let pieceBObj = pieces.first(where: { $0.id == pieceBId }) else {
                 return false
             }

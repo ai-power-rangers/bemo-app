@@ -573,8 +573,8 @@ struct PuzzleSilhouetteView: View {
     }
     
     private func calculateOffset(for bounds: CGRect, scale: CGFloat, in size: CGSize) -> CGPoint {
-        let scaledWidth = bounds.width * scale
-        let scaledHeight = bounds.height * scale
+        _ = bounds.width * scale
+        _ = bounds.height * scale
         
         let centerX = size.width / 2
         let centerY = size.height / 2

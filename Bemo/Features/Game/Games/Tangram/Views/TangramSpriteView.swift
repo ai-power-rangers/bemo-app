@@ -48,24 +48,24 @@ struct TangramSpriteView: View {
                 configureScene(size: geometry.size, safeAreaTop: geometry.safeAreaInsets.top)
             }
         }
-        .onChange(of: puzzle) { newPuzzle in
+        .onChange(of: puzzle) { oldValue, newValue in
             if let tangramScene = scene as? TangramPuzzleScene {
-                tangramScene.loadPuzzle(newPuzzle)
+                tangramScene.loadPuzzle(newValue)
             }
         }
-        .onChange(of: formattedTime) { _ in
+        .onChange(of: formattedTime) { oldValue, newValue in
             if let tangramScene = scene as? TangramPuzzleScene {
-                tangramScene.updateTimer(formattedTime, started: timerStarted)
+                tangramScene.updateTimer(newValue, started: timerStarted)
             }
         }
-        .onChange(of: progress) { _ in
+        .onChange(of: progress) { oldValue, newValue in
             if let tangramScene = scene as? TangramPuzzleScene {
-                tangramScene.updateProgress(progress)
+                tangramScene.updateProgress(newValue)
             }
         }
-        .onChange(of: isPuzzleComplete) { _ in
+        .onChange(of: isPuzzleComplete) { oldValue, newValue in
             if let tangramScene = scene as? TangramPuzzleScene {
-                tangramScene.updateCompletionState(isPuzzleComplete)
+                tangramScene.updateCompletionState(newValue)
             }
         }
         .onChange(of: currentHint) { oldValue, newValue in

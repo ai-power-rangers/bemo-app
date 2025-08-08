@@ -120,7 +120,7 @@ struct PendingPieceView: View {
         }
         
         // Check if this point type matches any unmatched canvas point type
-        let selectedPendingTypes = viewModel.uiState.selectedPendingPoints.map { pendingPoint in
+        _ = viewModel.uiState.selectedPendingPoints.map { pendingPoint in
             switch pendingPoint.type {
             case .vertex: return "vertex"
             case .edge: return "edge"

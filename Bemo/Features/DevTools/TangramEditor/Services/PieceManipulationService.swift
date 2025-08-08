@@ -68,7 +68,7 @@ class PieceManipulationService {
                 
             case .edgeToEdge(let pieceAId, let edgeA, let pieceBId, let edgeB):
                 // Determine which piece is sliding and which is stationary
-                let isPieceA = piece.id == pieceAId
+                _ = piece.id == pieceAId
                 
                 // Get BOTH pieces to determine proper sliding
                 guard let pieceA = allPieces.first(where: { $0.id == pieceAId }),
@@ -166,8 +166,8 @@ class PieceManipulationService {
                 }
                 
                 let edgeDef = edgesB[edge]
-                let edgeStart = worldVerticesB[edgeDef.startVertex]
-                let edgeEnd = worldVerticesB[edgeDef.endVertex]
+                _ = worldVerticesB[edgeDef.startVertex]
+                _ = worldVerticesB[edgeDef.endVertex]
                 
                 // Get current vertex position on the edge for rotation pivot
                 let worldVerticesA = TangramEditorCoordinateSystem.getWorldVertices(for: piece)

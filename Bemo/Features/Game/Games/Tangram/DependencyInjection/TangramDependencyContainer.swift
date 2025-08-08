@@ -91,14 +91,9 @@ class TangramDependencyContainer {
         return PuzzleSelectionViewModel(
             libraryService: puzzleLibraryService,
             onPuzzleSelected: { puzzle in
-                // Convert TangramPuzzle to GamePuzzleData if needed
-                if let tangramPuzzle = puzzle as? TangramPuzzle {
-                    if let gamePuzzleData = self.dataConverter.convertFromCodable(tangramPuzzle) {
-                        onPuzzleSelected(gamePuzzleData)
-                    }
-                } else {
-                    onPuzzleSelected(puzzle)
-                }
+                // The library service already returns GamePuzzleData, so just pass it through
+                // If we ever need to handle TangramPuzzle conversion, we can add that later
+                onPuzzleSelected(puzzle)
             },
             onBackToLobby: onBackToLobby
         )

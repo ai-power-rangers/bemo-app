@@ -78,7 +78,7 @@ class TangramEditorCoordinator {
         
         
         // Calculate piece placement (flip is now handled inside placeConnectedPiece)
-        guard var newPiece = placementService.placeConnectedPiece(
+        guard let newPiece = placementService.placeConnectedPiece(
             type: type,
             rotation: rotation,
             isFlipped: isFlipped,
@@ -91,11 +91,11 @@ class TangramEditorCoordinator {
         // Flip is now handled inside placeConnectedPiece, no need to apply here
         
         // Validate placement doesn't overlap using centralized coordinate system
-        let newVertices = TangramEditorCoordinateSystem.getWorldVertices(for: newPiece)
+        _ = TangramEditorCoordinateSystem.getWorldVertices(for: newPiece)
         
         
         for existingPiece in existingPieces {
-            let existingVertices = TangramEditorCoordinateSystem.getWorldVertices(for: existingPiece)
+            _ = TangramEditorCoordinateSystem.getWorldVertices(for: existingPiece)
             
             
             // Use PieceTransformEngine's overlap detection

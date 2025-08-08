@@ -195,7 +195,7 @@ class GameLobbyViewModel {
     
     func isGameUnlocked(_ game: Game) -> Bool {
         // Check if the player meets the requirements for this game
-        guard let currentUserProfile = profileService.currentProfile else {
+        guard let _ = profileService.currentProfile else {
             return false // No profiles exist, no games unlocked
         }
         

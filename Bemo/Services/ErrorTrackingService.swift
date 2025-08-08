@@ -39,12 +39,9 @@ class ErrorTrackingService {
             // Performance monitoring - lower sample rate for production
             options.tracesSampleRate = config.isDebugBuild ? 1.0 : 0.25
             
-            // Profile sampling using the new API
-            if #available(iOS 16.0, *) {
-                options.profilesSampler = { _ in
-                    return config.isDebugBuild ? 1.0 : 0.1
-                }
-            }
+            // Profile sampling - removed deprecated API
+            // Profiling configuration has moved to server-side configuration in Sentry
+            // or can be configured via experimental options if needed
             
             // Attachments for better debugging
             options.attachScreenshot = true

@@ -230,14 +230,14 @@ class PieceTransformEngine {
         // CRITICAL: Identify which piece is rotating vs stationary
         // The pivot point is ON the stationary piece
         // The rotating piece is the one we're calculating the transform for
-        let (stationaryPieceId, rotatingPieceId, connectionPoint) = identifyRotationRoles(
+        let (stationaryPieceId, rotatingPieceId, _) = identifyRotationRoles(
             for: piece,
             connection: conn,
             otherPieces: otherPieces
         )
         
         guard piece.id == rotatingPieceId,
-              let stationaryPiece = otherPieces.first(where: { $0.id == stationaryPieceId }) else {
+              let _ = otherPieces.first(where: { $0.id == stationaryPieceId }) else {
             // This piece is the stationary one or connection is invalid
             return (piece.transform, nil)
         }
@@ -356,7 +356,7 @@ class PieceTransformEngine {
                 return (stationaryId, rotatingId, connectionPoint)
             }
             
-        case .vertexToEdge(let vertexPieceId, let vertex, let edgePieceId, let edge):
+        case .vertexToEdge(let vertexPieceId, let vertex, let edgePieceId, _):
             // For vertex-to-edge connections:
             // If the vertex piece is being manipulated, it rotates around its vertex on the edge
             // If the edge piece is being manipulated, it cannot rotate (edge must stay under vertex)

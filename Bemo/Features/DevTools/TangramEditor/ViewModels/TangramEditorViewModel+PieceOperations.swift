@@ -74,7 +74,7 @@ extension TangramEditorViewModel {
             }
             
             // Create piece with the calculated transform
-            var piece = TangramPiece(type: type, transform: finalTransform)
+            let piece = TangramPiece(type: type, transform: finalTransform)
             puzzle.pieces.append(piece)
             // Clear pending piece type after successful placement
             uiState.pendingPieceType = nil
@@ -92,7 +92,7 @@ extension TangramEditorViewModel {
         case .selectingPendingConnections, .manipulatingPendingPiece:
             
             // Use the preview piece if available
-            guard let preview = uiState.previewPiece else {
+            guard uiState.previewPiece != nil else {
                 // No valid preview available - this shouldn't happen with proper UI validation
                 handleError(.placementCalculationFailed("No valid placement found for the selected connections"))
                 return
@@ -173,7 +173,7 @@ extension TangramEditorViewModel {
         case .manipulatingFirstPiece(let type, let currentRotation, let isFlipped):
             let newRotation = currentRotation + degrees
             uiState.pendingPieceRotation = newRotation
-            let success = transitionToState(.manipulatingFirstPiece(type: type, rotation: newRotation, isFlipped: isFlipped))
+            _ = transitionToState(.manipulatingFirstPiece(type: type, rotation: newRotation, isFlipped: isFlipped))
             
         case .selectingPendingConnections, .previewingPlacement:
             // Allow rotation while selecting connections
@@ -183,7 +183,7 @@ extension TangramEditorViewModel {
         case .manipulatingPendingPiece(let type, let mode, let currentRotation):
             let newRotation = currentRotation + degrees
             uiState.pendingPieceRotation = newRotation
-            let success = transitionToState(.manipulatingPendingPiece(type: type, mode: mode, rotation: newRotation))
+            _ = transitionToState(.manipulatingPendingPiece(type: type, mode: mode, rotation: newRotation))
             
         default:
             break
@@ -199,10 +199,10 @@ extension TangramEditorViewModel {
         switch editorState {
         case .manipulatingFirstPiece(let type, let rotation, let isFlipped):
             _ = transitionToState(.manipulatingFirstPiece(type: type, rotation: rotation, isFlipped: !isFlipped))
-        case .manipulatingPendingPiece(let type, let points, let rotation):
+        case .manipulatingPendingPiece(_, _, _):
             // For pending pieces, toggle the flip state
             uiState.pendingPieceIsFlipped.toggle()
-        case .selectingPendingConnections(let type, let points):
+        case .selectingPendingConnections(_, _):
             // Allow flipping while selecting connections
             uiState.pendingPieceIsFlipped.toggle()
         default:
@@ -408,7 +408,7 @@ extension TangramEditorViewModel {
             uiState.manipulatingPieceId = pieceId
             
             // Store snap indicators if available
-            if let snapInfo = result.snapInfo {
+            if let _ = result.snapInfo {
                 // Could be used to show snap points in UI
             }
         } else {
