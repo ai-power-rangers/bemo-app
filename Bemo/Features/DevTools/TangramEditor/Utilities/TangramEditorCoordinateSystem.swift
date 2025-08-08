@@ -97,16 +97,57 @@ class TangramEditorCoordinateSystem {
     
     // MARK: - Connection Points
     
+    /// Check if a transform represents a flipped state (negative determinant)
+    static func isFlipped(_ transform: CGAffineTransform) -> Bool {
+        // A transform is flipped if determinant is negative
+        // det = a*d - b*c
+        return transform.a * transform.d - transform.b * transform.c < 0
+    }
+    
+    /// Remap vertex index for flipped parallelogram
+    private static func remapParallelogramVertexIndex(_ index: Int) -> Int {
+        // When parallelogram is flipped horizontally, vertices swap: 0↔1, 2↔3
+        switch index {
+        case 0: return 1
+        case 1: return 0
+        case 2: return 3
+        case 3: return 2
+        default: return index
+        }
+    }
+    
+    /// Remap edge index for flipped parallelogram
+    private static func remapParallelogramEdgeIndex(_ index: Int) -> Int {
+        // When parallelogram is flipped, edges need remapping
+        // Original edges: 0(0→1), 1(1→2), 2(2→3), 3(3→0)
+        // Flipped edges: 0(1→0), 1(0→3), 2(3→2), 3(2→1)
+        // So mapping is: 0→0, 1→3, 2→2, 3→1
+        switch index {
+        case 0: return 0
+        case 1: return 3
+        case 2: return 2
+        case 3: return 1
+        default: return index
+        }
+    }
+    
     /// Get all connection points for a piece in world space
     static func getConnectionPoints(for piece: TangramPiece) -> [PiecePlacementService.ConnectionPoint] {
         var points: [PiecePlacementService.ConnectionPoint] = []
         let visualVertices = getVisualVertices(for: piece.type)
         
+        // Detect if parallelogram is flipped
+        let isFlipped = piece.type == .parallelogram && isFlipped(piece.transform)
+        
         // Add vertex connection points
         for (index, vertex) in visualVertices.enumerated() {
             let worldPos = vertex.applying(piece.transform)
+            
+            // Remap index for flipped parallelogram to maintain correct topology
+            let connectionIndex = isFlipped ? remapParallelogramVertexIndex(index) : index
+            
             points.append(PiecePlacementService.ConnectionPoint(
-                type: .vertex(index: index),
+                type: .vertex(index: connectionIndex),
                 position: worldPos,
                 pieceId: piece.id
             ))
@@ -121,8 +162,12 @@ class TangramEditorCoordinateSystem {
                 y: (start.y + end.y) / 2
             )
             let worldPos = midpoint.applying(piece.transform)
+            
+            // Remap edge index for flipped parallelogram
+            let connectionIndex = isFlipped ? remapParallelogramEdgeIndex(i) : i
+            
             points.append(PiecePlacementService.ConnectionPoint(
-                type: .edge(index: i),
+                type: .edge(index: connectionIndex),
                 position: worldPos,
                 pieceId: piece.id
             ))
@@ -160,6 +205,7 @@ class TangramEditorCoordinateSystem {
     static func calculateAlignmentTransform(
         pieceType: PieceType,
         baseRotation: Double,
+        isFlipped: Bool = false,
         connections: [(canvas: PiecePlacementService.ConnectionPoint, piece: PiecePlacementService.ConnectionPoint)],
         existingPieces: [TangramPiece] = []
     ) -> CGAffineTransform? {
@@ -172,6 +218,7 @@ class TangramEditorCoordinateSystem {
             return calculateSinglePointAlignment(
                 pieceType: pieceType,
                 baseRotation: baseRotation,
+                isFlipped: isFlipped,
                 connection: connections[0],
                 existingPieces: existingPieces
             )
@@ -181,6 +228,7 @@ class TangramEditorCoordinateSystem {
             return calculateMultiPointAlignment(
                 pieceType: pieceType,
                 baseRotation: baseRotation,
+                isFlipped: isFlipped,
                 connections: Array(connections.prefix(2)), // Use first 2 for dual alignment
                 existingPieces: existingPieces
             )
@@ -191,6 +239,7 @@ class TangramEditorCoordinateSystem {
     private static func calculateSinglePointAlignment(
         pieceType: PieceType,
         baseRotation: Double,
+        isFlipped: Bool,
         connection: (canvas: PiecePlacementService.ConnectionPoint, piece: PiecePlacementService.ConnectionPoint),
         existingPieces: [TangramPiece]
     ) -> CGAffineTransform? {
@@ -237,11 +286,32 @@ class TangramEditorCoordinateSystem {
             }
         }
         
-        // Start with calculated rotation
-        var transform = CGAffineTransform.identity.rotated(by: finalRotation)
+        // Start with flip if needed (for parallelogram)
+        var transform = CGAffineTransform.identity
+        if isFlipped && pieceType == .parallelogram {
+            transform = transform.scaledBy(x: -1, y: 1)
+        }
+        
+        // Then apply rotation
+        transform = transform.rotated(by: finalRotation)
         
         // Get local position of piece connection point
-        let localPiecePos = getLocalConnectionPoint(for: pieceType, connectionType: connection.piece.type)
+        // Need to account for flip when getting the local point
+        let localPiecePos: CGPoint
+        if isFlipped && pieceType == .parallelogram {
+            // For flipped parallelogram, we need to remap the connection point
+            let remappedType: PiecePlacementService.ConnectionPoint.PointType
+            switch connection.piece.type {
+            case .vertex(let index):
+                remappedType = .vertex(index: remapParallelogramVertexIndex(index))
+            case .edge(let index):
+                remappedType = .edge(index: remapParallelogramEdgeIndex(index))
+            }
+            localPiecePos = getLocalConnectionPoint(for: pieceType, connectionType: remappedType)
+        } else {
+            localPiecePos = getLocalConnectionPoint(for: pieceType, connectionType: connection.piece.type)
+        }
+        
         let rotatedPiecePos = localPiecePos.applying(transform)
         
         // Calculate translation in world space
@@ -264,6 +334,7 @@ class TangramEditorCoordinateSystem {
     private static func calculateMultiPointAlignment(
         pieceType: PieceType,
         baseRotation: Double,
+        isFlipped: Bool,
         connections: [(canvas: PiecePlacementService.ConnectionPoint, piece: PiecePlacementService.ConnectionPoint)],
         existingPieces: [TangramPiece]
     ) -> CGAffineTransform? {
@@ -272,14 +343,40 @@ class TangramEditorCoordinateSystem {
             return calculateSinglePointAlignment(
                 pieceType: pieceType,
                 baseRotation: baseRotation,
+                isFlipped: isFlipped,
                 connection: connections[0],
                 existingPieces: existingPieces
             )
         }
         
-        // Get local positions for piece connection points
-        let local1 = getLocalConnectionPoint(for: pieceType, connectionType: connections[0].piece.type)
-        let local2 = getLocalConnectionPoint(for: pieceType, connectionType: connections[1].piece.type)
+        // Get local positions for piece connection points, accounting for flip
+        let local1: CGPoint
+        let local2: CGPoint
+        
+        if isFlipped && pieceType == .parallelogram {
+            // Remap connection points for flipped parallelogram
+            let remapped1: PiecePlacementService.ConnectionPoint.PointType
+            switch connections[0].piece.type {
+            case .vertex(let index):
+                remapped1 = .vertex(index: remapParallelogramVertexIndex(index))
+            case .edge(let index):
+                remapped1 = .edge(index: remapParallelogramEdgeIndex(index))
+            }
+            
+            let remapped2: PiecePlacementService.ConnectionPoint.PointType
+            switch connections[1].piece.type {
+            case .vertex(let index):
+                remapped2 = .vertex(index: remapParallelogramVertexIndex(index))
+            case .edge(let index):
+                remapped2 = .edge(index: remapParallelogramEdgeIndex(index))
+            }
+            
+            local1 = getLocalConnectionPoint(for: pieceType, connectionType: remapped1)
+            local2 = getLocalConnectionPoint(for: pieceType, connectionType: remapped2)
+        } else {
+            local1 = getLocalConnectionPoint(for: pieceType, connectionType: connections[0].piece.type)
+            local2 = getLocalConnectionPoint(for: pieceType, connectionType: connections[1].piece.type)
+        }
         
         
         // Get canvas positions
@@ -305,8 +402,12 @@ class TangramEditorCoordinateSystem {
         let rotationNeeded = canvasAngle - localAngle + baseRotation
         
         
-        // Create transform with calculated rotation
-        var transform = CGAffineTransform.identity.rotated(by: rotationNeeded)
+        // Create transform with flip first if needed, then rotation
+        var transform = CGAffineTransform.identity
+        if isFlipped && pieceType == .parallelogram {
+            transform = transform.scaledBy(x: -1, y: 1)
+        }
+        transform = transform.rotated(by: rotationNeeded)
         
         // Calculate translation to align first point
         let rotatedLocal1 = local1.applying(transform)

@@ -357,26 +357,13 @@ struct TangramCVGameView: View {
     private func configureScene(size: CGSize) {
         scene.size = size
         scene.scaleMode = .resizeFill
-        scene.puzzle = viewModel.selectedPuzzle
-        scene.isCVMode = viewModel.isCVMode
         
-        // Set up callbacks
-        scene.onPiecePlaced = { [weak viewModel] piece, inAssemblyZone in
-            viewModel?.handlePiecePlacement(piece, inAssemblyZone: inAssemblyZone)
-        }
+        // Connect scene to viewModel via delegate pattern
+        viewModel.setScene(scene)
         
-        scene.onAnchorChanged = { [weak viewModel] anchor in
-            if let anchor = anchor {
-                viewModel?.setAnchorPiece(anchor)
-            }
-        }
-        
-        scene.onCVDataGenerated = { [weak viewModel] cvData in
-            viewModel?.cvOutputStream = cvData
-        }
-        
-        scene.onPuzzleCompleted = { [weak viewModel] in
-            viewModel?.validateAssembly()
+        // Load selected puzzle if any
+        if let puzzle = viewModel.selectedPuzzle {
+            scene.loadPuzzle(puzzle)
         }
     }
 }

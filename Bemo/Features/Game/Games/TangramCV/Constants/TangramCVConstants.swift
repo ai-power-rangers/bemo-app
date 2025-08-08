@@ -17,10 +17,11 @@ enum TangramCVConstants {
     // MARK: - Visual Scaling
     
     /// Scale factor to convert normalized coordinates (0-2) to visual pixels
-    static let visualScale: CGFloat = 50.0
+    /// Reduced to 35.0 for better fit in 3-panel layout
+    static let visualScale: CGFloat = 35.0
     
-    /// Scale factor for reference display (60% of normal size)
-    static let referenceScale: CGFloat = 0.6
+    /// Scale factor for reference display (1.0 = same as pieces)
+    static let referenceScale: CGFloat = 1.0
     
     // MARK: - Validation Tolerances (Normalized Units)
     

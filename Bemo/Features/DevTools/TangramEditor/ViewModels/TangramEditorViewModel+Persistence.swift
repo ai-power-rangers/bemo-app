@@ -25,8 +25,8 @@ extension TangramEditorViewModel {
             throw TangramEditorError.validationFailed("Puzzle must be valid with at least 2 pieces")
         }
         
-        // Check if this is a new puzzle (doesn't exist in database yet)
-        let isNewPuzzle = puzzle.createdDate == puzzle.modifiedDate
+        // Check if this puzzle already exists in the cache (better indicator than date comparison)
+        let existsInCache = await puzzleManagementService?.getTangramPuzzles().contains { $0.id == puzzle.id } ?? false
         
         puzzle.modifiedDate = Date()
         puzzle.solutionChecksum = generateChecksum()
@@ -40,11 +40,17 @@ extension TangramEditorViewModel {
         
         // Update the PuzzleManagementService cache efficiently
         if let puzzleManagement = puzzleManagementService {
-            if isNewPuzzle {
+            print("[TangramEditor] Updating PuzzleManagementService cache for puzzle: \(puzzle.id)")
+            if !existsInCache {
+                print("[TangramEditor] Puzzle not in cache - adding as new")
                 await puzzleManagement.addNewPuzzle(puzzle.id)
             } else {
+                print("[TangramEditor] Puzzle exists in cache - updating")
                 await puzzleManagement.updateSinglePuzzle(puzzle.id)
             }
+            print("[TangramEditor] Cache update completed")
+        } else {
+            print("[TangramEditor] WARNING: No PuzzleManagementService available - cache not updated!")
         }
     }
     

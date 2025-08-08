@@ -58,6 +58,7 @@ class PuzzleLibraryService {
                     await MainActor.run {
                         self.availablePuzzles = puzzles
                         self.isLoading = false
+                        print("[PuzzleLibraryService] Loaded \(puzzles.count) puzzles from cache")
                     }
                 } else {
                     // Fallback to direct database loading
@@ -65,6 +66,7 @@ class PuzzleLibraryService {
                     await MainActor.run {
                         self.availablePuzzles = puzzles
                         self.isLoading = false
+                        print("[PuzzleLibraryService] Loaded \(puzzles.count) puzzles from database")
                     }
                 }
             } catch {
@@ -72,9 +74,16 @@ class PuzzleLibraryService {
                     self.loadError = "Failed to load puzzles: \(error.localizedDescription)"
                     self.isLoading = false
                     self.availablePuzzles = []
+                    print("[PuzzleLibraryService] Failed to load puzzles: \(error)")
                 }
             }
         }
+    }
+    
+    /// Force refresh puzzles from cache (called after editor saves)
+    func refreshPuzzles() {
+        print("[PuzzleLibraryService] Refreshing puzzles...")
+        loadPuzzles()
     }
     
     // MARK: - Puzzle Filtering

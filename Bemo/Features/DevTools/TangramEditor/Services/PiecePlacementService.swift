@@ -56,24 +56,12 @@ class PiecePlacementService {
     ) -> TangramPiece? {
         guard !connections.isEmpty else { return nil }
         
-        // Create temporary piece for transform calculation
-        var tempPiece = TangramPiece(type: type, transform: .identity)
-        
-        // Apply flip if needed (for parallelogram) before calculating placement
-        if isFlipped && type == .parallelogram {
-            let flipTransform = CGAffineTransform(scaleX: -1, y: 1)
-            tempPiece.transform = flipTransform
-        }
-        
-        // Convert connection points to format expected by transform engine
-        // For now, we'll use the coordinate system alignment since transform engine
-        // expects different connection format
-        
         // Use TangramEditorCoordinateSystem for multi-point alignment
-        // This maintains compatibility while we transition
+        // Pass flip state to alignment calculation
         let transform = TangramEditorCoordinateSystem.calculateAlignmentTransform(
             pieceType: type,
             baseRotation: rotation * .pi / 180,
+            isFlipped: isFlipped,
             connections: connections.map { conn in
                 (canvas: conn.canvasPoint, piece: conn.piecePoint)
             },
@@ -84,12 +72,12 @@ class PiecePlacementService {
             return nil
         }
         
-        // Verify the transform is valid
-        tempPiece.transform = finalTransform
+        // Create piece with final transform for validation
+        let piece = TangramPiece(type: type, transform: finalTransform)
         
         // Use transform engine to validate placement
         let validationResult = transformEngine.calculateTransform(
-            for: tempPiece,
+            for: piece,
             operation: .place(center: CGPoint.zero, rotation: 0),
             connection: nil,
             otherPieces: existingPieces,
@@ -100,7 +88,7 @@ class PiecePlacementService {
             return nil
         }
         
-        return TangramPiece(type: type, transform: finalTransform)
+        return piece
     }
     
     // MARK: - Connection Point Calculation

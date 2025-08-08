@@ -2,77 +2,70 @@
 //  TangramCVGameViewModel.swift
 //  Bemo
 //
-//  View model for CV-ready Tangram game with three-zone layout
+//  ViewModel coordinator for TangramCV game
 //
 
-// WHAT: Manages CV-ready game state, anchor tracking, and relative validation
-// ARCHITECTURE: ViewModel in MVVM-S, uses @Observable for state management
-// USAGE: Created by TangramCVGame, manages three-zone gameplay and CV streaming
+// WHAT: Coordinates between Scene, Services, and Game delegate
+// ARCHITECTURE: ViewModel in MVVM-S pattern, implements Scene delegate
+// USAGE: Observes Scene state, coordinates business logic via services
 
-import SwiftUI
+import Foundation
 import Observation
 
 @Observable
 class TangramCVGameViewModel {
     
-    // MARK: - Game State
-    
-    enum GamePhase {
-        case selectingPuzzle
-        case playingPuzzle
-        case puzzleComplete
-    }
+    // MARK: - Game State (Observable for UI)
     
     var currentPhase: GamePhase = .selectingPuzzle
     var selectedPuzzle: GamePuzzleData?
-    var score: Int = 0
     var progress: Double = 0.0
-    
-    // MARK: - CV and Anchor Tracking
-    
-    var anchorPiece: CVPuzzlePieceNode?
-    var assembledPieces: [CVPuzzlePieceNode] = []
-    var cvOutputStream: [String: Any] = [:]
-    var lastCVEmissionTime: TimeInterval = 0
-    var isCVMode: Bool = false // Toggle between touch and CV mode
-    
-    // Track piece stability for anchor promotion (CV mode)
-    private var pieceStabilityFrames: [String: Int] = [:]
-    
-    // MARK: - Zone Management
-    
-    var referenceZoneHeight: CGFloat = 0
-    var assemblyZoneHeight: CGFloat = 0
-    var storageZoneHeight: CGFloat = 0
-    
-    // MARK: - Validation
-    
-    var validationResults: [TangramPieceType: Bool] = [:]
     var completedPieces: Set<String> = []
+    
+    // MARK: - Configuration
+    
+    var isCVMode: Bool = false
     
     // MARK: - Dependencies
     
     private weak var delegate: GameDelegate?
+    private let cvService = TangramCVService()
     private let puzzleLibraryService: PuzzleLibraryService
     private let supabaseService: SupabaseService?
+    
+    // MARK: - Scene Reference
+    
+    private weak var scene: TangramThreeZoneScene?
+    
+    // MARK: - CV Output
+    
+    var cvOutputStream: [String: Any] = [:]
+    private var lastCVEmissionTime: TimeInterval = 0
+    
+    // MARK: - Initialization
+    
+    init(delegate: GameDelegate? = nil,
+         puzzleLibraryService: PuzzleLibraryService,
+         supabaseService: SupabaseService? = nil) {
+        self.delegate = delegate
+        self.puzzleLibraryService = puzzleLibraryService
+        self.supabaseService = supabaseService
+        
+        Task {
+            await loadPuzzles()
+        }
+    }
+    
+    // MARK: - Public Interface
+    
     var availablePuzzles: [GamePuzzleData] {
         puzzleLibraryService.availablePuzzles
     }
     
-    // CV Services (to be implemented)
-    // private let cvOutputBridge = CVOutputBridge()
-    // private let relativeValidator = TangramRelativeValidator()
-    
-    // MARK: - Initialization
-    
-    init(delegate: GameDelegate, supabaseService: SupabaseService? = nil, puzzleManagementService: PuzzleManagementService? = nil) {
-        self.delegate = delegate
-        self.supabaseService = supabaseService
-        self.puzzleLibraryService = PuzzleLibraryService(
-            puzzleManagementService: puzzleManagementService,
-            supabaseService: supabaseService
-        )
-        // Puzzles will be loaded automatically by PuzzleLibraryService
+    func setScene(_ scene: TangramThreeZoneScene) {
+        self.scene = scene
+        self.scene?.gameDelegate = self
+        self.scene?.isCVMode = isCVMode
     }
     
     func selectPuzzle(_ puzzle: GamePuzzleData) {
@@ -80,162 +73,161 @@ class TangramCVGameViewModel {
         currentPhase = .playingPuzzle
         progress = 0.0
         completedPieces.removeAll()
-        validationResults.removeAll()
-        anchorPiece = nil
-        assembledPieces.removeAll()
+        cvOutputStream.removeAll()
+        
+        // Load puzzle in scene
+        scene?.loadPuzzle(puzzle)
         
         print("TangramCV: Selected puzzle '\(puzzle.name)'")
     }
     
-    // MARK: - Anchor Management
-    
-    func setAnchorPiece(_ piece: CVPuzzlePieceNode) {
-        // Clear previous anchor
-        anchorPiece?.isAnchor = false
-        
-        // Set new anchor
-        anchorPiece = piece
-        piece.isAnchor = true
-        
-        print("TangramCV: Anchor set to \(piece.pieceType?.rawValue ?? "unknown")")
-        
-        // Generate CV output with new anchor
-        generateCVOutputStream()
+    func toggleCVMode() {
+        isCVMode.toggle()
+        scene?.isCVMode = isCVMode
+        print("TangramCV: CV Mode = \(isCVMode)")
     }
     
-    func promoteNewAnchor() {
-        guard !assembledPieces.isEmpty else {
-            anchorPiece = nil
-            return
-        }
-        
-        let newAnchor: CVPuzzlePieceNode?
-        
-        if isCVMode {
-            // CV mode: Find largest stable piece
-            newAnchor = assembledPieces
-                .filter { isStableForFrames($0, frames: 5) }
-                .max { p1, p2 in
-                    getPieceArea(p1.pieceType) < getPieceArea(p2.pieceType)
-                }
-        } else {
-            // Touch mode: Use first (oldest) piece
-            newAnchor = assembledPieces.first
-        }
-        
-        if let anchor = newAnchor {
-            setAnchorPiece(anchor)
-        }
+    func requestQuit() {
+        delegate?.gameDidRequestQuit()
     }
-    
-    private func isStableForFrames(_ piece: CVPuzzlePieceNode, frames: Int) -> Bool {
-        guard let id = piece.id else { return false }
-        return (pieceStabilityFrames[id] ?? 0) >= frames
-    }
-    
-    private func getPieceArea(_ type: TangramPieceType?) -> Double {
-        guard let type = type else { return 0 }
-        
-        switch type {
-        case .largeTriangle1, .largeTriangle2:
-            return 2.0
-        case .mediumTriangle, .square, .parallelogram:
-            return 1.0
-        case .smallTriangle1, .smallTriangle2:
-            return 0.5
-        }
-    }
-    
-    // MARK: - CV Stream Generation
-    
-    func generateCVOutputStream() {
-        // Throttle to 20Hz (50ms between emissions)
-        let now = CACurrentMediaTime()
-        guard now - lastCVEmissionTime >= 0.05 else { return }
-        lastCVEmissionTime = now
-        
-        // Generate CV format output
-        // This will be implemented with CVOutputBridge
-        let cvData: [String: Any] = [
-            "schema_version": 1,
-            "timestamp": Date().timeIntervalSince1970,
-            "anchor_id": anchorPiece?.id ?? "none",
-            "objects": assembledPieces.map { piece in
-                [
-                    "id": piece.id ?? UUID().uuidString,
-                    "type": piece.pieceType?.rawValue ?? "unknown",
-                    "is_anchor": piece.isAnchor
-                ]
-            }
-        ]
-        
-        cvOutputStream = cvData
-        
-        #if DEBUG
-        print("📸 CV Stream: \(assembledPieces.count) pieces, anchor: \(anchorPiece?.pieceType?.rawValue ?? "none")")
-        #endif
-    }
-    
-    // MARK: - Piece Placement
-    
-    func handlePiecePlacement(_ piece: CVPuzzlePieceNode, inAssemblyZone: Bool) {
-        if inAssemblyZone {
-            // Add to assembled pieces if not already there
-            if !assembledPieces.contains(where: { $0.id == piece.id }) {
-                assembledPieces.append(piece)
-                
-                // First piece becomes anchor
-                if anchorPiece == nil {
-                    setAnchorPiece(piece)
-                }
-            }
-        } else {
-            // Remove from assembled pieces
-            assembledPieces.removeAll { $0.id == piece.id }
-            
-            // If this was the anchor, promote a new one
-            if piece == anchorPiece {
-                anchorPiece = nil
-                piece.isAnchor = false
-                promoteNewAnchor()
-            }
-        }
-        
-        generateCVOutputStream()
-    }
-    
-    // MARK: - Validation (Placeholder)
-    
-    func validateAssembly() {
-        // This will use TangramRelativeValidator when implemented
-        // For now, just track progress
-        let placedCount = assembledPieces.count
-        progress = Double(placedCount) / 7.0
-        
-        if placedCount == 7 {
-            // Check if puzzle is complete
-            checkPuzzleCompletion()
-        }
-    }
-    
-    private func checkPuzzleCompletion() {
-        // Placeholder - will implement with relative validation
-        currentPhase = .puzzleComplete
-        delegate?.gameDidCompleteLevel(xpAwarded: 100)
-        
-        print("TangramCV: Puzzle completed!")
-    }
-    
-    // MARK: - Navigation
     
     func quitToLobby() {
+        // Reset state and go back to lobby
+        currentPhase = .selectingPuzzle
+        selectedPuzzle = nil
+        progress = 0.0
+        completedPieces.removeAll()
+        cvOutputStream.removeAll()
+        
+        // Request game engine to quit
         delegate?.gameDidRequestQuit()
     }
     
     func selectNextPuzzle() {
-        if let currentIndex = availablePuzzles.firstIndex(where: { $0.id == selectedPuzzle?.id }),
-           currentIndex < availablePuzzles.count - 1 {
-            selectPuzzle(availablePuzzles[currentIndex + 1])
+        // Find next puzzle in the list
+        guard let currentPuzzle = selectedPuzzle else { return }
+        
+        let puzzles = availablePuzzles
+        if let currentIndex = puzzles.firstIndex(where: { $0.id == currentPuzzle.id }) {
+            let nextIndex = (currentIndex + 1) % puzzles.count
+            selectPuzzle(puzzles[nextIndex])
+        } else {
+            // Fallback: select first puzzle
+            if let firstPuzzle = puzzles.first {
+                selectPuzzle(firstPuzzle)
+            }
         }
+    }
+    
+    // MARK: - Private Methods
+    
+    private func loadPuzzles() async {
+        // Puzzles are loaded via PuzzleLibraryService
+        print("TangramCV: Loaded \(availablePuzzles.count) puzzles")
+    }
+    
+    private func updateProgress() {
+        guard let puzzle = selectedPuzzle else { return }
+        let totalPieces = puzzle.targetPieces.count
+        let completed = completedPieces.count
+        progress = Double(completed) / Double(totalPieces)
+        
+        if progress >= 1.0 {
+            handlePuzzleCompletion()
+        }
+    }
+    
+    private func handlePuzzleCompletion() {
+        currentPhase = .puzzleComplete
+        delegate?.gameDidCompleteLevel(xpAwarded: 100)
+        print("🎉 TangramCV: Puzzle completed!")
+    }
+}
+
+// MARK: - TangramCVSceneDelegate
+
+extension TangramCVGameViewModel: TangramCVSceneDelegate {
+    
+    func sceneDidSelectPiece(_ piece: CVPuzzlePieceNode) {
+        // Track piece selection if needed
+    }
+    
+    func sceneDidMovePiece(_ piece: CVPuzzlePieceNode, from: Zone, to: Zone) {
+        // Track zone transitions if needed
+        if from != to {
+            print("Piece \(piece.pieceType?.rawValue ?? "?") moved from \(from) to \(to)")
+        }
+    }
+    
+    func sceneDidReleasePiece(_ piece: CVPuzzlePieceNode, in zone: Zone) {
+        // Handle piece release
+    }
+    
+    func sceneDidAddPieceToAssembly(_ piece: CVPuzzlePieceNode) {
+        print("Added \(piece.pieceType?.rawValue ?? "?") to assembly")
+    }
+    
+    func sceneDidRemovePieceFromAssembly(_ piece: CVPuzzlePieceNode) {
+        print("Removed \(piece.pieceType?.rawValue ?? "?") from assembly")
+    }
+    
+    func sceneRequestsAnchorUpdate(currentAnchor: CVPuzzlePieceNode?, assembledPieces: [CVPuzzlePieceNode]) {
+        guard let state = scene?.currentState else { return }
+        
+        if cvService.shouldPromoteAnchor(currentAnchor: currentAnchor, assembledPieces: assembledPieces) {
+            let newAnchor = cvService.selectBestAnchor(
+                from: assembledPieces,
+                stableFrames: state.pieceStabilityFrames,
+                isCVMode: isCVMode
+            )
+            scene?.updateAnchor(newAnchor)
+            print("🚩 Anchor updated: \(newAnchor?.pieceType?.rawValue ?? "none")")
+        }
+    }
+    
+    func sceneRequestsCVGeneration(state: TangramCVPuzzleState) {
+        // Throttle CV generation
+        let now = Date().timeIntervalSince1970
+        if now - lastCVEmissionTime < (1.0 / TangramCVConstants.cvStreamFrequency) {
+            return
+        }
+        
+        cvOutputStream = cvService.generateCVOutput(state: state)
+        lastCVEmissionTime = now
+        
+        print("📸 CV Stream: \(state.assembledPieces.count) pieces, anchor: \(state.anchorPiece?.pieceType?.rawValue ?? "none")")
+    }
+    
+    func sceneRequestsValidation(for piece: CVPuzzlePieceNode, at position: CGPoint) -> Bool {
+        return cvService.validatePiecePlacement(piece, at: position, puzzle: selectedPuzzle)
+    }
+    
+    func sceneRequestsCompletionCheck(state: TangramCVPuzzleState) -> Bool {
+        guard let puzzle = selectedPuzzle else { return false }
+        
+        // Check each piece type
+        for target in puzzle.targetPieces {
+            if let piece = state.assembledPieces.first(where: { $0.pieceType == target.pieceType }) {
+                let isValid = cvService.validatePiecePlacement(piece, at: piece.position, puzzle: puzzle)
+                
+                if isValid && !completedPieces.contains(target.pieceType.rawValue) {
+                    completedPieces.insert(target.pieceType.rawValue)
+                    print("✅ Piece completed: \(target.pieceType.rawValue)")
+                }
+            }
+        }
+        
+        updateProgress()
+        return cvService.isPuzzleComplete(state: state)
+    }
+}
+
+// MARK: - Game Phase
+
+extension TangramCVGameViewModel {
+    enum GamePhase {
+        case selectingPuzzle
+        case playingPuzzle
+        case puzzleComplete
     }
 }

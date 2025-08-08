@@ -47,11 +47,17 @@ class TangramCVGame: Game {
     // MARK: - Game Protocol Methods
     
     func makeGameView(delegate: GameDelegate) -> AnyView {
+        // Create puzzle library service wrapper with both services
+        let puzzleLibraryService = PuzzleLibraryService(
+            puzzleManagementService: puzzleManagementService,
+            supabaseService: supabaseService
+        )
+        
         // Create the CV-enabled view model with services
         let viewModel = TangramCVGameViewModel(
             delegate: delegate,
-            supabaseService: supabaseService,
-            puzzleManagementService: puzzleManagementService
+            puzzleLibraryService: puzzleLibraryService,
+            supabaseService: supabaseService
         )
         
         // Return the CV-enabled game view
