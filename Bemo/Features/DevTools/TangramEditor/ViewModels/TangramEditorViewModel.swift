@@ -55,7 +55,6 @@ class TangramEditorViewModel {
     
     // Error handling
     var currentError: TangramEditorError? = nil
-    var showLibraryNavigationAlert: Bool = false
     
     // Delegate
     weak var delegate: DevToolDelegate?

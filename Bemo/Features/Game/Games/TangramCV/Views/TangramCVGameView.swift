@@ -20,11 +20,33 @@ struct TangramCVGameView: View {
     @State private var elapsedTime: TimeInterval = 0
     @State private var timerTask: Task<Void, Never>?
     @State private var showHints = false
+    @State private var searchText = ""
+    @State private var selectedCategory: String? = nil
     
     var formattedTime: String {
         let minutes = Int(elapsedTime) / 60
         let seconds = Int(elapsedTime) % 60
         return String(format: "%02d:%02d", minutes, seconds)
+    }
+    
+    private var availableCategories: [String] {
+        Array(Set(viewModel.availablePuzzles.map { $0.category })).sorted()
+    }
+    
+    private var filteredPuzzles: [GamePuzzleData] {
+        var puzzles = viewModel.availablePuzzles
+        
+        if let category = selectedCategory {
+            puzzles = puzzles.filter { $0.category == category }
+        }
+        
+        if !searchText.isEmpty {
+            puzzles = puzzles.filter { 
+                $0.name.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+        
+        return puzzles
     }
     
     var body: some View {
@@ -62,6 +84,44 @@ struct TangramCVGameView: View {
     
     private var puzzleSelectionView: some View {
         VStack(spacing: 0) {
+            // Search and Filter Bar - matching Editor UI
+            HStack(spacing: 12) {
+                // Search field
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField("Search puzzles...", text: $searchText)
+                }
+                .padding(8)
+                .background(Color(.systemGray6))
+                .cornerRadius(8)
+                
+                // Category filter dropdown - matching Editor
+                Menu {
+                    Button("All Categories", action: { selectedCategory = nil })
+                    Divider()
+                    ForEach(availableCategories, id: \.self) { category in
+                        Button(category.capitalized) {
+                            selectedCategory = category
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                        Text(selectedCategory?.capitalized ?? "All")
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            
+            Divider()
+            
+            // Puzzle grid - matching Editor layout
             if viewModel.availablePuzzles.isEmpty {
                 Spacer()
                 VStack(spacing: 20) {
@@ -71,26 +131,45 @@ struct TangramCVGameView: View {
                         .foregroundColor(.secondary)
                 }
                 Spacer()
+            } else if filteredPuzzles.isEmpty {
+                // Empty state when no puzzles match filters
+                VStack(spacing: 24) {
+                    Image(systemName: "square.grid.3x3.square")
+                        .font(.system(size: 80))
+                        .foregroundColor(.secondary)
+                    
+                    VStack(spacing: 8) {
+                        Text("No Puzzles Found")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                        
+                        Text("Try adjusting your search or filters")
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding()
             } else {
                 ScrollView {
                     LazyVGrid(columns: [
-                        GridItem(.flexible(), spacing: 16),
-                        GridItem(.flexible(), spacing: 16),
-                        GridItem(.flexible(), spacing: 16)
+                        GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)
                     ], spacing: 16) {
-                        ForEach(viewModel.availablePuzzles, id: \.id) { puzzle in
-                            PuzzleCard(puzzle: puzzle) {
-                                viewModel.selectPuzzle(puzzle)
-                                showingPuzzleSelection = false
-                            }
+                        ForEach(filteredPuzzles, id: \.id) { puzzle in
+                            TangramCVPuzzleCard(
+                                puzzle: puzzle,
+                                allPuzzles: filteredPuzzles,
+                                action: {
+                                    viewModel.selectPuzzle(puzzle)
+                                }
+                            )
                         }
                     }
                     .padding()
                 }
             }
         }
-        .background(Color(UIColor.secondarySystemBackground))
-        .navigationTitle("Choose a Puzzle (CV)")
+        .background(Color(.systemGray6))
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
@@ -104,6 +183,11 @@ struct TangramCVGameView: View {
                             .font(.system(size: 16))
                     }
                 }
+            }
+            
+            ToolbarItem(placement: .principal) {
+                Text("Puzzle Library")
+                    .font(.system(size: 18, weight: .semibold))
             }
         }
     }
@@ -234,63 +318,16 @@ struct TangramCVGameView: View {
     // MARK: - Completion View
     
     private var completionView: some View {
-        VStack(spacing: 30) {
-            // Celebration emoji and title
-            Text("🎉")
-                .font(.system(size: 80))
-                .rotationEffect(.degrees(-15))
-            
-            Text("Puzzle Complete!")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .foregroundColor(.green)
-            
-            Text("Amazing work! You solved \"\(viewModel.selectedPuzzle?.name ?? "the puzzle")\"!")
-                .font(.title2)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            
-            // Star rating display
-            HStack(spacing: 10) {
-                ForEach(0..<3) { _ in
-                    Image(systemName: "star.fill")
-                        .font(.title)
-                        .foregroundColor(.yellow)
-                        .scaleEffect(1.2)
-                }
+        TangramCVCompletionView(
+            puzzle: viewModel.selectedPuzzle,
+            timeElapsed: formattedTime,
+            onNextPuzzle: {
+                viewModel.selectNextPuzzle()
+            },
+            onBackToLobby: {
+                viewModel.quitToLobby()
             }
-            .padding()
-            
-            // Navigation buttons
-            HStack(spacing: 20) {
-                Button(action: {
-                    viewModel.quitToLobby()
-                }) {
-                    Label("Back to Lobby", systemImage: "house.fill")
-                        .frame(minWidth: 150)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                
-                Button(action: {
-                    viewModel.selectNextPuzzle()
-                }) {
-                    Label("Next Puzzle", systemImage: "arrow.right.circle.fill")
-                        .frame(minWidth: 150)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-            }
-            .padding(.top)
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color(UIColor.systemBackground))
-                .shadow(radius: 10)
         )
-        .padding()
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
@@ -344,78 +381,4 @@ struct TangramCVGameView: View {
     }
 }
 
-// MARK: - Puzzle Card Component
-
-struct PuzzleCard: View {
-    let puzzle: GamePuzzleData
-    let onTap: () -> Void
-    
-    var difficultyColor: Color {
-        switch puzzle.difficulty {
-        case 0: return .green
-        case 1: return .blue
-        case 2: return .orange
-        case 3: return .red
-        case 4: return .purple
-        default: return .gray
-        }
-    }
-    
-    var categoryIcon: String {
-        switch puzzle.category.lowercased() {
-        case "animals": return "🐾"
-        case "objects": return "📦"
-        case "people": return "👤"
-        case "geometric": return "🔷"
-        default: return "✨"
-        }
-    }
-    
-    var body: some View {
-        Button(action: onTap) {
-            VStack(spacing: 8) {
-                // Thumbnail with category icon
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(difficultyColor.opacity(0.15))
-                        .frame(height: 100)
-                    
-                    VStack {
-                        Text(categoryIcon)
-                            .font(.largeTitle)
-                        Text(puzzle.category.capitalized)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                // Puzzle name
-                Text(puzzle.name)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .foregroundColor(.primary)
-                
-                // Difficulty stars
-                HStack(spacing: 2) {
-                    ForEach(0..<5) { index in
-                        Image(systemName: index < puzzle.difficulty ? "star.fill" : "star")
-                            .font(.caption2)
-                            .foregroundColor(index < puzzle.difficulty ? difficultyColor : .gray.opacity(0.3))
-                    }
-                }
-            }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(UIColor.secondarySystemBackground))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-}
+// Puzzle Card component moved to TangramCVPuzzleCard.swift

@@ -39,10 +39,10 @@ class CVPuzzlePieceNode: SKNode {
     
     private func createShape(for pieceType: TangramPieceType) -> SKShapeNode {
         // Get normalized vertices from geometry
-        let normalizedVertices = TangramGameGeometry.normalizedVertices(for: pieceType)
+        let normalizedVertices = TangramCVGeometry.normalizedVertices(for: pieceType)
         
         // Scale vertices to visual size
-        let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
+        let scaledVertices = TangramCVGeometry.scaleVertices(normalizedVertices, by: TangramCVConstants.visualScale)
         
         // Calculate the centroid of the scaled vertices
         var centerX: CGFloat = 0
@@ -76,9 +76,9 @@ class CVPuzzlePieceNode: SKNode {
         }
         
         let shape = SKShapeNode(path: path.cgPath)
-        shape.fillColor = TangramColors.Sprite.uiColor(for: pieceType)
-        shape.strokeColor = shape.fillColor.darker(by: 20)
-        shape.lineWidth = 2
+        shape.fillColor = TangramCVColors.skColor(for: pieceType)
+        shape.strokeColor = TangramCVColors.darkerColor(shape.fillColor, by: 20)
+        shape.lineWidth = TangramCVConstants.pieceStrokeWidth
         
         return shape
     }
@@ -98,8 +98,8 @@ class CVPuzzlePieceNode: SKNode {
         guard let pieceType = pieceType else { return }
         
         // Get the vertices
-        let normalizedVertices = TangramGameGeometry.normalizedVertices(for: pieceType)
-        let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
+        let normalizedVertices = TangramCVGeometry.normalizedVertices(for: pieceType)
+        let scaledVertices = TangramCVGeometry.scaleVertices(normalizedVertices, by: TangramCVConstants.visualScale)
         
         // Flip vertices horizontally if needed
         let finalVertices: [CGPoint]
@@ -122,9 +122,9 @@ class CVPuzzlePieceNode: SKNode {
         
         // Create new shape
         let newShape = SKShapeNode(path: path.cgPath)
-        newShape.fillColor = TangramColors.Sprite.uiColor(for: pieceType)
-        newShape.strokeColor = newShape.fillColor.darker(by: 20)
-        newShape.lineWidth = 2
+        newShape.fillColor = TangramCVColors.skColor(for: pieceType)
+        newShape.strokeColor = TangramCVColors.darkerColor(newShape.fillColor, by: 20)
+        newShape.lineWidth = TangramCVConstants.pieceStrokeWidth
         
         self.shapeNode = newShape
         addChild(newShape)

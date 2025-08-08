@@ -15,12 +15,9 @@ struct TangramEditorTopBar: View {
         HStack {
             // Left side: Back button
             Button(action: {
-                // Check if there are unsaved changes
-                if viewModel.hasUnsavedChanges {
-                    viewModel.showLibraryNavigationAlert = true
-                } else {
-                    viewModel.uiState.navigationState = .library
-                }
+                // Navigate directly back to library - no unsaved changes dialog
+                // Any unsaved work is discarded
+                viewModel.navigateToLibrary()
             }) {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")

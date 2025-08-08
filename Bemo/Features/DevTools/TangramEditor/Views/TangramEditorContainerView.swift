@@ -55,17 +55,6 @@ struct TangramEditorContainerView: View {
                 SavePuzzleDialog(viewModel: viewModel)
             }
             .toastOverlay(toastService: viewModel.toastService)
-            .alert("Unsaved Changes", isPresented: $viewModel.showLibraryNavigationAlert) {
-                Button("Save", role: .none) {
-                    viewModel.navigateToLibrary(saveChanges: true)
-                }
-                Button("Discard", role: .destructive) {
-                    viewModel.navigateToLibrary(saveChanges: false)
-                }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("You have unsaved changes. What would you like to do?")
-            }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

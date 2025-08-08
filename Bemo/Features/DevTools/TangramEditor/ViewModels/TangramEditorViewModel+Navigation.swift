@@ -17,19 +17,32 @@ extension TangramEditorViewModel {
     // MARK: - Navigation Methods
     
     /// Navigate to puzzle library
-    func navigateToLibrary(saveChanges: Bool = false) {
-        if saveChanges && hasUnsavedChanges {
-            Task {
-                do {
-                    try await save()
-                    uiState.navigationState = .library
-                } catch {
-                    handleError(.saveFailed(error.localizedDescription))
-                }
-            }
-        } else {
-            uiState.navigationState = .library
-        }
+    func navigateToLibrary() {
+        // Clear editor state when navigating to library
+        resetToLibraryState()
+        uiState.navigationState = .library
+    }
+    
+    /// Reset editor state when returning to library
+    private func resetToLibraryState() {
+        // Clear the current puzzle and reset to a clean state
+        puzzle = TangramPuzzle(name: "New Puzzle")
+        originalPuzzleData = nil
+        validationState = .unknown
+        
+        // Clear all UI state
+        uiState.clearSelectionState()
+        uiState.clearManipulationState()
+        
+        // Clear editor-specific state
+        availableConnectionPoints.removeAll()
+        pieceManipulationModes.removeAll()
+        manipulationConstraints.removeAll()
+        initialManipulationTransforms.removeAll()
+        
+        // Reset state machine
+        stateManager.resetState(for: puzzle)
+        editorState = stateManager.currentState
     }
     
     /// Navigate to editor with optional puzzle
@@ -58,12 +71,9 @@ extension TangramEditorViewModel {
     
     /// Create a new puzzle and navigate to editor
     func createNewPuzzle() {
-        // Check for unsaved changes
-        if hasUnsavedChanges {
-            showLibraryNavigationAlert = true
-        } else {
-            startNewPuzzle()
-        }
+        // When creating a new puzzle, we don't check for unsaved changes
+        // Any unsaved work is simply discarded - this is expected behavior
+        startNewPuzzle()
     }
     
     /// Start a new puzzle (internal)
@@ -160,18 +170,6 @@ extension TangramEditorViewModel {
         }
     }
     
-    // MARK: - Alert Handling
-    
-    /// Handle library navigation with unsaved changes
-    func handleLibraryNavigationAlert(saveChanges: Bool) {
-        if saveChanges {
-            navigateToLibrary(saveChanges: true)
-        } else {
-            // Discard changes and navigate
-            originalPuzzleData = nil
-            navigateToLibrary(saveChanges: false)
-        }
-    }
     
     // MARK: - State Helpers
     

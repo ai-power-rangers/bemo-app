@@ -21,6 +21,17 @@ class TangramCVGame: Game {
     let recommendedAge = 5...10
     let thumbnailImageName = "tangram_thumbnail"
     
+    // MARK: - Game UI Configuration
+    
+    var gameUIConfig: GameUIConfig {
+        return GameUIConfig(
+            respectsSafeAreas: false,  // Games want full screen
+            showHintButton: false,     // We use our own hint button
+            showProgressBar: false,    // We use our own progress bar
+            showQuitButton: false      // We handle quit in our own UI
+        )
+    }
+    
     // MARK: - Services
     
     private let supabaseService: SupabaseService?

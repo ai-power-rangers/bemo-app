@@ -60,48 +60,44 @@ struct TangramGameView: View {
     
     private var puzzleSelectionView: some View {
         VStack(spacing: 0) {
-            
-            // Filter chips
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    // Category filters
-                    FilterChip(
-                        title: "All",
-                        isSelected: selectedCategory == nil,
-                        action: { selectedCategory = nil }
-                    )
-                    
-                    ForEach(availableCategories, id: \.self) { category in
-                        FilterChip(
-                            title: category.capitalized,
-                            isSelected: selectedCategory == category,
-                            icon: categoryIcon(for: category),
-                            action: { 
-                                selectedCategory = selectedCategory == category ? nil : category 
-                            }
-                        )
-                    }
-                    
-                    Divider()
-                        .frame(height: 20)
-                    
-                    // Difficulty filters
-                    ForEach(0..<5) { difficulty in
-                        FilterChip(
-                            title: difficultyEmoji(for: difficulty),
-                            isSelected: selectedDifficulty == difficulty,
-                            color: difficultyColor(for: difficulty),
-                            action: {
-                                selectedDifficulty = selectedDifficulty == difficulty ? nil : difficulty
-                            }
-                        )
-                    }
+            // Search and Filter Bar - matching Editor UI
+            HStack(spacing: 12) {
+                // Search field
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField("Search puzzles...", text: $searchText)
                 }
-                .padding(.horizontal)
+                .padding(8)
+                .background(Color(.systemGray6))
+                .cornerRadius(8)
+                
+                // Category filter dropdown - matching Editor
+                Menu {
+                    Button("All Categories", action: { selectedCategory = nil })
+                    Divider()
+                    ForEach(availableCategories, id: \.self) { category in
+                        Button(category.capitalized) {
+                            selectedCategory = category
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                        Text(selectedCategory?.capitalized ?? "All")
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                }
             }
+            .padding(.horizontal, 16)
             .padding(.vertical, 8)
             
-            // Puzzle grid
+            Divider()
+            
+            // Puzzle grid - matching Editor layout
             if viewModel.availablePuzzles.isEmpty {
                 Spacer()
                 VStack(spacing: 20) {
@@ -111,17 +107,33 @@ struct TangramGameView: View {
                         .foregroundColor(.secondary)
                 }
                 Spacer()
+            } else if filteredPuzzles.isEmpty {
+                // Empty state when no puzzles match filters
+                VStack(spacing: 24) {
+                    Image(systemName: "square.grid.3x3.square")
+                        .font(.system(size: 80))
+                        .foregroundColor(.secondary)
+                    
+                    VStack(spacing: 8) {
+                        Text("No Puzzles Found")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                        
+                        Text("Try adjusting your search or filters")
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding()
             } else {
                 ScrollView {
                     LazyVGrid(columns: [
-                        GridItem(.flexible(), spacing: 16),
-                        GridItem(.flexible(), spacing: 16),
-                        GridItem(.flexible(), spacing: 16)
+                        GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)
                     ], spacing: 16) {
                         ForEach(filteredPuzzles, id: \.id) { puzzle in
-                            PuzzleThumbnailView(
+                            TangramPuzzleCard(
                                 puzzle: puzzle,
-                                allPuzzles: filteredPuzzles,  // Pass all puzzles for badge calculation
+                                allPuzzles: filteredPuzzles,
                                 action: {
                                     viewModel.selectPuzzle(puzzle)
                                 }
@@ -132,8 +144,8 @@ struct TangramGameView: View {
                 }
             }
         }
-        .background(Color(UIColor.secondarySystemBackground))
-        .navigationTitle("Choose a Puzzle")
+        .background(Color(.systemGray6))
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
@@ -147,6 +159,11 @@ struct TangramGameView: View {
                             .font(.system(size: 16))
                     }
                 }
+            }
+            
+            ToolbarItem(placement: .principal) {
+                Text("Puzzle Library")
+                    .font(.system(size: 18, weight: .semibold))
             }
         }
     }
@@ -461,8 +478,8 @@ struct PuzzleThumbnailView: View {
                         RoundedRectangle(cornerRadius: 12)
                             .fill(Color(UIColor.secondarySystemBackground))
                         
-                        // Render puzzle silhouette properly scaled
-                        PuzzleSilhouetteView(puzzle: puzzle)
+                        // Render puzzle thumbnail using shared service
+                        PuzzleThumbnailService.shared.tangramThumbnailView(for: puzzle, colorful: true)
                             .frame(width: geometry.size.width, height: geometry.size.height)
                     }
                     .overlay(
@@ -515,106 +532,4 @@ struct PuzzleThumbnailView: View {
     }
 }
 
-struct PuzzleSilhouetteView: View {
-    let puzzle: GamePuzzleData
-    
-    var body: some View {
-        GeometryReader { geometry in
-            // Calculate bounds of all pieces to scale appropriately
-            let bounds = calculatePuzzleBounds()
-            let scale = calculateScale(for: bounds, in: geometry.size)
-            let offset = calculateOffset(for: bounds, scale: scale, in: geometry.size)
-            
-            ForEach(puzzle.targetPieces.indices, id: \.self) { index in
-                let piece = puzzle.targetPieces[index]
-                PuzzlePieceShape(
-                    pieceType: piece.pieceType,
-                    transform: piece.transform,
-                    scale: scale,
-                    offset: offset
-                )
-                .fill(Color.gray.opacity(0.7))
-            }
-        }
-        .padding(8)
-    }
-    
-    private func calculatePuzzleBounds() -> CGRect {
-        var minX = CGFloat.greatestFiniteMagnitude
-        var maxX = -CGFloat.greatestFiniteMagnitude
-        var minY = CGFloat.greatestFiniteMagnitude
-        var maxY = -CGFloat.greatestFiniteMagnitude
-        
-        for piece in puzzle.targetPieces {
-            let vertices = TangramGameGeometry.normalizedVertices(for: piece.pieceType)
-            let scaled = TangramGameGeometry.scaleVertices(vertices, by: TangramGameConstants.visualScale)
-            let transformed = TangramGameGeometry.transformVertices(scaled, with: piece.transform)
-            
-            for vertex in transformed {
-                minX = min(minX, vertex.x)
-                maxX = max(maxX, vertex.x)
-                minY = min(minY, vertex.y)
-                maxY = max(maxY, vertex.y)
-            }
-        }
-        
-        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
-    }
-    
-    private func calculateScale(for bounds: CGRect, in size: CGSize) -> CGFloat {
-        let padding: CGFloat = 16
-        let availableWidth = size.width - padding * 2
-        let availableHeight = size.height - padding * 2
-        
-        let scaleX = availableWidth / bounds.width
-        let scaleY = availableHeight / bounds.height
-        
-        return min(scaleX, scaleY, 1.0) // Don't scale up beyond original size
-    }
-    
-    private func calculateOffset(for bounds: CGRect, scale: CGFloat, in size: CGSize) -> CGPoint {
-        _ = bounds.width * scale
-        _ = bounds.height * scale
-        
-        let centerX = size.width / 2
-        let centerY = size.height / 2
-        
-        let offsetX = centerX - (bounds.midX * scale)
-        let offsetY = centerY - (bounds.midY * scale)
-        
-        return CGPoint(x: offsetX, y: offsetY)
-    }
-}
-
-struct PuzzlePieceShape: Shape {
-    let pieceType: TangramPieceType
-    let transform: CGAffineTransform
-    var scale: CGFloat = 1.0
-    var offset: CGPoint = .zero
-    
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        
-        let normalizedVertices = TangramGameGeometry.normalizedVertices(for: pieceType)
-        let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
-        let transformedVertices = TangramGameGeometry.transformVertices(scaledVertices, with: transform)
-        
-        // Apply thumbnail scaling and offset
-        let finalVertices = transformedVertices.map { vertex in
-            CGPoint(
-                x: vertex.x * scale + offset.x,
-                y: vertex.y * scale + offset.y
-            )
-        }
-        
-        if let firstVertex = finalVertices.first {
-            path.move(to: firstVertex)
-            for vertex in finalVertices.dropFirst() {
-                path.addLine(to: vertex)
-            }
-            path.closeSubpath()
-        }
-        
-        return path
-    }
-}
+// Removed duplicate PuzzleSilhouetteView and PuzzlePieceShape - now using shared PuzzleThumbnailService

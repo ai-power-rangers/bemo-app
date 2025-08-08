@@ -17,6 +17,14 @@ extension TangramEditorViewModel {
     // MARK: - Persistence
     
     func save() async throws {
+        // Clear any pending/UI state before saving
+        clearPendingStateBeforeSave()
+        
+        // Only save if puzzle is valid
+        guard canSavePuzzle else {
+            throw TangramEditorError.validationFailed("Puzzle must be valid with at least 2 pieces")
+        }
+        
         // Check if this is a new puzzle (doesn't exist in database yet)
         let isNewPuzzle = puzzle.createdDate == puzzle.modifiedDate
         
@@ -122,6 +130,25 @@ extension TangramEditorViewModel {
     }
     
     // MARK: - Helpers
+    
+    private func clearPendingStateBeforeSave() {
+        // Clear any UI/pending state that shouldn't be persisted
+        uiState.pendingPieceType = nil
+        uiState.pendingPieceRotation = 0
+        uiState.pendingPieceIsFlipped = false
+        uiState.previewPiece = nil
+        uiState.previewTransform = nil
+        uiState.selectedCanvasPoints.removeAll()
+        uiState.selectedPendingPoints.removeAll()
+        uiState.clearManipulationState()
+        
+        // Ensure we're in a clean state
+        if case .selectingCanvasConnections = editorState {
+            _ = transitionToState(.idle)
+        } else if case .selectingPendingConnections = editorState {
+            _ = transitionToState(.idle)
+        }
+    }
     
     func generateChecksum() -> String {
         let positionString = puzzle.pieces.map { piece in

@@ -76,40 +76,42 @@ class TangramThreeZoneScene: SKScene {
     private func setupZones() {
         backgroundColor = SKColor(named: "GameBackground") ?? SKColor.systemBackground
         
-        let zoneHeight = size.height / 3
+        // Zone proportions: 2/5 (reference), 2/5 (assembly), 1/5 (storage)
+        let referenceHeight = size.height * 2.0 / 5.0
+        let assemblyHeight = size.height * 2.0 / 5.0
+        let storageHeight = size.height * 1.0 / 5.0
         
-        // REFERENCE ZONE - Top 1/3 (non-interactive)
+        // REFERENCE ZONE - Top 2/5 (non-interactive)
         referenceZone = SKNode()
-        referenceZone.position = CGPoint(x: size.width / 2, y: size.height - zoneHeight / 2)
+        referenceZone.position = CGPoint(x: size.width / 2, y: size.height - referenceHeight / 2)
         referenceZone.zPosition = 0
         addChild(referenceZone)
         
         // Add subtle background for reference zone
-        let referenceBackground = SKShapeNode(rectOf: CGSize(width: size.width, height: zoneHeight))
+        let referenceBackground = SKShapeNode(rectOf: CGSize(width: size.width, height: referenceHeight))
         referenceBackground.fillColor = SKColor.systemGray6.withAlphaComponent(0.3)
         referenceBackground.strokeColor = .clear
         referenceBackground.position = .zero
         referenceBackground.zPosition = -1
         referenceZone.addChild(referenceBackground)
         
-        // ASSEMBLY ZONE - Middle 1/3 ("physical table")
+        // ASSEMBLY ZONE - Middle 2/5 ("physical table")
         assemblyZone = SKNode()
-        assemblyZone.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        assemblyZone.position = CGPoint(x: size.width / 2, y: storageHeight + assemblyHeight / 2)
         assemblyZone.zPosition = 1
         addChild(assemblyZone)
         
         // Assembly zone bounds for detection
         assemblyZoneBounds = CGRect(
             x: 0,
-            y: zoneHeight,
+            y: storageHeight,
             width: size.width,
-            height: zoneHeight
+            height: assemblyHeight
         )
         
         // Visual boundary for assembly zone
-        // Note: SKShapeNode doesn't support dashed lines directly, so we'll use a solid border
-        let borderRect = CGRect(x: -size.width/2 + 10, y: -zoneHeight/2 + 10, 
-                               width: size.width - 20, height: zoneHeight - 20)
+        let borderRect = CGRect(x: -size.width/2 + 10, y: -assemblyHeight/2 + 10, 
+                               width: size.width - 20, height: assemblyHeight - 20)
         assemblyBoundary = SKShapeNode(rect: borderRect, cornerRadius: 8)
         assemblyBoundary.strokeColor = .systemBlue.withAlphaComponent(0.4)
         assemblyBoundary.fillColor = .clear
@@ -118,9 +120,9 @@ class TangramThreeZoneScene: SKScene {
         assemblyBoundary.zPosition = -1
         assemblyZone.addChild(assemblyBoundary)
         
-        // STORAGE ZONE - Bottom 1/3 (piece storage)
+        // STORAGE ZONE - Bottom 1/5 (piece storage)
         storageZone = SKNode()
-        storageZone.position = CGPoint(x: size.width / 2, y: zoneHeight / 2)
+        storageZone.position = CGPoint(x: size.width / 2, y: storageHeight / 2)
         storageZone.zPosition = 1
         addChild(storageZone)
         
@@ -129,7 +131,7 @@ class TangramThreeZoneScene: SKScene {
             x: 0,
             y: 0,
             width: size.width,
-            height: zoneHeight
+            height: storageHeight
         )
     }
     
@@ -158,11 +160,11 @@ class TangramThreeZoneScene: SKScene {
     }
     
     private func setupAssemblyBoundary() {
-        let zoneHeight = size.height / 3
+        let assemblyHeight = size.height * 2.0 / 5.0
         
         // Create a solid border since SKShapeNode doesn't support dashed lines
-        let borderRect = CGRect(x: -size.width/2 + 10, y: -zoneHeight/2 + 10,
-                               width: size.width - 20, height: zoneHeight - 20)
+        let borderRect = CGRect(x: -size.width/2 + 10, y: -assemblyHeight/2 + 10,
+                               width: size.width - 20, height: assemblyHeight - 20)
         let border = SKShapeNode(rect: borderRect, cornerRadius: 8)
         border.strokeColor = .systemBlue.withAlphaComponent(0.4)
         border.fillColor = .clear
@@ -173,71 +175,80 @@ class TangramThreeZoneScene: SKScene {
     }
     
     private func loadReferenceDisplay(_ puzzle: GamePuzzleData) {
-        // Calculate bounds for centering
-        var minX = CGFloat.greatestFiniteMagnitude
-        var maxX = -CGFloat.greatestFiniteMagnitude
-        var minY = CGFloat.greatestFiniteMagnitude
-        var maxY = -CGFloat.greatestFiniteMagnitude
+        // Calculate bounds for the entire puzzle
+        var allVertices: [CGPoint] = []
         
-        // First pass: calculate bounds
+        // First pass: collect all transformed vertices to find bounds
         for target in puzzle.targetPieces {
-            let vertices = TangramGameGeometry.normalizedVertices(for: target.pieceType)
-            let scaled = TangramGameGeometry.scaleVertices(vertices, by: TangramGameConstants.visualScale * 0.6) // Smaller for reference
-            let transformed = TangramGameGeometry.transformVertices(scaled, with: target.transform)
-            
-            for vertex in transformed {
-                minX = min(minX, vertex.x)
-                maxX = max(maxX, vertex.x)
-                minY = min(minY, vertex.y)
-                maxY = max(maxY, vertex.y)
-            }
+            let vertices = TangramCVGeometry.normalizedVertices(for: target.pieceType)
+            let scaled = TangramCVGeometry.scaleVertices(vertices, by: TangramCVConstants.visualScale * TangramCVConstants.referenceScale)
+            let transformed = TangramCVGeometry.transformVertices(scaled, with: target.transform)
+            allVertices.append(contentsOf: transformed)
         }
         
-        let centerX = (minX + maxX) / 2
-        let centerY = (minY + maxY) / 2
+        // Calculate the bounding box of the entire puzzle
+        let bounds = TangramCVGeometry.boundingBox(of: allVertices)
+        let puzzleCenter = CGPoint(x: bounds.midX, y: bounds.midY)
         
-        // Second pass: create reference pieces
+        // Second pass: create reference pieces as silhouettes
         for target in puzzle.targetPieces {
-            let vertices = TangramGameGeometry.normalizedVertices(for: target.pieceType)
-            let scaled = TangramGameGeometry.scaleVertices(vertices, by: TangramGameConstants.visualScale * 0.6)
-            let transformed = TangramGameGeometry.transformVertices(scaled, with: target.transform)
+            // Get base geometry
+            let vertices = TangramCVGeometry.normalizedVertices(for: target.pieceType)
             
-            // Center the vertices
-            let centered = transformed.map { vertex in
-                CGPoint(x: vertex.x - centerX, y: -(vertex.y - centerY)) // Flip Y for SpriteKit
+            // Scale to visual size (with reference scaling)
+            let scaled = TangramCVGeometry.scaleVertices(vertices, by: TangramCVConstants.visualScale * TangramCVConstants.referenceScale)
+            
+            // Apply the transform from the database
+            let transformed = TangramCVGeometry.transformVertices(scaled, with: target.transform)
+            
+            // Calculate this piece's centroid
+            let pieceCentroid = TangramCVGeometry.centroid(of: transformed)
+            
+            // Center the vertices around origin for the shape
+            let centeredVertices = transformed.map { vertex in
+                CGPoint(x: vertex.x - pieceCentroid.x, y: vertex.y - pieceCentroid.y)
             }
             
-            // Create path
+            // Create path for the shape
             let path = UIBezierPath()
-            if let first = centered.first {
+            if let first = centeredVertices.first {
                 path.move(to: first)
-                for vertex in centered.dropFirst() {
+                for vertex in centeredVertices.dropFirst() {
                     path.addLine(to: vertex)
                 }
                 path.close()
             }
             
-            // Create reference piece (non-interactive)
+            // Create reference piece as gray silhouette
             let referencePiece = SKShapeNode(path: path.cgPath)
-            referencePiece.fillColor = TangramColors.Sprite.uiColor(for: target.pieceType).withAlphaComponent(0.6)
-            referencePiece.strokeColor = referencePiece.fillColor.darker(by: 20)
-            referencePiece.lineWidth = 1
-            referencePiece.position = .zero
+            referencePiece.fillColor = TangramCVColors.targetSilhouetteColor.withAlphaComponent(TangramCVConstants.targetPieceAlpha)
+            referencePiece.strokeColor = TangramCVColors.targetStrokeColor
+            referencePiece.lineWidth = TangramCVConstants.referencePieceStrokeWidth
+            
+            // Position the piece relative to puzzle center
+            // Note: Y is not flipped here because SpriteKit's coordinate system matches our needs
+            referencePiece.position = CGPoint(
+                x: pieceCentroid.x - puzzleCenter.x,
+                y: pieceCentroid.y - puzzleCenter.y
+            )
+            
             referenceZone.addChild(referencePiece)
         }
         
-        // Add label
+        // Add puzzle name label below the reference
         let label = SKLabelNode(text: puzzle.name)
         label.fontName = "System"
-        label.fontSize = 14
+        label.fontSize = 16
         label.fontColor = .label
-        label.position = CGPoint(x: 0, y: -size.height / 6 + 20)
+        // Position label at the bottom of the reference zone
+        let referenceHeight = size.height * 2.0 / 5.0
+        label.position = CGPoint(x: 0, y: -(referenceHeight / 2) + 20)
         referenceZone.addChild(label)
     }
     
     private func scatterPiecesInStorage(_ targets: [GamePuzzleData.TargetPiece]) {
-        let zoneHeight = size.height / 3
-        let margin: CGFloat = 30
+        let storageHeight = size.height * 1.0 / 5.0
+        let margin: CGFloat = TangramCVConstants.storageZoneMargin
         
         // Create grid positions for pieces
         let cols = 3
@@ -253,10 +264,10 @@ class TangramThreeZoneScene: SKScene {
             let row = index / cols
             
             let xSpacing = (size.width - 2 * margin) / CGFloat(cols)
-            let ySpacing = (zoneHeight - 2 * margin) / CGFloat(rows)
+            let ySpacing = (storageHeight - 2 * margin) / CGFloat(rows)
             
             let baseX = margin + xSpacing * (CGFloat(col) + 0.5) - size.width / 2
-            let baseY = margin + ySpacing * (CGFloat(row) + 0.5) - zoneHeight / 2
+            let baseY = margin + ySpacing * (CGFloat(row) + 0.5) - storageHeight / 2
             
             // Add random offset
             let randomX = CGFloat.random(in: -20...20)
@@ -412,7 +423,7 @@ class TangramThreeZoneScene: SKScene {
         // Visual feedback - small green circle
         let anchorIndicator = SKShapeNode(circleOfRadius: 5)
         anchorIndicator.fillColor = .systemGreen
-        anchorIndicator.strokeColor = .systemGreen.darker(by: 20)
+        anchorIndicator.strokeColor = TangramCVColors.darkerColor(.systemGreen, by: 20)
         anchorIndicator.lineWidth = 1
         anchorIndicator.position = .zero
         anchorIndicator.zPosition = -1
@@ -435,7 +446,7 @@ class TangramThreeZoneScene: SKScene {
         if isCVMode {
             // CV mode: largest stable piece
             newAnchor = assembledPieces
-                .filter { hasBeenStableForFrames($0, frames: 5) }
+                .filter { hasBeenStableForFrames($0, frames: TangramCVConstants.anchorStabilityFrames) }
                 .max { p1, p2 in
                     getPieceArea(p1.pieceType) < getPieceArea(p2.pieceType)
                 }
@@ -485,7 +496,7 @@ class TangramThreeZoneScene: SKScene {
         
         let cvObjects = assembledPieces.map { piece in
             [
-                "name": mapTypeToCV(piece.pieceType),
+                "name": TangramCVConstants.mapTypeToCV(piece.pieceType),
                 "object_id": piece.id ?? UUID().uuidString,
                 "pose": [
                     "rotation_degrees": piece.zRotation * 180.0 / .pi,
@@ -514,16 +525,4 @@ class TangramThreeZoneScene: SKScene {
         #endif
     }
     
-    private func mapTypeToCV(_ type: TangramPieceType?) -> String {
-        switch type {
-        case .square: return "tangram_square"
-        case .smallTriangle1: return "tangram_triangle_sml"
-        case .smallTriangle2: return "tangram_triangle_sml2"
-        case .mediumTriangle: return "tangram_triangle_med"
-        case .largeTriangle1: return "tangram_triangle_lrg"
-        case .largeTriangle2: return "tangram_triangle_lrg2"
-        case .parallelogram: return "tangram_parallelogram"
-        default: return "unknown"
-        }
-    }
 }
