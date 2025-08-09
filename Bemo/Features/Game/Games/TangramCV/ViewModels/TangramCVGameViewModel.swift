@@ -26,6 +26,12 @@ class TangramCVGameViewModel {
     
     var isCVMode: Bool = false
     
+    // MARK: - TEST PIPELINE PUZZLES (TEMPORARY - REMOVE AFTER VALIDATION)
+    // This array holds automated pipeline test puzzles loaded from JSON files
+    // These are injected alongside database puzzles for testing CV validation
+    // TO REMOVE: Delete this property and the loadAutomatedPuzzles() call
+    var pipelineTestPuzzles: [GamePuzzleData] = []
+    
     // MARK: - Dependencies
     
     private weak var delegate: GameDelegate?
@@ -53,13 +59,19 @@ class TangramCVGameViewModel {
         
         Task {
             await loadPuzzles()
+            // Also load automated pipeline puzzles for testing
+            loadAutomatedPuzzles()
         }
     }
     
     // MARK: - Public Interface
     
     var availablePuzzles: [GamePuzzleData] {
-        puzzleLibraryService.availablePuzzles
+        // TEMPORARY: Combine database puzzles with pipeline test puzzles
+        // TO REMOVE: Just return puzzleLibraryService.availablePuzzles after validation
+        let combined = puzzleLibraryService.availablePuzzles + pipelineTestPuzzles
+        print("📚 Available puzzles: \(combined.count) total (\(puzzleLibraryService.availablePuzzles.count) from DB, \(pipelineTestPuzzles.count) from pipeline)")
+        return combined
     }
     
     func setScene(_ scene: TangramThreeZoneScene) {

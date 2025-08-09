@@ -780,6 +780,18 @@ class PieceTransformEngine {
                 verticesThis[thisVertex].y - verticesOther[otherVertex].y
             )
             
+            // Debug logging for parallelogram
+            if piece.type == .parallelogram || otherPiece.type == .parallelogram {
+                print("🔍 VALIDATION DEBUG (v-v):")
+                print("  - piece: \(piece.type) id=\(piece.id)")
+                print("  - other: \(otherPiece.type) id=\(otherPiece.id)")
+                print("  - checking: vertex \(thisVertex) vs vertex \(otherVertex)")
+                print("  - thisPos: \(verticesThis[thisVertex])")
+                print("  - otherPos: \(verticesOther[otherVertex])")
+                print("  - distance: \(distance) (tolerance: 2.0)")
+                print("  - valid: \(distance < 2.0)")
+            }
+            
             return distance < 2.0 // tolerance
             
         case .vertexToEdge(let pieceAId, let vertex, let pieceBId, let edge):
@@ -861,13 +873,29 @@ class PieceTransformEngine {
             let otherStart = verticesOther[otherEdgeDef.startVertex]
             let otherEnd = verticesOther[otherEdgeDef.endVertex]
             
+            // Debug logging for parallelogram
+            if piece.type == .parallelogram || otherPiece.type == .parallelogram {
+                print("🔍 VALIDATION DEBUG (e-e):")
+                print("  - piece: \(piece.type) id=\(piece.id)")
+                print("  - other: \(otherPiece.type) id=\(otherPiece.id)")
+                print("  - checking: edge \(thisEdge) vs edge \(otherEdge)")
+                print("  - thisEdge: \(thisStart) -> \(thisEnd)")
+                print("  - otherEdge: \(otherStart) -> \(otherEnd)")
+            }
+            
             // Check if edges are parallel and touching
-            return areEdgesParallelAndTouching(
+            let result = areEdgesParallelAndTouching(
                 edge1Start: thisStart,
                 edge1End: thisEnd,
                 edge2Start: otherStart,
                 edge2End: otherEnd
             )
+            
+            if piece.type == .parallelogram || otherPiece.type == .parallelogram {
+                print("  - valid: \(result)")
+            }
+            
+            return result
         }
     }
     

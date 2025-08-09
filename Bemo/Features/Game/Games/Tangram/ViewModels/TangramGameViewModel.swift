@@ -318,7 +318,8 @@ class TangramGameViewModel {
             // Create a perfectly placed piece
             // Extract position from transform (tx, ty) and rotation from transform matrix
             let position = CGPoint(x: targetPiece.transform.tx, y: targetPiece.transform.ty)
-            let rotation = TangramGeometryUtilities.extractRotation(from: targetPiece.transform) * 180.0 / .pi
+            // Use sceneRotation for consistency with rendering
+            let rotation = TangramGeometryUtilities.sceneRotation(from: targetPiece.transform) * 180.0 / .pi
             
             let mockPiece = RecognizedPiece(
                 id: "touch_\(pieceType)_\(UUID().uuidString.prefix(8))",

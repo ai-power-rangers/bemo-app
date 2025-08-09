@@ -27,7 +27,7 @@ enum TangramGameConstants {
         static let positionTolerance: CGFloat = 35.0  // Increased for better touch interaction with triangles
         
         /// Rotation tolerance for piece angle matching (in degrees)
-        static let rotationTolerance: CGFloat = 4.0  // Very tight tolerance for precise placement
+        static let rotationTolerance: CGFloat = 25.0  // More forgiving tolerance for touch interaction
         
         /// Legacy vertex matching tolerance (in pixels) - used for vertex-by-vertex comparison
         static let vertexTolerance: CGFloat = 20.0  // Tightened from 30

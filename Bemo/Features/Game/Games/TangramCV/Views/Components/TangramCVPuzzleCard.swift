@@ -75,6 +75,23 @@ struct TangramCVPuzzleCard: View {
                             }
                             Spacer()
                         }
+                    // TEMPORARY: Special indicator for pipeline test puzzles
+                    // TO REMOVE: Delete this else if block after validation
+                    } else if puzzle.category == "generated" {
+                        VStack {
+                            HStack {
+                                Label("PIPELINE TEST", systemImage: "flask.fill")
+                                    .font(.caption2)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.green)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(4)
+                                    .padding(8)
+                                Spacer()
+                            }
+                            Spacer()
+                        }
                     }
                 }
             )
@@ -86,13 +103,21 @@ struct TangramCVPuzzleCard: View {
                     .lineLimit(1)
                 
                 HStack {
-                    // Category badge
+                    // Category badge with special styling for test puzzles
+                    // TEMPORARY: Highlight "generated" category for pipeline tests
+                    // TO REMOVE: Remove the conditional styling after validation
                     Text(puzzle.category)
                         .font(.caption)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color(.systemGray5))
+                        .background(puzzle.category == "generated" ? Color.green.opacity(0.3) : Color(.systemGray5))
+                        .foregroundColor(puzzle.category == "generated" ? .green : .primary)
                         .cornerRadius(4)
+                        .overlay(
+                            // Add border for pipeline test puzzles
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(puzzle.category == "generated" ? Color.green : Color.clear, lineWidth: 1)
+                        )
                     
                     Spacer()
                     

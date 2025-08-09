@@ -22,6 +22,7 @@ struct TangramCVGameView: View {
     @State private var showHints = false
     @State private var searchText = ""
     @State private var selectedCategory: String? = nil
+    @State private var sceneKey = UUID()  // Key to force scene recreation
     
     var formattedTime: String {
         let minutes = Int(elapsedTime) / 60
@@ -160,6 +161,11 @@ struct TangramCVGameView: View {
                                 allPuzzles: filteredPuzzles,
                                 action: {
                                     viewModel.selectPuzzle(puzzle)
+                                    // Reset timer and force new scene
+                                    timerStarted = false
+                                    elapsedTime = 0
+                                    timerTask?.cancel()
+                                    sceneKey = UUID()
                                 }
                             )
                         }
@@ -202,13 +208,16 @@ struct TangramCVGameView: View {
                         scene: scene,
                         options: [.allowsTransparency]
                     )
+                    .id(sceneKey)  // Forces new SpriteView when key changes
                     .ignoresSafeArea()
                     .onAppear {
                         configureScene(size: geometry.size)
                     }
                     .onChange(of: viewModel.selectedPuzzle) { _, newValue in
-                        if let puzzle = newValue {
-                            scene.loadPuzzle(puzzle)
+                        if newValue != nil {
+                            // Force scene recreation for clean state
+                            sceneKey = UUID()
+                            // Scene will be loaded in onAppear after recreation
                         }
                     }
                 }
@@ -323,6 +332,11 @@ struct TangramCVGameView: View {
             timeElapsed: formattedTime,
             onNextPuzzle: {
                 viewModel.selectNextPuzzle()
+                // Reset timer and force new scene
+                timerStarted = false
+                elapsedTime = 0
+                timerTask?.cancel()
+                sceneKey = UUID()
             },
             onBackToLobby: {
                 viewModel.quitToLobby()

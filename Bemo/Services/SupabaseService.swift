@@ -192,7 +192,7 @@ class SupabaseService {
         
         try await client
             .from("parent_profiles")
-            .upsert(profileData)
+            .upsert(profileData, onConflict: "apple_user_id")
             .execute()
         
         print("Supabase: Parent profile upserted for user \(supabaseUserID)")
@@ -225,7 +225,7 @@ class SupabaseService {
             print("DEBUG: SupabaseService - Upserting profile data to child_profiles table...")
             try await client
                 .from("child_profiles")
-                .upsert(profileData)
+                .upsert(profileData, onConflict: "id")
                 .execute()
             
             print("DEBUG: SupabaseService - Profile upsert successful!")
@@ -913,7 +913,7 @@ extension SupabaseService {
             // Upsert puzzle (insert or update based on puzzle_id)
             try await client
                 .from("tangram_puzzles")
-                .upsert(puzzle)
+                .upsert(puzzle, onConflict: "puzzle_id")
                 .execute()
             
             print("Supabase: Saved tangram puzzle - \(puzzle.puzzle_id)")

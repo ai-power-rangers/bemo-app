@@ -15,7 +15,7 @@ class TangramRotationDialNode: SKNode {
     private var dial: SKShapeNode!
     private var handle: SKShapeNode!
     private var angleLabel: SKLabelNode!
-    private var targetPiece: PuzzlePieceNode?
+    private(set) var targetPiece: PuzzlePieceNode?  // Allow read access for flip button
     private var initialRotation: CGFloat = 0
     private var originalRotation: CGFloat = 0
     private var originalFlipState: Bool = false
@@ -170,7 +170,7 @@ class TangramRotationDialNode: SKNode {
         )
         
         // Update angle label
-        var degrees = Int(angle * 180 / .pi)
+        var degrees = Int(round(angle * 180 / .pi))
         while degrees < 0 { degrees += 360 }
         while degrees >= 360 { degrees -= 360 }
         angleLabel.text = "\(degrees)°"

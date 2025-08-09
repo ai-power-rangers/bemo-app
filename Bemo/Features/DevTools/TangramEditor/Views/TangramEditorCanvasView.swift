@@ -73,7 +73,8 @@ struct TangramEditorCanvasView: View {
                     
                     Spacer()
                 }
-            }
+            }  // End of Canvas point selection UI
+            }  // End of ZStack for Main Canvas
             
             // Pending piece overlay - show in multiple states
             if case .selectingPendingConnections(let type, _) = viewModel.editorState {
@@ -111,8 +112,7 @@ struct TangramEditorCanvasView: View {
                     canvasSize: canvasSize
                 )
             } else {
-            }
-            }
+                // Empty else block
             }
         }
         .alert("Placement Error", isPresented: $viewModel.uiState.showErrorAlert) {
@@ -122,7 +122,7 @@ struct TangramEditorCanvasView: View {
         } message: {
             Text(viewModel.uiState.errorMessage)
         }
-    }
+    }  // End of body
     
     // MARK: - Canvas View
     

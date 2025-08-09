@@ -43,7 +43,8 @@ class TangramPieceValidator {
         
         // 2. Extract target position and rotation from transform
         let targetPosition = CGPoint(x: target.transform.tx, y: target.transform.ty)
-        let targetRotation = CGFloat(TangramGeometryUtilities.extractRotation(from: target.transform))
+        // Use sceneRotation for consistency with Y-flipped rendering
+        let targetRotation = CGFloat(TangramGeometryUtilities.sceneRotation(from: target.transform))
         
         // 3. Check if position is within tolerance
         let distance = hypot(
@@ -98,7 +99,20 @@ class TangramPieceValidator {
     ) -> ValidationResult {
         
         // Extract rotation from the ORIGINAL transform (not the sprite's)
-        let targetRotation = TangramGeometryUtilities.extractRotation(from: targetTransform)
+        // IMPORTANT: Target silhouettes are rendered with Y inverted in SpriteKit.
+        // Use sceneRotation to convert to the scene's coordinate space.
+        let targetRotation = TangramGeometryUtilities.sceneRotation(from: targetTransform)
+        
+        #if DEBUG
+        print("  🎯 \(pieceType.rawValue) validation:")
+        print("    Transform a,b,c,d: \(targetTransform.a), \(targetTransform.b), \(targetTransform.c), \(targetTransform.d)")
+        print("    Raw rotation from transform: \(TangramGeometryUtilities.extractRotation(from: targetTransform) * 180 / .pi)°")
+        print("    Scene-space target rotation: \(targetRotation * 180 / .pi)°")
+        print("    Current piece rotation: \(pieceRotation * 180 / .pi)°")
+        print("    Rotation difference: \((pieceRotation - targetRotation) * 180 / .pi)°")
+        print("    Tolerance: \(rotationTolerance)°")
+        print("    Is flipped: \(isFlipped)")
+        #endif
         
         // Validate position
         let distance = hypot(piecePosition.x - targetWorldPos.x, piecePosition.y - targetWorldPos.y)

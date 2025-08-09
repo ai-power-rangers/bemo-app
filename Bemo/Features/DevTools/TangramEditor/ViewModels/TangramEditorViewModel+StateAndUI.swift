@@ -234,7 +234,16 @@ extension TangramEditorViewModel {
                 }
                 
                 // Calculate placement - add debug for parallelogram issues
-                for (_, _) in connections.enumerated() {
+                if type == .parallelogram {
+                    print("🔍 PARALLELOGRAM PLACEMENT DEBUG:")
+                    print("  - isFlipped: \(uiState.pendingPieceIsFlipped)")
+                    print("  - rotation: \(uiState.pendingPieceRotation)°")
+                    print("  - connections:")
+                    for (i, conn) in connections.enumerated() {
+                        let canvasType = conn.canvasPoint.type
+                        let pieceType = conn.piecePoint.type
+                        print("    \(i): canvas=\(canvasType) -> piece=\(pieceType)")
+                    }
                 }
                 
                 if let placedPiece = placementService.placeConnectedPiece(
@@ -254,9 +263,30 @@ extension TangramEditorViewModel {
                        let canvasPieceId = firstConnection.canvasPoint.pieceId.split(separator: "_").first {
                         let canvasPieceIdStr = String(canvasPieceId)
                         
-                        // Determine connection type based on the points
+                        // For flipped parallelogram, remap the piece indices to match the physical vertices/edges
+                        // after the flip transform has been applied
+                        var actualPieceVertexIndex: Int? = nil
+                        var actualPieceEdgeIndex: Int? = nil
+                        
+                        if placedPiece.type == .parallelogram && uiState.pendingPieceIsFlipped {
+                            // Apply remapping for flipped parallelogram
+                            if case .vertex(let index) = firstConnection.piecePoint.type {
+                                actualPieceVertexIndex = TangramEditorCoordinateSystem.remapParallelogramVertexIndex(index)
+                            } else if case .edge(let index) = firstConnection.piecePoint.type {
+                                actualPieceEdgeIndex = TangramEditorCoordinateSystem.remapParallelogramEdgeIndex(index)
+                            }
+                        } else {
+                            // No remapping for other pieces or non-flipped parallelogram
+                            if case .vertex(let index) = firstConnection.piecePoint.type {
+                                actualPieceVertexIndex = index
+                            } else if case .edge(let index) = firstConnection.piecePoint.type {
+                                actualPieceEdgeIndex = index
+                            }
+                        }
+                        
+                        // Determine connection type based on the points (using actual indices)
                         if case .vertex(let canvasVertexIndex) = firstConnection.canvasPoint.type,
-                           case .vertex(let pieceVertexIndex) = firstConnection.piecePoint.type {
+                           let pieceVertexIndex = actualPieceVertexIndex {
                             validationConnection = Connection(
                                 type: .vertexToVertex(
                                     pieceAId: canvasPieceIdStr,
@@ -267,7 +297,7 @@ extension TangramEditorViewModel {
                                 constraint: Constraint(type: .fixed, affectedPieceId: placedPiece.id)
                             )
                         } else if case .edge(let canvasEdgeIndex) = firstConnection.canvasPoint.type,
-                                  case .edge(let pieceEdgeIndex) = firstConnection.piecePoint.type {
+                                  let pieceEdgeIndex = actualPieceEdgeIndex {
                             let connectionType = ConnectionType.edgeToEdge(
                                 pieceAId: canvasPieceIdStr,
                                 edgeA: canvasEdgeIndex,
@@ -280,13 +310,13 @@ extension TangramEditorViewModel {
                                 type: connectionType,
                                 pieces: puzzle.pieces + [placedPiece]
                             )
-                        } else if case .vertex(let vertexIndex) = firstConnection.canvasPoint.type,
-                                  case .edge(let edgeIndex) = firstConnection.piecePoint.type {
+                        } else if case .vertex(let canvasVertexIndex) = firstConnection.canvasPoint.type,
+                                  let pieceEdgeIndex = actualPieceEdgeIndex {
                             let connectionType = ConnectionType.vertexToEdge(
                                 pieceAId: canvasPieceIdStr,
-                                vertex: vertexIndex,
+                                vertex: canvasVertexIndex,
                                 pieceBId: placedPiece.id,
-                                edge: edgeIndex
+                                edge: pieceEdgeIndex
                             )
                             // Create connection service temporarily for constraint calculation
                             let connectionService = ConnectionService()
@@ -294,13 +324,13 @@ extension TangramEditorViewModel {
                                 type: connectionType,
                                 pieces: puzzle.pieces + [placedPiece]
                             )
-                        } else if case .edge(let edgeIndex) = firstConnection.canvasPoint.type,
-                                  case .vertex(let vertexIndex) = firstConnection.piecePoint.type {
+                        } else if case .edge(let canvasEdgeIndex) = firstConnection.canvasPoint.type,
+                                  let pieceVertexIndex = actualPieceVertexIndex {
                             let connectionType = ConnectionType.vertexToEdge(
                                 pieceAId: placedPiece.id,
-                                vertex: vertexIndex,
+                                vertex: pieceVertexIndex,
                                 pieceBId: canvasPieceIdStr,
-                                edge: edgeIndex
+                                edge: canvasEdgeIndex
                             )
                             // Create connection service temporarily for constraint calculation
                             let connectionService = ConnectionService()
@@ -312,9 +342,23 @@ extension TangramEditorViewModel {
                     }
                     
                     // Use transform engine for validation WITH connection info
+                    // Calculate the current center of the placed piece from its world vertices
+                    let placedVertices = TangramEditorCoordinateSystem.getWorldVertices(for: placedPiece)
+                    var centerX: CGFloat = 0
+                    var centerY: CGFloat = 0
+                    for vertex in placedVertices {
+                        centerX += vertex.x
+                        centerY += vertex.y
+                    }
+                    centerX /= CGFloat(placedVertices.count)
+                    centerY /= CGFloat(placedVertices.count)
+                    let currentCenter = CGPoint(x: centerX, y: centerY)
+                    
+                    // Use .drag(to: currentCenter) which is a no-op that preserves the transform
+                    // while still running the connection and overlap checks
                     let result = transformEngine.calculateTransform(
                         for: placedPiece,
-                        operation: .place(center: CGPoint.zero, rotation: 0), // Already positioned
+                        operation: .drag(to: currentCenter), // Preserves as-placed transform
                         connection: validationConnection,
                         otherPieces: puzzle.pieces,
                         canvasSize: uiState.currentCanvasSize
@@ -371,12 +415,47 @@ extension TangramEditorViewModel {
     // MARK: - Placement Helpers
     
     /// Try to find a valid placement for a piece with given connections
+    /// This includes trying different rotations and sliding along edges for tight fits
     private func findValidPlacement(
         for piece: TangramPiece,
         connections: [(canvasPoint: ConnectionPoint, piecePoint: ConnectionPoint)],
         existingPieces: [TangramPiece]
     ) -> TangramPiece? {
-        // Try different rotation angles to find a valid placement
+        // For edge-to-edge connections, the placeConnectedPiece method already
+        // includes sliding search, so we just need to try it with the current rotation
+        if connections.count == 1,
+           case .edge = connections[0].canvasPoint.type,
+           case .edge = connections[0].piecePoint.type {
+            
+            // Try with current rotation first (sliding search is built-in)
+            if let placedPiece = placementService.placeConnectedPiece(
+                type: piece.type,
+                rotation: uiState.pendingPieceRotation * .pi / 180,
+                isFlipped: uiState.pendingPieceIsFlipped && piece.type == .parallelogram,
+                connections: connections,
+                existingPieces: existingPieces
+            ) {
+                // Validate "as placed" - DO NOT reset transform with .place(center: .zero)!
+                // Calculate current center from world vertices
+                let placedVertices = TangramEditorCoordinateSystem.getWorldVertices(for: placedPiece)
+                let currentCenter = TangramEditorCoordinateSystem.calculateCenter(of: placedVertices)
+                
+                // Use .drag which preserves the transform
+                let result = transformEngine.calculateTransform(
+                    for: placedPiece,
+                    operation: .drag(to: currentCenter),
+                    connection: nil,
+                    otherPieces: existingPieces,
+                    canvasSize: uiState.currentCanvasSize
+                )
+                
+                if result.isValid {
+                    return placedPiece
+                }
+            }
+        }
+        
+        // For vertex connections or if edge sliding failed, try different rotation angles
         let rotationAngles = [0, 45, 90, 135, 180, -135, -90, -45].map { Double($0) }
         
         for angle in rotationAngles {
@@ -388,10 +467,13 @@ extension TangramEditorViewModel {
                 connections: connections,
                 existingPieces: existingPieces
             ) {
-                // Validate this placement
+                // Validate "as placed" - DO NOT reset transform!
+                let placedVertices = TangramEditorCoordinateSystem.getWorldVertices(for: placedPiece)
+                let currentCenter = TangramEditorCoordinateSystem.calculateCenter(of: placedVertices)
+                
                 let result = transformEngine.calculateTransform(
                     for: placedPiece,
-                    operation: .place(center: CGPoint.zero, rotation: 0),
+                    operation: .drag(to: currentCenter),
                     connection: nil,
                     otherPieces: existingPieces,
                     canvasSize: uiState.currentCanvasSize

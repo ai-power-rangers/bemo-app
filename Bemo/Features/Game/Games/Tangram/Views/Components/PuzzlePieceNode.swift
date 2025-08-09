@@ -88,7 +88,7 @@ class PuzzlePieceNode: SKNode {
         // Flip the piece horizontally
         isFlipped = !isFlipped
         
-        // Recreate the shape with flipped geometry
+        // Recreate the shape with flipped geometry centered at origin
         if let oldShape = shapeNode {
             oldShape.removeFromParent()
         }
@@ -98,6 +98,9 @@ class PuzzlePieceNode: SKNode {
         // Get the vertices
         let normalizedVertices = TangramGameGeometry.normalizedVertices(for: pieceType)
         let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
+        
+        // Compute centroid to center path around origin
+        let centroid = TangramGameGeometry.centerOfVertices(scaledVertices)
         
         // Flip vertices horizontally if needed
         let finalVertices: [CGPoint]
@@ -111,9 +114,12 @@ class PuzzlePieceNode: SKNode {
         // Create path from vertices
         let path = UIBezierPath()
         if let firstVertex = finalVertices.first {
-            path.move(to: firstVertex)
+            // Center vertices around origin so node's position is the piece centroid
+            let first = CGPoint(x: firstVertex.x - centroid.x, y: firstVertex.y - centroid.y)
+            path.move(to: first)
             for vertex in finalVertices.dropFirst() {
-                path.addLine(to: vertex)
+                let adjusted = CGPoint(x: vertex.x - centroid.x, y: vertex.y - centroid.y)
+                path.addLine(to: adjusted)
             }
             path.close()
         }

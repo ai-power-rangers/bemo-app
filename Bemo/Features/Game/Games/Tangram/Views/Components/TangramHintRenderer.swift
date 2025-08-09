@@ -40,6 +40,7 @@ class TangramHintRenderer {
         // Create hint outline
         let hintNode = createHintNode(for: pieceType)
         hintNode.position = targetPosition
+        // Rotation should already be in scene-space from hint engine
         hintNode.zRotation = rotation
         hintNode.alpha = 0
         
@@ -101,7 +102,7 @@ class TangramHintRenderer {
         circle.lineWidth = 2
         circle.alpha = 0
         
-        // Add rotation arrow
+        // Add rotation arrow - rotation should already be in scene-space from hint engine
         let arrowPath = CGMutablePath()
         arrowPath.addArc(center: .zero, radius: radius, 
                         startAngle: 0, endAngle: targetRotation,

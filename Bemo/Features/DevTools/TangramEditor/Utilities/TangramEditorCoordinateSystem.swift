@@ -105,7 +105,7 @@ class TangramEditorCoordinateSystem {
     }
     
     /// Remap vertex index for flipped parallelogram
-    private static func remapParallelogramVertexIndex(_ index: Int) -> Int {
+    static func remapParallelogramVertexIndexForFlip(_ index: Int) -> Int {
         // When parallelogram is flipped horizontally, vertices swap: 0↔1, 2↔3
         switch index {
         case 0: return 1
@@ -117,7 +117,7 @@ class TangramEditorCoordinateSystem {
     }
     
     /// Remap edge index for flipped parallelogram
-    private static func remapParallelogramEdgeIndex(_ index: Int) -> Int {
+    static func remapParallelogramEdgeIndexForFlip(_ index: Int) -> Int {
         // When parallelogram is flipped, edges need remapping
         // Original edges: 0(0→1), 1(1→2), 2(2→3), 3(3→0)
         // Flipped edges: 0(1→0), 1(0→3), 2(3→2), 3(2→1)
@@ -131,23 +131,32 @@ class TangramEditorCoordinateSystem {
         }
     }
     
+    // Keep internal versions for both internal and external use
+    static func remapParallelogramVertexIndex(_ index: Int) -> Int {
+        return remapParallelogramVertexIndexForFlip(index)
+    }
+    
+    static func remapParallelogramEdgeIndex(_ index: Int) -> Int {
+        return remapParallelogramEdgeIndexForFlip(index)
+    }
+    
     /// Get all connection points for a piece in world space
     static func getConnectionPoints(for piece: TangramPiece) -> [PiecePlacementService.ConnectionPoint] {
         var points: [PiecePlacementService.ConnectionPoint] = []
         let visualVertices = getVisualVertices(for: piece.type)
         
-        // Detect if parallelogram is flipped
-        let isFlipped = piece.type == .parallelogram && isFlipped(piece.transform)
+        // IMPORTANT: Do NOT remap indices here! Connection points should always use
+        // the actual vertex/edge indices. The placement logic handles any necessary
+        // remapping internally when calculating transforms for flipped pieces.
+        // Remapping here causes inconsistency with getWorldVertices which returns
+        // vertices in their natural order.
         
         // Add vertex connection points
         for (index, vertex) in visualVertices.enumerated() {
             let worldPos = vertex.applying(piece.transform)
             
-            // Remap index for flipped parallelogram to maintain correct topology
-            let connectionIndex = isFlipped ? remapParallelogramVertexIndex(index) : index
-            
             points.append(PiecePlacementService.ConnectionPoint(
-                type: .vertex(index: connectionIndex),
+                type: .vertex(index: index), // Use actual index, no remapping
                 position: worldPos,
                 pieceId: piece.id
             ))
@@ -163,11 +172,8 @@ class TangramEditorCoordinateSystem {
             )
             let worldPos = midpoint.applying(piece.transform)
             
-            // Remap edge index for flipped parallelogram
-            let connectionIndex = isFlipped ? remapParallelogramEdgeIndex(i) : i
-            
             points.append(PiecePlacementService.ConnectionPoint(
-                type: .edge(index: connectionIndex),
+                type: .edge(index: i), // Use actual index, no remapping
                 position: worldPos,
                 pieceId: piece.id
             ))
@@ -265,17 +271,33 @@ class TangramEditorCoordinateSystem {
                     )
                     
                     // Get the piece edge direction in local space
+                    // For flipped parallelogram, we need to remap the edge index
+                    let actualPieceEdgeIndex = (isFlipped && pieceType == .parallelogram)
+                        ? remapParallelogramEdgeIndex(pieceEdgeIndex)
+                        : pieceEdgeIndex
+                    
                     let localVertices = getVisualVertices(for: pieceType)
                     let pieceEdges = TangramGeometry.edges(for: pieceType)
                     
-                    if pieceEdgeIndex < pieceEdges.count {
-                        let pieceEdgeDef = pieceEdges[pieceEdgeIndex]
+                    if actualPieceEdgeIndex < pieceEdges.count {
+                        let pieceEdgeDef = pieceEdges[actualPieceEdgeIndex]
                         let pieceEdgeStart = localVertices[pieceEdgeDef.startVertex]
                         let pieceEdgeEnd = localVertices[pieceEdgeDef.endVertex]
-                        let pieceEdgeAngle = atan2(
+                        
+                        // For flipped pieces, we need to account for the flip when calculating angle
+                        var pieceEdgeAngle = atan2(
                             pieceEdgeEnd.y - pieceEdgeStart.y,
                             pieceEdgeEnd.x - pieceEdgeStart.x
                         )
+                        
+                        // If flipped, the edge direction is reversed due to the flip transform
+                        if isFlipped && pieceType == .parallelogram {
+                            // The flip reverses the X component of the direction
+                            pieceEdgeAngle = atan2(
+                                pieceEdgeEnd.y - pieceEdgeStart.y,
+                                -(pieceEdgeEnd.x - pieceEdgeStart.x)
+                            )
+                        }
                         
                         // Calculate rotation needed to align edges (edges should be anti-parallel)
                         // Add π to make edges face opposite directions
@@ -296,21 +318,19 @@ class TangramEditorCoordinateSystem {
         transform = transform.rotated(by: finalRotation)
         
         // Get local position of piece connection point
-        // Need to account for flip when getting the local point
-        let localPiecePos: CGPoint
+        // For flipped parallelogram, we need to remap the connection point
+        let remappedConnectionType: PiecePlacementService.ConnectionPoint.PointType
         if isFlipped && pieceType == .parallelogram {
-            // For flipped parallelogram, we need to remap the connection point
-            let remappedType: PiecePlacementService.ConnectionPoint.PointType
             switch connection.piece.type {
             case .vertex(let index):
-                remappedType = .vertex(index: remapParallelogramVertexIndex(index))
+                remappedConnectionType = .vertex(index: remapParallelogramVertexIndex(index))
             case .edge(let index):
-                remappedType = .edge(index: remapParallelogramEdgeIndex(index))
+                remappedConnectionType = .edge(index: remapParallelogramEdgeIndex(index))
             }
-            localPiecePos = getLocalConnectionPoint(for: pieceType, connectionType: remappedType)
         } else {
-            localPiecePos = getLocalConnectionPoint(for: pieceType, connectionType: connection.piece.type)
+            remappedConnectionType = connection.piece.type
         }
+        let localPiecePos = getLocalConnectionPoint(for: pieceType, connectionType: remappedConnectionType)
         
         let rotatedPiecePos = localPiecePos.applying(transform)
         
@@ -349,13 +369,12 @@ class TangramEditorCoordinateSystem {
             )
         }
         
-        // Get local positions for piece connection points, accounting for flip
-        let local1: CGPoint
-        let local2: CGPoint
+        // Get local positions for piece connection points
+        // For flipped parallelogram, remap the connection points
+        let remapped1: PiecePlacementService.ConnectionPoint.PointType
+        let remapped2: PiecePlacementService.ConnectionPoint.PointType
         
         if isFlipped && pieceType == .parallelogram {
-            // Remap connection points for flipped parallelogram
-            let remapped1: PiecePlacementService.ConnectionPoint.PointType
             switch connections[0].piece.type {
             case .vertex(let index):
                 remapped1 = .vertex(index: remapParallelogramVertexIndex(index))
@@ -363,20 +382,19 @@ class TangramEditorCoordinateSystem {
                 remapped1 = .edge(index: remapParallelogramEdgeIndex(index))
             }
             
-            let remapped2: PiecePlacementService.ConnectionPoint.PointType
             switch connections[1].piece.type {
             case .vertex(let index):
                 remapped2 = .vertex(index: remapParallelogramVertexIndex(index))
             case .edge(let index):
                 remapped2 = .edge(index: remapParallelogramEdgeIndex(index))
             }
-            
-            local1 = getLocalConnectionPoint(for: pieceType, connectionType: remapped1)
-            local2 = getLocalConnectionPoint(for: pieceType, connectionType: remapped2)
         } else {
-            local1 = getLocalConnectionPoint(for: pieceType, connectionType: connections[0].piece.type)
-            local2 = getLocalConnectionPoint(for: pieceType, connectionType: connections[1].piece.type)
+            remapped1 = connections[0].piece.type
+            remapped2 = connections[1].piece.type
         }
+        
+        let local1 = getLocalConnectionPoint(for: pieceType, connectionType: remapped1)
+        let local2 = getLocalConnectionPoint(for: pieceType, connectionType: remapped2)
         
         
         // Get canvas positions
