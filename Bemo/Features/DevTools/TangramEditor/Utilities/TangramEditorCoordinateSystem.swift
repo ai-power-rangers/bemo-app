@@ -318,6 +318,27 @@ class TangramEditorCoordinateSystem {
             )
         }
         
+        // Special handling for vertex+edge dual connection
+        // This provides exact alignment without sliding
+        if connections.count == 2 {
+            let hasVertex = connections.contains { $0.piece.type.isVertex }
+            let hasEdge = connections.contains { $0.piece.type.isEdge }
+            
+            if hasVertex && hasEdge {
+                // Find which connection is vertex and which is edge
+                let vertexConnection = connections.first { $0.piece.type.isVertex }!
+                let edgeConnection = connections.first { $0.piece.type.isEdge }!
+                
+                return calculateVertexEdgeAlignment(
+                    pieceType: pieceType,
+                    isFlipped: isFlipped,
+                    vertexConnection: vertexConnection,
+                    edgeConnection: edgeConnection,
+                    existingPieces: existingPieces
+                )
+            }
+        }
+        
         // Get local positions for piece connection points
         // For flipped parallelogram, remap the connection points
         let remapped1: PiecePlacementService.ConnectionPoint.PointType
@@ -496,6 +517,207 @@ class TangramEditorCoordinateSystem {
         let dx = point2.x - point1.x
         let dy = point2.y - point1.y
         return sqrt(dx * dx + dy * dy)
+    }
+    
+    /// Calculate transform for vertex+edge dual connection
+    /// This uses true edge directions and pivots around the vertex for exact alignment
+    private static func calculateVertexEdgeAlignment(
+        pieceType: PieceType,
+        isFlipped: Bool,
+        vertexConnection: (canvas: PiecePlacementService.ConnectionPoint, piece: PiecePlacementService.ConnectionPoint),
+        edgeConnection: (canvas: PiecePlacementService.ConnectionPoint, piece: PiecePlacementService.ConnectionPoint),
+        existingPieces: [TangramPiece]
+    ) -> CGAffineTransform? {
+        
+        // Get the canvas edge owner piece and edge definition
+        // Note: Canvas vertex and edge can be from DIFFERENT pieces (cross-piece constraint)
+        guard case .edge(let canvasEdgeIndex) = edgeConnection.canvas.type,
+              let canvasEdgePiece = existingPieces.first(where: { $0.id == edgeConnection.canvas.pieceId }) else {
+            return nil
+        }
+        
+        let canvasEdges = TangramGeometry.edges(for: canvasEdgePiece.type)
+        guard canvasEdgeIndex < canvasEdges.count else { return nil }
+        let canvasEdgeDef = canvasEdges[canvasEdgeIndex]
+        
+        // Get canvas edge endpoints in world coordinates
+        let canvasEdgeVertices = getWorldVertices(for: canvasEdgePiece)
+        let canvasEdgeStart = canvasEdgeVertices[canvasEdgeDef.startVertex]
+        let canvasEdgeEnd = canvasEdgeVertices[canvasEdgeDef.endVertex]
+        
+        // Get canvas vertex position (can be from a different piece)
+        let canvasVertexPos = vertexConnection.canvas.position
+        
+        // Log canvas edge for debugging
+        Logger.tangramPlacement.debug("[CoordinateSystem] Canvas edge: start=(\(String(format: "%.1f", canvasEdgeStart.x)), \(String(format: "%.1f", canvasEdgeStart.y))) end=(\(String(format: "%.1f", canvasEdgeEnd.x)), \(String(format: "%.1f", canvasEdgeEnd.y)))")
+        
+        // Get canvas edge direction vector
+        let canvasEdgeVector = CGVector(
+            dx: canvasEdgeEnd.x - canvasEdgeStart.x,
+            dy: canvasEdgeEnd.y - canvasEdgeStart.y
+        )
+        let canvasEdgeAngle = atan2(canvasEdgeVector.dy, canvasEdgeVector.dx)
+        
+        // Get local piece edge and vertex positions
+        var localVertexIndex: Int
+        var localEdgeIndex: Int
+        
+        if case .vertex(let vIdx) = vertexConnection.piece.type {
+            localVertexIndex = vIdx
+        } else { return nil }
+        
+        if case .edge(let eIdx) = edgeConnection.piece.type {
+            localEdgeIndex = eIdx
+        } else { return nil }
+        
+        // Apply remapping for flipped parallelogram
+        if isFlipped && pieceType == .parallelogram {
+            localVertexIndex = remapParallelogramVertexIndex(localVertexIndex)
+            localEdgeIndex = remapParallelogramEdgeIndex(localEdgeIndex)
+        }
+        
+        // Get local piece geometry
+        let visualVertices = getVisualVertices(for: pieceType)
+        let pieceEdges = TangramGeometry.edges(for: pieceType)
+        guard localVertexIndex < visualVertices.count,
+              localEdgeIndex < pieceEdges.count else { return nil }
+        
+        // Validate that piece vertex is incident to piece edge (keep this check - it's geometrically necessary)
+        let pieceEdgeDef = pieceEdges[localEdgeIndex]
+        let pieceVertexOnEdge = (localVertexIndex == pieceEdgeDef.startVertex || 
+                                localVertexIndex == pieceEdgeDef.endVertex)
+        if !pieceVertexOnEdge {
+            Logger.tangramPlacement.warning("[CoordinateSystem] Piece vertex \(localVertexIndex) is not incident to piece edge \(localEdgeIndex) - geometrically impossible")
+            return nil
+        }
+        
+        let localVertex = visualVertices[localVertexIndex]
+        let localEdgeStart = visualVertices[pieceEdgeDef.startVertex]
+        let localEdgeEnd = visualVertices[pieceEdgeDef.endVertex]
+        
+        // Calculate local edge direction from true edge endpoints
+        let localEdgeVector = CGVector(
+            dx: localEdgeEnd.x - localEdgeStart.x,
+            dy: localEdgeEnd.y - localEdgeStart.y
+        )
+        let localEdgeAngle = atan2(localEdgeVector.dy, localEdgeVector.dx)
+        
+        // Log edge angles for debugging
+        Logger.tangramPlacement.debug("[CoordinateSystem] Local edge angle: \(String(format: "%.1f", localEdgeAngle * 180 / .pi))°, Canvas edge angle: \(String(format: "%.1f", canvasEdgeAngle * 180 / .pi))°")
+        
+        // Calculate rotation needed to align edge directions (NO baseRotation for dual-connection - pose is fully determined)
+        var rotationNeeded = canvasEdgeAngle - localEdgeAngle
+        
+        // Apply flip transform first if needed
+        var transform = CGAffineTransform.identity
+        if isFlipped && pieceType == .parallelogram {
+            transform = transform.scaledBy(x: -1, y: 1)
+            // Adjust rotation for flip
+            rotationNeeded = canvasEdgeAngle - (-localEdgeAngle)
+        }
+        
+        // Log rotation before snapping
+        let degrees = rotationNeeded * 180 / .pi
+        Logger.tangramPlacement.debug("[CoordinateSystem] Rotation needed before snap: \(String(format: "%.1f", degrees))°")
+        
+        // Snap rotation to nearest 45° ONLY if within small epsilon
+        let snappedDegrees = round(degrees / 45) * 45
+        if abs(degrees - snappedDegrees) <= 1.0 {  // Within 1° of a 45° multiple
+            rotationNeeded = snappedDegrees * .pi / 180
+            Logger.tangramPlacement.debug("[CoordinateSystem] Snapped rotation to \(String(format: "%.0f", snappedDegrees))°")
+        }
+        
+        // Apply rotation around the vertex (pivot point)
+        transform = transform.rotated(by: rotationNeeded)
+        
+        // Transform the local vertex position
+        let rotatedVertex = localVertex.applying(transform)
+        
+        // Translate so the vertex aligns exactly with canvas vertex
+        transform.tx = canvasVertexPos.x - rotatedVertex.x
+        transform.ty = canvasVertexPos.y - rotatedVertex.y
+        
+        Logger.tangramPlacement.debug("[CoordinateSystem] Vertex pivot at (\(String(format: "%.1f", canvasVertexPos.x)), \(String(format: "%.1f", canvasVertexPos.y)))")
+        
+        // Verify edge collinearity (NOT midpoint equality)
+        // Both endpoints of the piece edge should be close to the canvas edge LINE (infinite line, not segment)
+        let transformedEdgeStart = localEdgeStart.applying(transform)
+        let transformedEdgeEnd = localEdgeEnd.applying(transform)
+        
+        // Calculate perpendicular distances from both endpoints to the canvas edge line
+        let startDistance = perpendicularDistanceToLine(
+            point: transformedEdgeStart,
+            lineStart: canvasEdgeStart,
+            lineEnd: canvasEdgeEnd
+        )
+        let endDistance = perpendicularDistanceToLine(
+            point: transformedEdgeEnd,
+            lineStart: canvasEdgeStart,
+            lineEnd: canvasEdgeEnd
+        )
+        
+        // Log the perpendicular distances for debugging
+        Logger.tangramPlacement.debug("[CoordinateSystem] Edge endpoint distances to canvas line: start=\(String(format: "%.2f", startDistance)), end=\(String(format: "%.2f", endDistance))")
+        
+        // Both endpoints should be within tolerance of the canvas edge line for collinearity
+        let maxDistance = max(startDistance, endDistance)
+        if maxDistance > TangramConstants.mixedConnectionTolerance {
+            Logger.tangramPlacement.warning("[CoordinateSystem] Vertex+edge alignment failed: collinearity error \(String(format: "%.2f", maxDistance)) exceeds tolerance \(TangramConstants.mixedConnectionTolerance)")
+            return nil
+        }
+        
+        Logger.tangramPlacement.info("[CoordinateSystem] Vertex+edge alignment successful with rotation \(String(format: "%.1f", rotationNeeded * 180 / .pi))°")
+        
+        return transform
+    }
+    
+    /// Project a point onto a line segment
+    private static func projectPointOntoLineSegment(
+        point: CGPoint,
+        lineStart: CGPoint,
+        lineEnd: CGPoint
+    ) -> CGPoint {
+        let lineVector = CGVector(dx: lineEnd.x - lineStart.x, dy: lineEnd.y - lineStart.y)
+        let lineLength = sqrt(lineVector.dx * lineVector.dx + lineVector.dy * lineVector.dy)
+        
+        if lineLength < 0.001 {
+            return lineStart
+        }
+        
+        let toPoint = CGVector(dx: point.x - lineStart.x, dy: point.y - lineStart.y)
+        let t = max(0, min(1, (toPoint.dx * lineVector.dx + toPoint.dy * lineVector.dy) / (lineLength * lineLength)))
+        
+        return CGPoint(
+            x: lineStart.x + t * lineVector.dx,
+            y: lineStart.y + t * lineVector.dy
+        )
+    }
+    
+    /// Calculate perpendicular distance from a point to an infinite line
+    private static func perpendicularDistanceToLine(
+        point: CGPoint,
+        lineStart: CGPoint,
+        lineEnd: CGPoint
+    ) -> CGFloat {
+        let lineVector = CGVector(dx: lineEnd.x - lineStart.x, dy: lineEnd.y - lineStart.y)
+        let lineLength = sqrt(lineVector.dx * lineVector.dx + lineVector.dy * lineVector.dy)
+        
+        if lineLength < 0.001 {
+            // Degenerate line - return distance to point
+            return distance(from: point, to: lineStart)
+        }
+        
+        // Calculate perpendicular distance using cross product formula
+        // Distance = |ax + by + c| / sqrt(a^2 + b^2)
+        // Where line equation is: a(x - x1) + b(y - y1) = 0
+        // And a = -(y2 - y1), b = (x2 - x1)
+        
+        let a = -(lineEnd.y - lineStart.y)
+        let b = lineEnd.x - lineStart.x
+        let c = -(a * lineStart.x + b * lineStart.y)
+        
+        let distance = abs(a * point.x + b * point.y + c) / sqrt(a * a + b * b)
+        return distance
     }
     
     // MARK: - Bounding Box Operations

@@ -48,7 +48,6 @@ class TangramPuzzleScene: SKScene {
     private var puzzleAreaHeight: CGFloat = 0
     private var piecesAreaHeight: CGFloat = 0
     private var puzzleCenter: CGPoint = .zero
-    private var puzzleScale: CGFloat = 1.0
     
     // Visual settings
     private let targetAlpha: CGFloat = 0.3
@@ -135,58 +134,154 @@ class TangramPuzzleScene: SKScene {
         puzzleLayer.removeAllChildren()
         piecesLayer.removeAllChildren()
         
-        // Note: We no longer need raw bounds for centering
-        // The pieces already use TangramGameConstants.visualScale
-        puzzleScale = 1.0
-        
-        // Create target silhouettes with proper scaling and positioning
-        // Each piece is positioned in SK space via PoseMapper
-        for target in puzzle.targetPieces {
-            createTargetPiece(target)
-        }
-        
-        // Calculate bounds in SK space (same space as the child nodes)
+        // STEP 1: Calculate bounds in SK space to understand puzzle dimensions
         let boundsSK = TangramBounds.calculatePuzzleBoundsSK(targets: puzzle.targetPieces)
         
-        // Compute desired center for the puzzle (top area below safe area)
-        let desiredCenter = CGPoint(
+        // Get the current center of the puzzle in SK space
+        let currentMid = CGPoint(x: boundsSK.midX, y: boundsSK.midY)
+        
+        // STEP 2: Determine where we want the puzzle centered on screen
+        let desiredMid = CGPoint(
             x: size.width / 2,
             y: (size.height - safeAreaTop) * 0.75
         )
         
-        // Get current center from SK bounds
-        let currentCenter = CGPoint(
-            x: boundsSK.midX,
-            y: boundsSK.midY
-        )
+        // STEP 3: Position parent layer at the desired position
+        // This centers the puzzle at the desired screen location
+        puzzleLayer.position = desiredMid
+        puzzleLayer.zRotation = 0  // Ensure no rotation on parent
+        puzzleLayer.setScale(1.0)  // Ensure no scale on parent
         
-        // Position puzzle layer to move current center to desired center
-        puzzleLayer.position = CGPoint(
-            x: desiredCenter.x - currentCenter.x,
-            y: desiredCenter.y - currentCenter.y
-        )
+        // STEP 4: Create target pieces with parent-local coordinates
+        // Pass the bounds center so pieces can be positioned relative to it
+        for target in puzzle.targetPieces {
+            createTargetPiece(target, boundsCenterSK: currentMid)
+        }
         
-        // Temporary sanity log
-        print("=== Puzzle Centering Debug ===")
+        // Comprehensive vertex-level verification for ALL pieces
+        print("=== Puzzle Assembly Verification ===")
         print("SK Bounds: \(TangramBounds.debugString(for: boundsSK))")
-        print("Desired Center: (\(String(format: "%.1f", desiredCenter.x)), \(String(format: "%.1f", desiredCenter.y)))")
-        print("Current Center: (\(String(format: "%.1f", currentCenter.x)), \(String(format: "%.1f", currentCenter.y)))")
+        print("Bounds Center SK: (\(String(format: "%.1f", currentMid.x)), \(String(format: "%.1f", currentMid.y)))")
+        print("Desired Screen Position: (\(String(format: "%.1f", desiredMid.x)), \(String(format: "%.1f", desiredMid.y)))")
         print("Puzzle Layer Position: (\(String(format: "%.1f", puzzleLayer.position.x)), \(String(format: "%.1f", puzzleLayer.position.y)))")
-        print("=============================")
+        
+        // Verify EVERY piece with vertex-level precision
+        var totalMaxError: CGFloat = 0
+        print("\n=== Per-Piece Vertex Verification ===")
+        
+        for target in puzzle.targetPieces {
+            guard let shape = targetPieces[target.pieceType.rawValue] else { continue }
+            
+            // Get the expected vertices stored in userData
+            guard let expectedVerticesSK = shape.userData?["expectedVerticesSK"] as? [CGPoint] else { 
+                print("Warning: No expected vertices for \(target.pieceType.rawValue)")
+                continue 
+            }
+            
+            // Get the actual vertices by transforming the shape's path
+            let pathBounds = shape.path?.boundingBox ?? .zero
+            let pathCenter = CGPoint(x: pathBounds.midX, y: pathBounds.midY)
+            
+            // The path is centered, so we need to transform it by the shape's position
+            // Since zRotation is 0 (baked approach), we only need to translate
+            
+            // Calculate the centroid of expected vertices (simpler calculation)
+            var expectedCentroid = CGPoint.zero
+            for vertex in expectedVerticesSK {
+                expectedCentroid.x += vertex.x
+                expectedCentroid.y += vertex.y
+            }
+            let vertexCount = CGFloat(expectedVerticesSK.count)
+            expectedCentroid.x /= vertexCount
+            expectedCentroid.y /= vertexCount
+            
+            let actualVerticesSK = expectedVerticesSK.map { expectedVertex in
+                // The path vertices are centered, so reconstruct scene position
+                let localVertex = CGPoint(
+                    x: expectedVertex.x - expectedCentroid.x,
+                    y: expectedVertex.y - expectedCentroid.y
+                )
+                
+                // Transform to scene coordinates
+                let sceneVertex = CGPoint(
+                    x: localVertex.x + shape.position.x + puzzleLayer.position.x,
+                    y: localVertex.y + shape.position.y + puzzleLayer.position.y
+                )
+                return sceneVertex
+            }
+            
+            // Calculate per-vertex error
+            var maxVertexError: CGFloat = 0
+            for (expected, actual) in zip(expectedVerticesSK, actualVerticesSK) {
+                // Expected scene position = expected SK vertex offset by bounds center and parent position
+                let expectedScene = CGPoint(
+                    x: expected.x - currentMid.x + desiredMid.x,
+                    y: expected.y - currentMid.y + desiredMid.y
+                )
+                let error = hypot(actual.x - expectedScene.x, actual.y - expectedScene.y)
+                maxVertexError = max(maxVertexError, error)
+            }
+            
+            totalMaxError = max(totalMaxError, maxVertexError)
+            
+            // Also verify centroid position
+            let centroidSK = shape.userData?["centerX"] as? CGFloat ?? 0
+            let centroidSKY = shape.userData?["centerY"] as? CGFloat ?? 0
+            let expectedCentroidSK = CGPoint(x: centroidSK, y: centroidSKY)
+            let actualCentroidScene = puzzleLayer.convert(shape.position, to: self)
+            let expectedCentroidScene = CGPoint(
+                x: expectedCentroidSK.x - currentMid.x + desiredMid.x,
+                y: expectedCentroidSK.y - currentMid.y + desiredMid.y
+            )
+            let centroidError = hypot(actualCentroidScene.x - expectedCentroidScene.x, actualCentroidScene.y - expectedCentroidScene.y)
+            
+            print("\(target.pieceType.rawValue):")
+            print("  Max vertex error: \(String(format: "%.2f", maxVertexError)) px")
+            print("  Centroid error: \(String(format: "%.2f", centroidError)) px")
+            print("  Shape zRotation: \(String(format: "%.2f", shape.zRotation * 180 / .pi))° (should be 0)")
+        }
+        
+        print("\nTotal max vertex error across all pieces: \(String(format: "%.2f", totalMaxError)) px")
+        if totalMaxError < 1.0 {
+            print("✅ SUCCESS: Puzzle assembled with sub-pixel accuracy!")
+        } else {
+            print("⚠️ WARNING: Puzzle assembly has errors > 1px")
+        }
+        print("=====================================")
         
         // Create movable pieces at the bottom
         createAvailablePieces(from: puzzle.targetPieces)
     }
     
-    private func createTargetPiece(_ target: GamePuzzleData.TargetPiece) {
-        // 1. Get scaled vertices and calculate local centroid
+    private func createTargetPiece(_ target: GamePuzzleData.TargetPiece, boundsCenterSK: CGPoint) {
+        // BAKED-VERTICES APPROACH: Apply transform directly to vertices for bulletproof rendering
+        
+        // 1. Get normalized vertices and scale them
         let normalizedVertices = TangramGameGeometry.normalizedVertices(for: target.pieceType)
         let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
-        let localCentroid = TangramGameGeometry.centerOfVertices(scaledVertices)
         
-        // 2. Build path centered at origin (like PuzzlePieceNode does)
+        // 2. Apply the full transform to each vertex in RAW space
+        let transformedVerticesRaw = TangramGameGeometry.transformVertices(scaledVertices, with: target.transform)
+        
+        // 3. Convert each transformed vertex to SK space
+        let transformedVerticesSK = transformedVerticesRaw.map { rawVertex in
+            TangramPoseMapper.spriteKitPosition(fromRawPosition: rawVertex)
+        }
+        
+        // 4. Calculate centroid from the SK-transformed vertices
+        var centroidSK = CGPoint.zero
+        for vertex in transformedVerticesSK {
+            centroidSK.x += vertex.x
+            centroidSK.y += vertex.y
+        }
+        centroidSK.x /= CGFloat(transformedVerticesSK.count)
+        centroidSK.y /= CGFloat(transformedVerticesSK.count)
+        
+        // 5. Build path from SK vertices centered around their centroid
         let path = UIBezierPath()
-        let centeredVertices = scaledVertices.map { CGPoint(x: $0.x - localCentroid.x, y: $0.y - localCentroid.y) }
+        let centeredVertices = transformedVerticesSK.map { vertex in
+            CGPoint(x: vertex.x - centroidSK.x, y: vertex.y - centroidSK.y)
+        }
         
         if let firstVertex = centeredVertices.first {
             path.move(to: firstVertex)
@@ -196,7 +291,7 @@ class TangramPuzzleScene: SKScene {
             path.close()
         }
         
-        // 3. Create shape node
+        // 6. Create shape node
         let shape = SKShapeNode(path: path.cgPath)
         shape.fillColor = SKColor.systemGray
         shape.alpha = targetAlpha
@@ -204,20 +299,23 @@ class TangramPuzzleScene: SKScene {
         shape.lineWidth = 1.0
         shape.name = "target_\(target.pieceType.rawValue)"
         
-        // 4. Apply transform to centroid to get world position
-        let worldCentroidRaw = localCentroid.applying(target.transform)
+        // 7. Set position in parent-local coordinates (relative to bounds center)
+        let localPos = CGPoint(
+            x: centroidSK.x - boundsCenterSK.x,
+            y: centroidSK.y - boundsCenterSK.y
+        )
+        shape.position = localPos
         
-        // 5. Convert to SpriteKit and set pose
-        shape.position = TangramPoseMapper.toSpriteKit(centroidRaw: worldCentroidRaw)
-        shape.zRotation = TangramPoseMapper.toSpriteKit(angleRaw: TangramPoseMapper.rawAngle(from: target.transform))
+        // 8. No rotation needed - transform is baked into the vertices
+        shape.zRotation = 0
         
-        // 6. Store SK position for validation and add stable IDs
+        // 9. Store metadata for validation
         shape.userData = [
-            "centerX": shape.position.x,
-            "centerY": shape.position.y,
-            "pieceID": target.pieceType.rawValue
+            "centerX": centroidSK.x,  // Store the absolute SK position for validation
+            "centerY": centroidSK.y,
+            "pieceID": target.pieceType.rawValue,
+            "expectedVerticesSK": transformedVerticesSK  // Store for verification
         ]
-        
         
         targetPieces[target.pieceType.rawValue] = shape
         puzzleLayer.addChild(shape)

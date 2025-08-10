@@ -368,18 +368,6 @@ extension TangramEditorViewModel {
                     }
                     
                     // Use validation service directly for proper dual-connection validation
-                    // Calculate the current center of the placed piece from its world vertices
-                    let placedVertices = TangramEditorCoordinateSystem.getWorldVertices(for: placedPiece)
-                    var centerX: CGFloat = 0
-                    var centerY: CGFloat = 0
-                    for vertex in placedVertices {
-                        centerX += vertex.x
-                        centerY += vertex.y
-                    }
-                    centerX /= CGFloat(placedVertices.count)
-                    centerY /= CGFloat(placedVertices.count)
-                    let currentCenter = CGPoint(x: centerX, y: centerY)
-                    
                     // Validate the as-placed transform without re-centering
                     // Check ALL connections (not just the first)
                     var isValid = true
@@ -406,12 +394,19 @@ extension TangramEditorViewModel {
                         isValid = result.isValid
                     } else {
                         // Multiple connections - validate ALL of them
+                        Logger.tangramPlacement.debug("[Preview] Validating \(validationConnections.count) connections")
                         let result = validationService.validateMultipleConnections(
                             placedPiece,
                             connections: validationConnections,
                             otherPieces: puzzle.pieces
                         )
                         isValid = result.isValid
+                        
+                        if !isValid {
+                            for violation in result.violations {
+                                Logger.tangramPlacement.debug("[Preview] Connection validation failed: \(violation.message)")
+                            }
+                        }
                         
                         // Also check for overlaps with non-connected pieces
                         if isValid {
@@ -423,6 +418,12 @@ extension TangramEditorViewModel {
                             )
                             let overlapResult = validationService.validatePlacement(placedPiece, context: context)
                             isValid = overlapResult.isValid
+                            
+                            if !isValid {
+                                for violation in overlapResult.violations {
+                                    Logger.tangramPlacement.debug("[Preview] SAT overlap check failed: \(violation.message)")
+                                }
+                            }
                         }
                     }
                     
