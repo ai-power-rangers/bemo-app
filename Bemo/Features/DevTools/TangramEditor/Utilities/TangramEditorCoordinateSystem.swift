@@ -666,7 +666,92 @@ class TangramEditorCoordinateSystem {
             return nil
         }
         
-        Logger.tangramPlacement.info("[CoordinateSystem] Vertex+edge alignment successful with rotation \(String(format: "%.1f", rotationNeeded * 180 / .pi))°")
+        // CRITICAL: Ensure piece is on the correct side of the canvas edge to prevent SAT overlaps
+        // Compute centroids to determine which half-plane each piece occupies
+        
+        // Get canvas edge owner's centroid
+        let canvasOwnerCentroid = calculatePieceCentroid(canvasEdgePiece)
+        
+        // Get pending piece centroid after transform
+        let pendingPieceCentroid = calculateTransformedPieceCentroid(
+            pieceType: pieceType,
+            transform: transform
+        )
+        
+        // Calculate the normal to the canvas edge (perpendicular vector)
+        let edgeNormal = CGVector(
+            dx: -(canvasEdgeEnd.y - canvasEdgeStart.y),
+            dy: canvasEdgeEnd.x - canvasEdgeStart.x
+        )
+        
+        // Normalize the normal vector
+        let normalLength = sqrt(edgeNormal.dx * edgeNormal.dx + edgeNormal.dy * edgeNormal.dy)
+        let unitNormal = CGVector(
+            dx: edgeNormal.dx / normalLength,
+            dy: edgeNormal.dy / normalLength
+        )
+        
+        // Calculate signed distances from edge line to determine which side each piece is on
+        let canvasOwnerSide = signedDistanceToLine(
+            point: canvasOwnerCentroid,
+            lineStart: canvasEdgeStart,
+            lineEnd: canvasEdgeEnd,
+            normal: unitNormal
+        )
+        
+        let pendingPieceSide = signedDistanceToLine(
+            point: pendingPieceCentroid,
+            lineStart: canvasEdgeStart,
+            lineEnd: canvasEdgeEnd,
+            normal: unitNormal
+        )
+        
+        Logger.tangramPlacement.debug("[CoordinateSystem] Half-plane check: canvas owner side=\(String(format: "%.1f", canvasOwnerSide)), pending piece side=\(String(format: "%.1f", pendingPieceSide))")
+        
+        // If both pieces are on the same side of the edge, flip the orientation
+        if canvasOwnerSide * pendingPieceSide > 0 {  // Same sign means same side
+            Logger.tangramPlacement.info("[CoordinateSystem] Pieces on same side of edge - flipping orientation by π")
+            
+            // Add π to rotation to place piece on opposite side
+            rotationNeeded += .pi
+            
+            // Re-apply the transform with flipped orientation
+            transform = CGAffineTransform.identity
+            if isFlipped && pieceType == .parallelogram {
+                transform = transform.scaledBy(x: -1, y: 1)
+            }
+            transform = transform.rotated(by: rotationNeeded)
+            
+            // Re-apply translation to keep vertex at canvas vertex
+            let rotatedVertex = localVertex.applying(transform)
+            transform.tx = canvasVertexPos.x - rotatedVertex.x
+            transform.ty = canvasVertexPos.y - rotatedVertex.y
+            
+            // Re-check collinearity after flip
+            let flippedEdgeStart = localEdgeStart.applying(transform)
+            let flippedEdgeEnd = localEdgeEnd.applying(transform)
+            
+            let flippedStartDistance = perpendicularDistanceToLine(
+                point: flippedEdgeStart,
+                lineStart: canvasEdgeStart,
+                lineEnd: canvasEdgeEnd
+            )
+            let flippedEndDistance = perpendicularDistanceToLine(
+                point: flippedEdgeEnd,
+                lineStart: canvasEdgeStart,
+                lineEnd: canvasEdgeEnd
+            )
+            
+            let flippedMaxDistance = max(flippedStartDistance, flippedEndDistance)
+            if flippedMaxDistance > TangramConstants.mixedConnectionTolerance {
+                Logger.tangramPlacement.warning("[CoordinateSystem] After flip, collinearity error \(String(format: "%.2f", flippedMaxDistance)) exceeds tolerance")
+                return nil
+            }
+            
+            Logger.tangramPlacement.debug("[CoordinateSystem] After flip, edge distances: start=\(String(format: "%.2f", flippedStartDistance)), end=\(String(format: "%.2f", flippedEndDistance))")
+        }
+        
+        Logger.tangramPlacement.info("[CoordinateSystem] Vertex+edge alignment successful with final rotation \(String(format: "%.1f", rotationNeeded * 180 / .pi))°")
         
         return transform
     }
@@ -718,6 +803,58 @@ class TangramEditorCoordinateSystem {
         
         let distance = abs(a * point.x + b * point.y + c) / sqrt(a * a + b * b)
         return distance
+    }
+    
+    /// Calculate signed distance from a point to a line (positive on one side, negative on the other)
+    private static func signedDistanceToLine(
+        point: CGPoint,
+        lineStart: CGPoint,
+        lineEnd: CGPoint,
+        normal: CGVector
+    ) -> CGFloat {
+        // Vector from line start to point
+        let toPoint = CGVector(dx: point.x - lineStart.x, dy: point.y - lineStart.y)
+        
+        // Dot product with normal gives signed distance
+        return toPoint.dx * normal.dx + toPoint.dy * normal.dy
+    }
+    
+    /// Calculate centroid of a placed piece in world coordinates
+    private static func calculatePieceCentroid(_ piece: TangramPiece) -> CGPoint {
+        let vertices = getWorldVertices(for: piece)
+        var centerX: CGFloat = 0
+        var centerY: CGFloat = 0
+        
+        for vertex in vertices {
+            centerX += vertex.x
+            centerY += vertex.y
+        }
+        
+        centerX /= CGFloat(vertices.count)
+        centerY /= CGFloat(vertices.count)
+        
+        return CGPoint(x: centerX, y: centerY)
+    }
+    
+    /// Calculate centroid of a piece type after applying a transform
+    private static func calculateTransformedPieceCentroid(
+        pieceType: PieceType,
+        transform: CGAffineTransform
+    ) -> CGPoint {
+        let visualVertices = getVisualVertices(for: pieceType)
+        var centerX: CGFloat = 0
+        var centerY: CGFloat = 0
+        
+        for vertex in visualVertices {
+            let transformed = vertex.applying(transform)
+            centerX += transformed.x
+            centerY += transformed.y
+        }
+        
+        centerX /= CGFloat(visualVertices.count)
+        centerY /= CGFloat(visualVertices.count)
+        
+        return CGPoint(x: centerX, y: centerY)
     }
     
     // MARK: - Bounding Box Operations
