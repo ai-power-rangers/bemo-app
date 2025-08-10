@@ -49,48 +49,51 @@ enum TangramConstants {
     
     // MARK: - Validation
     
-    /// Tolerance for vertex matching in validation
-    static let vertexMatchTolerance: CGFloat = 0.01
-    
-    /// Tolerance for edge coincidence checks
-    static let edgeCoincidenceTolerance: CGFloat = 1e-6
+    /// Primary tolerance values used by TangramValidationService
+    /// All validation should use these consistent values
     
     // MARK: - Manipulation
     
     /// Step size for rotation in degrees
     static let rotationStepDegrees: Double = 45.0
     
+    /// Valid rotation snap angles in degrees
+    static let rotationSnapAngles: [Double] = [-180.0, -135.0, -90.0, -45.0, 0.0, 45.0, 90.0, 135.0, 180.0]
+    
     /// Step size for sliding along edges
     static let slideStepSize: Double = 2.0
+    
+    /// Slide snap positions as percentages (0.0 to 1.0)
+    static let slideSnapPercentages: [Double] = [0.0, 0.25, 0.5, 0.75, 1.0]
     
     /// Rotation limits calculation step in degrees
     static let rotationLimitStepDegrees: Double = 5.0
     
     // MARK: - Connection Tolerances
     
-    /// Tolerance for angle snapping during placement
-    static let angleSnapTolerance: Double = 1.0
+    /// Unified tolerance values - single source of truth
+    /// These are used by TangramValidationService.ToleranceType
     
-    /// Tolerance for distance snapping during placement
-    static let distanceSnapTolerance: Double = 2.0
-    
-    /// Tolerance for connection point matching
-    static let connectionPointTolerance: Double = 5.0
-    
-    /// Tolerance for overlap detection
-    static let overlapTolerance: Double = 10.0
-    
-    /// Tolerance for vertex-to-vertex connections
+    /// Tolerance for vertex-to-vertex connections (tight)
     static let vertexToVertexTolerance: CGFloat = 1.5
     
-    /// Tolerance for edge-to-edge connections
-    static let edgeToEdgeTolerance: CGFloat = 5.0
+    /// Tolerance for edge-to-edge connections (allows sliding)
+    static let edgeToEdgeTolerance: CGFloat = 2.0  // Reduced from 5.0 for consistency
     
-    /// Tolerance for mixed vertex and edge connections
-    static let mixedConnectionTolerance: CGFloat = 3.0
+    /// Tolerance for vertex-to-edge connections
+    static let vertexToEdgeTolerance: CGFloat = 2.0
     
-    /// Default connection tolerance
-    static let defaultConnectionTolerance: CGFloat = 2.0
+    /// Tolerance for mixed connections (vertex+edge)
+    static let mixedConnectionTolerance: CGFloat = 2.0  // Aligned with engine tolerance
+    
+    /// SAT overlap detection tolerance
+    static let overlapTolerance: CGFloat = 1.0
+    
+    /// Angle snapping tolerance for rotations
+    static let angleSnapTolerance: Double = 1.0
+    
+    /// Distance snapping tolerance
+    static let distanceSnapTolerance: Double = 2.0
     
     // MARK: - Canvas
     
@@ -101,4 +104,26 @@ enum TangramConstants {
     
     /// Maximum memory for undo stack (10 MB)
     static let maxUndoMemory: Int = 10_000_000
+    
+    // MARK: - UI Animation
+    
+    /// Toast message duration in seconds
+    static let toastDuration: Double = 2.0
+    
+    /// Button press scale effect
+    static let buttonPressScale: CGFloat = 0.95
+    
+    /// Long press minimum duration
+    static let longPressDuration: Double = 0.5
+    
+    /// Selection scale effect
+    static let selectionScale: CGFloat = 1.2
+    
+    // MARK: - Math Utilities
+    
+    /// Convert degrees to radians multiplier
+    static let degreesToRadians: Double = .pi / 180.0
+    
+    /// Convert radians to degrees multiplier
+    static let radiansToDegrees: Double = 180.0 / .pi
 }

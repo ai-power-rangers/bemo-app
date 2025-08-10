@@ -8,20 +8,36 @@
 // WHAT: Coordinates piece placement by delegating transform calculations to PieceTransformEngine
 // ARCHITECTURE: Service layer in MVVM-S, ensures consistency between preview and placement
 // USAGE: Used by ViewModels and Coordinator for piece placement operations
+//
+// RESPONSIBILITIES:
+// - Calculate initial piece placement with connections
+// - Find valid snap positions for edge-to-edge connections
+// - Delegate all transform calculations to PieceTransformEngine
+// - Delegate all overlap detection to PieceTransformEngine
+//
+// NOT RESPONSIBLE FOR:
+// - Transform calculations (use PieceTransformEngine)
+// - Overlap detection algorithms (use PieceTransformEngine)
+// - Connection validation (use ConnectionService)
+// - State management (handled by ViewModel)
 
 import Foundation
 import CoreGraphics
+import OSLog
 
 @MainActor
 class PiecePlacementService {
     
     private let transformEngine: PieceTransformEngine
     private let connectionService: ConnectionService
+    private let validationService: TangramValidationService
     
     init(transformEngine: PieceTransformEngine,
-         connectionService: ConnectionService) {
+         connectionService: ConnectionService,
+         validationService: TangramValidationService) {
         self.transformEngine = transformEngine
         self.connectionService = connectionService
+        self.validationService = validationService
     }
     
     // MARK: - Piece Placement
@@ -54,7 +70,19 @@ class PiecePlacementService {
         connections: [(canvasPoint: ConnectionPoint, piecePoint: ConnectionPoint)],
         existingPieces: [TangramPiece]
     ) -> TangramPiece? {
-        guard !connections.isEmpty else { return nil }
+        guard !connections.isEmpty else {
+            Logger.tangramPlacement.error("[PlacementService] No connections provided")
+            return nil
+        }
+        
+        Logger.tangramPlacement.info("[PlacementService] Starting placement: piece=\(type.rawValue) connections=\(connections.count) rotation=\(String(format: "%.0f", rotation * 180 / .pi))° flipped=\(isFlipped)")
+        
+        // Log connection details
+        for (index, conn) in connections.enumerated() {
+            let canvasType = conn.canvasPoint.type
+            let pieceType = conn.piecePoint.type
+            Logger.tangramPlacement.debug("[PlacementService] Connection \(index): canvas=\(String(describing: canvasType)) -> piece=\(String(describing: pieceType))")
+        }
         
         // Use TangramEditorCoordinateSystem for multi-point alignment
         // Pass flip state to alignment calculation
@@ -69,11 +97,14 @@ class PiecePlacementService {
         )
         
         guard var finalTransform = transform else {
+            Logger.tangramPlacement.error("[PlacementService] Failed to calculate alignment transform")
             return nil
         }
         
-        // For single edge-to-edge connections, search for a non-overlapping slide position
-        // using the transform engine for consistency
+        Logger.tangramPlacement.info("[PlacementService] Initial transform calculated")
+        
+        // For single edge-to-edge connections, find best snap position (0%, 25%, 50%, 75%, 100%)
+        // that doesn't cause overlaps
         if connections.count == 1,
            case .edge(let canvasEdgeIndex) = connections[0].canvasPoint.type,
            case .edge(let pieceEdgeIndex) = connections[0].piecePoint.type {
@@ -89,57 +120,53 @@ class PiecePlacementService {
                     let canvasEdgeStart = canvasVertices[canvasEdgeDef.startVertex]
                     let canvasEdgeEnd = canvasVertices[canvasEdgeDef.endVertex]
                     
-                    // Search along the edge - try different positions from start to end
-                    // Two-phase search: coarse then fine for better performance in tight spaces
+                    // Get piece edge length to determine valid slide range
+                    let tempPiece = TangramPiece(type: type, transform: finalTransform)
+                    let pieceVertices = TangramEditorCoordinateSystem.getWorldVertices(for: tempPiece)
+                    let pieceEdges = TangramGeometry.edges(for: type)
                     
-                    // Phase 1: Coarse search (10% increments)
-                    let coarsePercentages: [Double] = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-                    var bestCoarsePercent: Double? = nil
-                    var bestCoarseTransform: CGAffineTransform? = nil
-                    var foundValidSlide = false
-                    
-                    for slidePercent in coarsePercentages {
-                        // Calculate absolute position along the canvas edge
-                        let targetPoint = CGPoint(
-                            x: canvasEdgeStart.x + (canvasEdgeEnd.x - canvasEdgeStart.x) * CGFloat(slidePercent),
-                            y: canvasEdgeStart.y + (canvasEdgeEnd.y - canvasEdgeStart.y) * CGFloat(slidePercent)
-                        )
+                    if pieceEdgeIndex < pieceEdges.count {
+                        let pieceEdgeDef = pieceEdges[pieceEdgeIndex]
+                        let pieceEdgeStart = pieceVertices[pieceEdgeDef.startVertex]
+                        let pieceEdgeEnd = pieceVertices[pieceEdgeDef.endVertex]
+                        let pieceEdgeLength = sqrt(pow(pieceEdgeEnd.x - pieceEdgeStart.x, 2) + 
+                                                  pow(pieceEdgeEnd.y - pieceEdgeStart.y, 2))
                         
-                        // Calculate transform that places piece edge at this position
-                        // maintaining the anti-parallel alignment from initial calculation
-                        let testTransform = calculateEdgeAlignedTransform(
-                            pieceType: type,
-                            pieceEdgeIndex: pieceEdgeIndex,
-                            targetEdgePoint: targetPoint,
-                            baseTransform: finalTransform,
-                            isFlipped: isFlipped
-                        )
+                        let canvasEdgeLength = sqrt(pow(canvasEdgeEnd.x - canvasEdgeStart.x, 2) + 
+                                                   pow(canvasEdgeEnd.y - canvasEdgeStart.y, 2))
                         
-                        // Test for overlaps with OTHER pieces (not the connected one)
-                        let testPiece = TangramPiece(type: type, transform: testTransform)
-                        let piecesToCheck = existingPieces.filter { $0.id != canvasPieceId }
+                        // Calculate valid range: piece can slide from 0 to (canvas_length - piece_length)
+                        // This ensures the piece edge stays fully on the canvas edge
+                        let maxSlidePercent = max(0, (canvasEdgeLength - pieceEdgeLength) / canvasEdgeLength)
                         
-                        if !hasOverlapWithAnyPiece(testPiece, existingPieces: piecesToCheck) {
-                            bestCoarsePercent = slidePercent
-                            bestCoarseTransform = testTransform
-                            break // Found a valid position in coarse search
+                        // Define snap positions as percentages of the valid slide range
+                        var snapPercentages: [Double] = []
+                        if maxSlidePercent <= 0 {
+                            // Edges are same length - only center position is valid
+                            snapPercentages = [0.5]
+                        } else {
+                            // Use standard snap positions from constants, scaled to valid range
+                            snapPercentages = TangramConstants.slideSnapPercentages.map { $0 * maxSlidePercent }
+                            
+                            // For longer piece edge on shorter canvas edge, adjust to center
+                            if pieceEdgeLength > canvasEdgeLength {
+                                // Center the longer edge on the shorter edge
+                                let centerOffset = (pieceEdgeLength - canvasEdgeLength) / (2 * canvasEdgeLength)
+                                snapPercentages = [0.5 - centerOffset]
+                            }
                         }
-                    }
-                    
-                    // Phase 2: Fine search around best coarse position
-                    if let coarsePercent = bestCoarsePercent {
-                        // Search ±5% around the best coarse position with 0.5% increments
-                        let fineStart = max(0.0, coarsePercent - 0.05)
-                        let fineEnd = min(1.0, coarsePercent + 0.05)
-                        let fineStep = 0.005 // 0.5% increments
                         
-                        var currentPercent = fineStart
-                        while currentPercent <= fineEnd {
+                        // Try each snap position, starting with center (most likely to fit)
+                        let orderedSnapPositions = snapPercentages.sorted { abs($0 - 0.5) < abs($1 - 0.5) }
+                        
+                        for snapPercent in orderedSnapPositions {
+                            // Calculate position along the canvas edge
                             let targetPoint = CGPoint(
-                                x: canvasEdgeStart.x + (canvasEdgeEnd.x - canvasEdgeStart.x) * CGFloat(currentPercent),
-                                y: canvasEdgeStart.y + (canvasEdgeEnd.y - canvasEdgeStart.y) * CGFloat(currentPercent)
+                                x: canvasEdgeStart.x + (canvasEdgeEnd.x - canvasEdgeStart.x) * CGFloat(snapPercent),
+                                y: canvasEdgeStart.y + (canvasEdgeEnd.y - canvasEdgeStart.y) * CGFloat(snapPercent)
                             )
                             
+                            // Calculate transform for this snap position
                             let testTransform = calculateEdgeAlignedTransform(
                                 pieceType: type,
                                 pieceEdgeIndex: pieceEdgeIndex,
@@ -148,29 +175,15 @@ class PiecePlacementService {
                                 isFlipped: isFlipped
                             )
                             
+                            // Test for overlaps with OTHER pieces (not the connected one)
                             let testPiece = TangramPiece(type: type, transform: testTransform)
                             let piecesToCheck = existingPieces.filter { $0.id != canvasPieceId }
                             
                             if !hasOverlapWithAnyPiece(testPiece, existingPieces: piecesToCheck) {
                                 finalTransform = testTransform
-                                foundValidSlide = true
-                                break
+                                break // Use first valid snap position
                             }
-                            
-                            currentPercent += fineStep
                         }
-                    } else if let fallbackTransform = bestCoarseTransform {
-                        // Use best coarse result if fine search didn't improve
-                        finalTransform = fallbackTransform
-                        foundValidSlide = true
-                    }
-                    
-                    // Update foundValidSlide based on whether we found any valid position
-                    foundValidSlide = foundValidSlide || (bestCoarsePercent != nil)
-                    
-                    // If no valid slide found, keep the original midpoint alignment
-                    if !foundValidSlide {
-                        print("Warning: No valid slide position found for edge-to-edge connection")
                     }
                 }
             }
@@ -230,78 +243,23 @@ class PiecePlacementService {
     
     /// Check if a piece overlaps with any existing pieces
     private func hasOverlapWithAnyPiece(_ piece: TangramPiece, existingPieces: [TangramPiece]) -> Bool {
-        let pieceVertices = TangramEditorCoordinateSystem.getWorldVertices(for: piece)
+        // Use unified validation service for overlap detection
+        let context = TangramValidationService.ValidationContext(
+            connection: nil, // No connection context for simple overlap check
+            otherPieces: existingPieces,
+            canvasSize: CGSize(width: 800, height: 600),
+            allowOutOfBounds: true
+        )
         
-        for existingPiece in existingPieces {
-            let existingVertices = TangramEditorCoordinateSystem.getWorldVertices(for: existingPiece)
-            
-            // Use SAT (Separating Axis Theorem) for polygon overlap detection
-            if polygonsOverlap(pieceVertices, existingVertices) {
+        let result = validationService.validatePlacement(piece, context: context)
+        
+        // Check specifically for overlap violations
+        for violation in result.violations {
+            if case .overlap = violation.type {
                 return true
             }
         }
-        
         return false
-    }
-    
-    /// Check if two polygons overlap using SAT
-    private func polygonsOverlap(_ vertices1: [CGPoint], _ vertices2: [CGPoint]) -> Bool {
-        // Check all edges of polygon 1
-        for i in 0..<vertices1.count {
-            let edge = CGPoint(
-                x: vertices1[(i + 1) % vertices1.count].x - vertices1[i].x,
-                y: vertices1[(i + 1) % vertices1.count].y - vertices1[i].y
-            )
-            let normal = CGPoint(x: -edge.y, y: edge.x)
-            
-            if !projectionsOverlap(vertices1, vertices2, axis: normal) {
-                return false
-            }
-        }
-        
-        // Check all edges of polygon 2
-        for i in 0..<vertices2.count {
-            let edge = CGPoint(
-                x: vertices2[(i + 1) % vertices2.count].x - vertices2[i].x,
-                y: vertices2[(i + 1) % vertices2.count].y - vertices2[i].y
-            )
-            let normal = CGPoint(x: -edge.y, y: edge.x)
-            
-            if !projectionsOverlap(vertices1, vertices2, axis: normal) {
-                return false
-            }
-        }
-        
-        return true
-    }
-    
-    /// Check if projections of two polygons onto an axis overlap
-    private func projectionsOverlap(_ vertices1: [CGPoint], _ vertices2: [CGPoint], axis: CGPoint) -> Bool {
-        let (min1, max1) = projectPolygon(vertices1, onto: axis)
-        let (min2, max2) = projectPolygon(vertices2, onto: axis)
-        
-        return !(max1 < min2 || max2 < min1)
-    }
-    
-    /// Project a polygon onto an axis and return min/max values
-    private func projectPolygon(_ vertices: [CGPoint], onto axis: CGPoint) -> (min: CGFloat, max: CGFloat) {
-        guard !vertices.isEmpty else { return (0, 0) }
-        
-        let axisLength = sqrt(axis.x * axis.x + axis.y * axis.y)
-        guard axisLength > 0 else { return (0, 0) }
-        
-        let normalizedAxis = CGPoint(x: axis.x / axisLength, y: axis.y / axisLength)
-        
-        var minProj = CGFloat.greatestFiniteMagnitude
-        var maxProj = -CGFloat.greatestFiniteMagnitude
-        
-        for vertex in vertices {
-            let projection = vertex.x * normalizedAxis.x + vertex.y * normalizedAxis.y
-            minProj = min(minProj, projection)
-            maxProj = max(maxProj, projection)
-        }
-        
-        return (minProj, maxProj)
     }
     
     // MARK: - Connection Point Calculation

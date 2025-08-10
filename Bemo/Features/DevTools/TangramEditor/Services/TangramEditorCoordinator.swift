@@ -7,6 +7,7 @@
 
 import Foundation
 import CoreGraphics
+import OSLog
 
 /// Coordinates complex operations between services for the Tangram Editor
 @MainActor
@@ -14,11 +15,14 @@ class TangramEditorCoordinator {
     
     private let placementService: PiecePlacementService
     private let connectionService: ConnectionService
+    private let validationService: TangramValidationService
     
     init(placementService: PiecePlacementService,
-         connectionService: ConnectionService) {
+         connectionService: ConnectionService,
+         validationService: TangramValidationService) {
         self.placementService = placementService
         self.connectionService = connectionService
+        self.validationService = validationService
     }
     
     // MARK: - Complex Piece Placement
@@ -90,20 +94,39 @@ class TangramEditorCoordinator {
         
         // Flip is now handled inside placeConnectedPiece, no need to apply here
         
-        // Validate placement doesn't overlap using centralized coordinate system
-        _ = TangramEditorCoordinateSystem.getWorldVertices(for: newPiece)
-        
-        
-        for existingPiece in existingPieces {
-            _ = TangramEditorCoordinateSystem.getWorldVertices(for: existingPiece)
+        // Validate placement using unified validation service
+        // Create validation context with connection info if available
+        var validationConnection: Connection? = nil
+        if let firstConnection = connections.first,
+           let canvasPieceId = firstConnection.canvasPoint.pieceId.split(separator: "_").first {
+            let canvasPieceIdStr = String(canvasPieceId)
             
-            
-            // Use PieceTransformEngine's overlap detection
-            let testPiece = newPiece
-            if PieceTransformEngine.hasAreaOverlap(testPiece, existingPiece) {
-                return .failure(.overlappingPieces)
-            } else {
+            // Create connection for validation based on connection types
+            if case .vertex(let canvasVertex) = firstConnection.canvasPoint.type,
+               case .vertex(let pieceVertex) = firstConnection.piecePoint.type {
+                validationConnection = Connection(
+                    type: .vertexToVertex(
+                        pieceAId: canvasPieceIdStr,
+                        vertexA: canvasVertex,
+                        pieceBId: newPiece.id,
+                        vertexB: pieceVertex
+                    ),
+                    constraint: Constraint(type: .fixed, affectedPieceId: newPiece.id)
+                )
             }
+            // Add other connection type handling as needed
+        }
+        
+        let validationContext = TangramValidationService.ValidationContext(
+            connection: validationConnection,
+            otherPieces: existingPieces,
+            canvasSize: CGSize(width: 800, height: 600),
+            allowOutOfBounds: true
+        )
+        
+        let validationResult = validationService.validatePlacement(newPiece, context: validationContext)
+        if !validationResult.isValid {
+            return .failure(.overlappingPieces)
         }
         
         // Add piece and create connections
@@ -132,36 +155,122 @@ class TangramEditorCoordinator {
     
     /// Perform complete validation of puzzle state
     func validatePuzzle(_ puzzle: TangramPuzzle) -> ValidationState {
-        // Check for overlaps between all pieces
-        for i in 0..<puzzle.pieces.count {
-            for j in (i+1)..<puzzle.pieces.count {
-                if PieceTransformEngine.hasAreaOverlap(puzzle.pieces[i], puzzle.pieces[j]) {
-                    return .invalid(reason: "Pieces overlap")
-                }
-            }
-        }
-        
         // Check if puzzle has at least one piece
         if puzzle.pieces.isEmpty {
             return .unknown
         }
         
+        // Use validation service for comprehensive puzzle validation
+        for i in 0..<puzzle.pieces.count {
+            // Get connections for this piece
+            let pieceConnections = puzzle.connections.filter { conn in
+                conn.pieceAId == puzzle.pieces[i].id || conn.pieceBId == puzzle.pieces[i].id
+            }
+            
+            // Validate each piece with its connections
+            for connection in pieceConnections {
+                let context = TangramValidationService.ValidationContext(
+                    connection: connection,
+                    otherPieces: puzzle.pieces.filter { $0.id != puzzle.pieces[i].id },
+                    canvasSize: CGSize(width: 800, height: 600),
+                    allowOutOfBounds: true
+                )
+                
+                let result = validationService.validatePlacement(puzzle.pieces[i], context: context)
+                if !result.isValid {
+                    if let violation = result.violations.first {
+                        Logger.tangramEditorValidation.warning("[Validation] \(violation.message)")
+                        return .invalid(reason: violation.message)
+                    }
+                }
+            }
+        }
+        
+        // Check for orphaned pieces (not connected to any other piece)
+        // Only check if we have more than one piece
+        if puzzle.pieces.count > 1 {
+            var connectedPieceIds = Set<String>()
+            
+            // Build graph of connected pieces
+            for connection in puzzle.connections {
+                connectedPieceIds.insert(connection.pieceAId)
+                connectedPieceIds.insert(connection.pieceBId)
+            }
+            
+            // Check if all pieces are connected (except single piece puzzles)
+            for piece in puzzle.pieces {
+                if !connectedPieceIds.contains(piece.id) {
+                    Logger.tangramEditorValidation.warning("[Validation] Orphaned piece: \(piece.type.rawValue) has no connections")
+                    return .invalid(reason: "Piece '\(piece.type.rawValue)' is not connected to other pieces")
+                }
+            }
+            
+            // Additional check: ensure all pieces form a single connected component
+            // (no separate islands of connected pieces)
+            if !connectedPieceIds.isEmpty {
+                if !isFullyConnected(puzzle: puzzle) {
+                    Logger.tangramEditorValidation.warning("[Validation] Disconnected islands detected - pieces must form single connected shape")
+                    return .invalid(reason: "Pieces must form a single connected shape")
+                }
+            }
+        }
+        
         return .valid
+    }
+    
+    /// Check if all pieces form a single connected component (no islands)
+    private func isFullyConnected(puzzle: TangramPuzzle) -> Bool {
+        guard puzzle.pieces.count > 1 else { return true }
+        
+        // Build adjacency list
+        var adjacencyList: [String: Set<String>] = [:]
+        for piece in puzzle.pieces {
+            adjacencyList[piece.id] = Set<String>()
+        }
+        
+        for connection in puzzle.connections {
+            adjacencyList[connection.pieceAId]?.insert(connection.pieceBId)
+            adjacencyList[connection.pieceBId]?.insert(connection.pieceAId)
+        }
+        
+        // BFS to find all connected pieces starting from first piece
+        guard let startPiece = puzzle.pieces.first else { return true }
+        var visited = Set<String>()
+        var queue = [startPiece.id]
+        
+        while !queue.isEmpty {
+            let current = queue.removeFirst()
+            if visited.contains(current) { continue }
+            visited.insert(current)
+            
+            if let neighbors = adjacencyList[current] {
+                for neighbor in neighbors {
+                    if !visited.contains(neighbor) {
+                        queue.append(neighbor)
+                    }
+                }
+            }
+        }
+        
+        // Check if all pieces were visited (single connected component)
+        return visited.count == puzzle.pieces.count
     }
     
     /// Check if a specific piece placement is valid
     func validatePiecePlacement(
         piece: TangramPiece,
-        existingPieces: [TangramPiece]
+        existingPieces: [TangramPiece],
+        connection: Connection? = nil
     ) -> Bool {
-        // Check for overlaps
-        for existing in existingPieces {
-            if PieceTransformEngine.hasAreaOverlap(piece, existing) {
-                return false
-            }
-        }
+        let context = TangramValidationService.ValidationContext(
+            connection: connection,
+            otherPieces: existingPieces,
+            canvasSize: CGSize(width: 800, height: 600),
+            allowOutOfBounds: true
+        )
         
-        return true
+        let result = validationService.validatePlacement(piece, context: context)
+        return result.isValid
     }
     
     // MARK: - Transform Coordination

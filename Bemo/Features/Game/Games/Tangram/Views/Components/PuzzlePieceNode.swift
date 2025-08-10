@@ -25,6 +25,12 @@ class PuzzlePieceNode: SKNode {
         self.pieceType = pieceType
         self.name = "piece_\(pieceType.rawValue)"
         
+        // Add stable ID for CV compatibility
+        self.userData = [
+            "pieceID": pieceType.rawValue,
+            "pieceType": pieceType.rawValue
+        ]
+        
         // Create shape node with proper geometry
         let shapeNode = createShape(for: pieceType)
         self.shapeNode = shapeNode

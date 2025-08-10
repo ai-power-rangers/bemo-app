@@ -270,8 +270,9 @@ class TangramHintEngine {
             current.position.y - target.position.y
         )
         
-        // Check rotation using proper validator
-        let targetRotationRad = CGFloat(TangramGeometryUtilities.sceneRotation(from: target.transform))
+        // Check rotation using proper validator with PoseMapper
+        let rawAngle = TangramPoseMapper.rawAngle(from: target.transform)
+        let targetRotationRad = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
         let currentRotationRad = current.rotation * .pi / 180
         
         // Get flip state from placed piece
@@ -374,7 +375,8 @@ class TangramHintEngine {
             
         case .fullSolution:
             // Complete sequence: show rotation, flip if needed, then position
-            let targetRotation = CGFloat(TangramGeometryUtilities.sceneRotation(from: targetTransform))
+            let rawAngle = TangramPoseMapper.rawAngle(from: targetTransform)
+            let targetRotation = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
             
             // Step 1: Show piece appearing
             steps.append(AnimationStep(

@@ -58,22 +58,10 @@ struct TangramRotationValidator {
         let toleranceRadians = toleranceDegrees * .pi / 180
         let symmetryFold = rotationalSymmetryFold(for: pieceType, isFlipped: isFlipped)
         
-        #if DEBUG
-        print("       🔄 Rotation validation for \(pieceType.rawValue):")
-        print("          Current: \(currentRotation * 180 / .pi)°")
-        print("          Target: \(targetRotation * 180 / .pi)°")
-        print("          Is flipped: \(isFlipped)")
-        print("          Symmetry fold: \(symmetryFold)")
-        print("          Tolerance: \(toleranceDegrees)°")
-        #endif
-        
         // If no symmetry (fold = 1), just check direct match
         if symmetryFold == 1 {
             let diff = normalizeAngle(currentRotation - targetRotation)
             let isValid = abs(diff) < toleranceRadians
-            #if DEBUG
-            print("          Direct match check: diff=\(diff * 180 / .pi)°, valid=\(isValid)")
-            #endif
             return isValid
         }
         
@@ -84,15 +72,7 @@ struct TangramRotationValidator {
             let equivalentRotation = targetRotation + (CGFloat(i) * symmetryAngle)
             let diff = normalizeAngle(currentRotation - equivalentRotation)
             
-            #if DEBUG
-            print("          Checking equivalent rotation \(i): \(equivalentRotation * 180 / .pi)°")
-            print("             Difference: \(diff * 180 / .pi)°")
-            #endif
-            
             if abs(diff) < toleranceRadians {
-                #if DEBUG
-                print("          ✅ Match found at equivalent rotation!")
-                #endif
                 return true
             }
         }

@@ -22,6 +22,10 @@ class TangramEditorDependencyContainer {
     
     // MARK: - Services (Lazy for efficiency)
     
+    lazy var validationService: TangramValidationService = {
+        return TangramValidationService()
+    }()
+    
     lazy var transformEngine: PieceTransformEngine = {
         return PieceTransformEngine()
     }()
@@ -31,11 +35,19 @@ class TangramEditorDependencyContainer {
     }()
     
     lazy var coordinator: TangramEditorCoordinator = {
-        return TangramEditorCoordinator(placementService: placementService, connectionService: connectionService)
+        return TangramEditorCoordinator(
+            placementService: placementService,
+            connectionService: connectionService,
+            validationService: validationService
+        )
     }()
     
     lazy var placementService: PiecePlacementService = {
-        return PiecePlacementService(transformEngine: transformEngine, connectionService: connectionService)
+        return PiecePlacementService(
+            transformEngine: transformEngine,
+            connectionService: connectionService,
+            validationService: validationService
+        )
     }()
     
     lazy var persistenceService: PuzzlePersistenceService = {
@@ -75,6 +87,7 @@ class TangramEditorDependencyContainer {
     func makeViewModel(puzzle: TangramPuzzle? = nil) -> TangramEditorViewModel {
         return TangramEditorViewModel(
             puzzle: puzzle,
+            validationService: validationService,
             transformEngine: transformEngine,
             coordinator: coordinator,
             placementService: placementService,

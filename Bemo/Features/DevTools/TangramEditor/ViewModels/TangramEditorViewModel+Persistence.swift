@@ -40,17 +40,11 @@ extension TangramEditorViewModel {
         
         // Update the PuzzleManagementService cache efficiently
         if let puzzleManagement = puzzleManagementService {
-            print("[TangramEditor] Updating PuzzleManagementService cache for puzzle: \(puzzle.id)")
             if !existsInCache {
-                print("[TangramEditor] Puzzle not in cache - adding as new")
                 await puzzleManagement.addNewPuzzle(puzzle.id)
             } else {
-                print("[TangramEditor] Puzzle exists in cache - updating")
                 await puzzleManagement.updateSinglePuzzle(puzzle.id)
             }
-            print("[TangramEditor] Cache update completed")
-        } else {
-            print("[TangramEditor] WARNING: No PuzzleManagementService available - cache not updated!")
         }
     }
     

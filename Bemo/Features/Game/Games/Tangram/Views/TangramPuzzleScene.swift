@@ -49,7 +49,6 @@ class TangramPuzzleScene: SKScene {
     private var piecesAreaHeight: CGFloat = 0
     private var puzzleCenter: CGPoint = .zero
     private var puzzleScale: CGFloat = 1.0
-    private var puzzleBounds: CGRect = .zero
     
     // Visual settings
     private let targetAlpha: CGFloat = 0.3
@@ -136,86 +135,89 @@ class TangramPuzzleScene: SKScene {
         puzzleLayer.removeAllChildren()
         piecesLayer.removeAllChildren()
         
-        // Calculate the original bounds of the puzzle
-        puzzleBounds = calculatePuzzleBounds(for: puzzle.targetPieces)
-        
-        // Use the same scale as the movable pieces (no additional scaling)
+        // Note: We no longer need raw bounds for centering
         // The pieces already use TangramGameConstants.visualScale
         puzzleScale = 1.0
         
         // Create target silhouettes with proper scaling and positioning
+        // Each piece is positioned in SK space via PoseMapper
         for target in puzzle.targetPieces {
-            createTargetPiece(target, puzzleBounds: puzzleBounds, scale: puzzleScale)
+            createTargetPiece(target)
         }
         
-        // Position the puzzle layer to center the target at the top of screen
-        // Offset to center the puzzle bounds and account for safe area
-        let centerX = size.width / 2 - puzzleBounds.midX
-        let centerY = (size.height - safeAreaTop) * 0.75 + puzzleBounds.midY  // Top area below safe area
-        puzzleLayer.position = CGPoint(x: centerX, y: centerY)
+        // Calculate bounds in SK space (same space as the child nodes)
+        let boundsSK = TangramBounds.calculatePuzzleBoundsSK(targets: puzzle.targetPieces)
+        
+        // Compute desired center for the puzzle (top area below safe area)
+        let desiredCenter = CGPoint(
+            x: size.width / 2,
+            y: (size.height - safeAreaTop) * 0.75
+        )
+        
+        // Get current center from SK bounds
+        let currentCenter = CGPoint(
+            x: boundsSK.midX,
+            y: boundsSK.midY
+        )
+        
+        // Position puzzle layer to move current center to desired center
+        puzzleLayer.position = CGPoint(
+            x: desiredCenter.x - currentCenter.x,
+            y: desiredCenter.y - currentCenter.y
+        )
+        
+        // Temporary sanity log
+        print("=== Puzzle Centering Debug ===")
+        print("SK Bounds: \(TangramBounds.debugString(for: boundsSK))")
+        print("Desired Center: (\(String(format: "%.1f", desiredCenter.x)), \(String(format: "%.1f", desiredCenter.y)))")
+        print("Current Center: (\(String(format: "%.1f", currentCenter.x)), \(String(format: "%.1f", currentCenter.y)))")
+        print("Puzzle Layer Position: (\(String(format: "%.1f", puzzleLayer.position.x)), \(String(format: "%.1f", puzzleLayer.position.y)))")
+        print("=============================")
         
         // Create movable pieces at the bottom
         createAvailablePieces(from: puzzle.targetPieces)
     }
     
-    private func createTargetPiece(_ target: GamePuzzleData.TargetPiece, puzzleBounds: CGRect, scale: CGFloat) {
-        // Get transformed vertices for the target piece
+    private func createTargetPiece(_ target: GamePuzzleData.TargetPiece) {
+        // 1. Get scaled vertices and calculate local centroid
         let normalizedVertices = TangramGameGeometry.normalizedVertices(for: target.pieceType)
         let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
-        let transformedVertices = TangramGameGeometry.transformVertices(scaledVertices, with: target.transform)
+        let localCentroid = TangramGameGeometry.centerOfVertices(scaledVertices)
         
-        // Calculate the center of the transformed piece
-        var centerX: CGFloat = 0
-        var centerY: CGFloat = 0
-        for vertex in transformedVertices {
-            centerX += vertex.x
-            centerY += vertex.y
-        }
-        centerX /= CGFloat(transformedVertices.count)
-        centerY /= CGFloat(transformedVertices.count)
-        
-        // Create shape with vertices CENTERED around origin
-        // The shape should be at origin, then positioned at the actual location
+        // 2. Build path centered at origin (like PuzzlePieceNode does)
         let path = UIBezierPath()
-        if let firstVertex = transformedVertices.first {
-            // Center the vertices around (0,0) by subtracting the center
-            let adjustedFirst = CGPoint(
-                x: firstVertex.x - centerX,
-                y: -(firstVertex.y - centerY)  // Flip Y for SpriteKit after centering
-            )
-            path.move(to: adjustedFirst)
-            
-            for vertex in transformedVertices.dropFirst() {
-                let adjustedVertex = CGPoint(
-                    x: vertex.x - centerX,
-                    y: -(vertex.y - centerY)  // Flip Y for SpriteKit after centering
-                )
-                path.addLine(to: adjustedVertex)
+        let centeredVertices = scaledVertices.map { CGPoint(x: $0.x - localCentroid.x, y: $0.y - localCentroid.y) }
+        
+        if let firstVertex = centeredVertices.first {
+            path.move(to: firstVertex)
+            for vertex in centeredVertices.dropFirst() {
+                path.addLine(to: vertex)
             }
             path.close()
         }
         
+        // 3. Create shape node
         let shape = SKShapeNode(path: path.cgPath)
         shape.fillColor = SKColor.systemGray
         shape.alpha = targetAlpha
         shape.strokeColor = SKColor.darkGray
         shape.lineWidth = 1.0
-        
-        // Now position the shape at the actual center location
-        // The center is already flipped for SpriteKit
-        shape.position = CGPoint(x: centerX, y: -centerY)
         shape.name = "target_\(target.pieceType.rawValue)"
         
-        // Store the actual center position for validation (in puzzleLayer coordinates)
-        shape.userData = ["centerX": centerX, "centerY": -centerY]
+        // 4. Apply transform to centroid to get world position
+        let worldCentroidRaw = localCentroid.applying(target.transform)
         
-        #if DEBUG
-        print("DEBUG: Target piece \(target.pieceType.rawValue)")
-        print("  Transform: tx=\(target.transform.tx), ty=\(target.transform.ty)")
-        print("  Calculated center: (\(centerX), \(-centerY))")
-        print("  Shape position in puzzleLayer: \(shape.position)")
-        print("  PuzzleLayer position: \(puzzleLayer.position)")
-        #endif
+        // 5. Convert to SpriteKit and set pose
+        shape.position = TangramPoseMapper.toSpriteKit(centroidRaw: worldCentroidRaw)
+        shape.zRotation = TangramPoseMapper.toSpriteKit(angleRaw: TangramPoseMapper.rawAngle(from: target.transform))
+        
+        // 6. Store SK position for validation and add stable IDs
+        shape.userData = [
+            "centerX": shape.position.x,
+            "centerY": shape.position.y,
+            "pieceID": target.pieceType.rawValue
+        ]
+        
         
         targetPieces[target.pieceType.rawValue] = shape
         puzzleLayer.addChild(shape)
@@ -309,24 +311,13 @@ class TangramPuzzleScene: SKScene {
             // Check node itself first
             if node.name == "flipPiece" {
                 // Flip the piece that's currently being rotated
-                print("DEBUG: Flip button tapped (direct node)!")
-                print("DEBUG: rotationDial exists: \(rotationDial != nil)")
-                print("DEBUG: selectedPiece exists: \(selectedPiece != nil)")
-                if let piece = selectedPiece {
-                    print("DEBUG: selectedPiece type: \(piece.pieceType?.rawValue ?? "nil")")
-                }
                 
                 // Use the dial's targetPiece instead of selectedPiece
                 if let dial = rotationDial, let piece = dial.targetPiece {
-                    print("DEBUG: Flipping piece - current isFlipped: \(piece.isFlipped)")
-                    print("DEBUG: Piece type: \(piece.pieceType?.rawValue ?? "unknown")")
                     piece.flip()
-                    print("DEBUG: After flip - isFlipped: \(piece.isFlipped)")
                     // Haptic feedback
                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                     impactFeedback.impactOccurred()
-                } else {
-                    print("DEBUG: Cannot flip - no rotation dial or dial has no target piece!")
                 }
                 return
             }
@@ -436,16 +427,12 @@ class TangramPuzzleScene: SKScene {
         selected.isSelected = false
         
         // Check if close enough to snap
-        print("DEBUG: touchesEnded - checking validation")
         if let pieceType = selected.pieceType,
            let target = targetPieces[pieceType.rawValue],
            let targetData = puzzle?.targetPieces.first(where: { $0.pieceType == pieceType }) {
-            print("DEBUG: Found target for piece \(pieceType.rawValue)")
             
             // Get target position in scene coordinates
             let targetWorldPos = puzzleLayer.convert(target.position, to: self)
-            print("DEBUG: Target world position: \(targetWorldPos)")
-            print("DEBUG: Selected piece position: \(selected.position)")
             
             // Use the validator with scene coordinates
             let validation = TangramPieceValidator.validateForSpriteKit(
@@ -457,45 +444,35 @@ class TangramPuzzleScene: SKScene {
                 targetWorldPos: targetWorldPos
             )
             
-            print("DEBUG: Validation result - position: \(validation.positionValid), rotation: \(validation.rotationValid), flip: \(validation.flipValid)")
-            print("DEBUG: Current piece rotation: \(selected.zRotation * 180 / .pi)°")
-            print("DEBUG: Target transform: a=\(targetData.transform.a), b=\(targetData.transform.b)")
-            print("DEBUG: Raw rotation from transform: \(TangramGeometryUtilities.extractRotation(from: targetData.transform) * 180 / .pi)°")
-            print("DEBUG: Scene-space rotation: \(TangramGeometryUtilities.sceneRotation(from: targetData.transform) * 180 / .pi)°")
-            
             if validation.positionValid {
                 if validation.rotationValid && validation.flipValid {
-                    print("🎯 SNAP SUCCESS: Snapping to position and rotation")
-                    print("   Piece: \(pieceType.rawValue)")
-                    print("   Current rotation: \(selected.zRotation * 180 / .pi)°")
                     
                     snapToPosition(piece: selected, targetPosition: targetWorldPos)
                     
-                    // Snap rotation to exact scene-space angle for perfect alignment
+                    // Snap rotation to exact SK angle for perfect alignment using PoseMapper
                     // Even though validation passed (within tolerance), we want exact placement
-                    let targetRotation = TangramGeometryUtilities.sceneRotation(from: targetData.transform)
-                    selected.zRotation = CGFloat(targetRotation)
-                    print("   Snapped to scene-space rotation: \(targetRotation * 180 / .pi)°")
+                    let rawAngle = TangramPoseMapper.rawAngle(from: targetData.transform)
+                    let targetRotationSK = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
+                    selected.zRotation = targetRotationSK
                     
                     markPieceComplete(selected)
                     
                     // Show success effect
                     effectsRenderer.showSuccessNudge(at: selected.position)
                 } else {
-                    print("DEBUG: Close but wrong orientation - rotation: \(validation.rotationValid), flip: \(validation.flipValid)")
                     
                     // Update available pieces for hint system
                     effectsRenderer.updateAvailablePieces(availablePieces)
                     effectsRenderer.showOrientationNudge(for: selected, flipNeeded: !validation.flipValid, rotationNeeded: !validation.rotationValid)
                 }
-            } else {
-                print("DEBUG: Not close enough to snap")
             }
-        } else {
-            print("DEBUG: Could not find target data for piece")
         }
         
-        selectedPiece = nil
+        // Only clear selectedPiece if rotation dial is not showing
+        // This ensures the flip button can still access the piece
+        if !isShowingRotationDial {
+            selectedPiece = nil
+        }
     }
     
     // MARK: - Game Logic
@@ -545,7 +522,6 @@ class TangramPuzzleScene: SKScene {
         
         // Check if puzzle is complete
         if completedPieces.count == availablePieces.count {
-            print("🎉 Puzzle Complete!")
             onPuzzleCompleted?()
             
             // Trigger celebration effect
@@ -689,28 +665,6 @@ class TangramPuzzleScene: SKScene {
     }
     
     // MARK: - Helper Methods
-    
-    private func calculatePuzzleBounds(for pieces: [GamePuzzleData.TargetPiece]) -> CGRect {
-        var minX = CGFloat.greatestFiniteMagnitude
-        var maxX = -CGFloat.greatestFiniteMagnitude
-        var minY = CGFloat.greatestFiniteMagnitude
-        var maxY = -CGFloat.greatestFiniteMagnitude
-        
-        for piece in pieces {
-            let vertices = TangramGameGeometry.normalizedVertices(for: piece.pieceType)
-            let scaled = TangramGameGeometry.scaleVertices(vertices, by: TangramGameConstants.visualScale)
-            let transformed = TangramGameGeometry.transformVertices(scaled, with: piece.transform)
-            
-            for vertex in transformed {
-                minX = min(minX, vertex.x)
-                maxX = max(maxX, vertex.x)
-                minY = min(minY, vertex.y)
-                maxY = max(maxY, vertex.y)
-            }
-        }
-        
-        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
-    }
     
     private func hideRotationDial(cancel: Bool = false) {
         if cancel, let dial = rotationDial {

@@ -84,9 +84,7 @@ class TangramGameViewModel {
                     let puzzles = try await self.container.databaseLoader.loadOfficialPuzzles()
                     self.availablePuzzles = puzzles
                 } catch {
-                    #if DEBUG
-                    print("Failed to load puzzles: \(error)")
-                    #endif
+                    // Handle error silently
                 }
             }
         }
@@ -124,7 +122,6 @@ class TangramGameViewModel {
         }
         
         guard let puzzle = gamePuzzleData else {
-            print("Error: Failed to convert puzzle data")
             return
         }
         
@@ -182,22 +179,18 @@ class TangramGameViewModel {
     }
     
     func toggleHints() {
-        print("DEBUG: toggleHints called")
         // Just request a hint, don't toggle state
         requestStructuredHint()
     }
     
     func requestStructuredHint() {
-        print("DEBUG: requestStructuredHint called")
         guard let puzzle = selectedPuzzle else { 
-            print("DEBUG: No selected puzzle")
             return 
         }
         
         let timeSinceProgress = Date().timeIntervalSince(lastProgressTime)
         
         // Get intelligent hint
-        print("DEBUG: Calling hintEngine.determineNextHint")
         let hint = container.hintEngine.determineNextHint(
             puzzle: puzzle,
             placedPieces: placedPieces,
@@ -206,13 +199,8 @@ class TangramGameViewModel {
             previousHints: hintHistory
         )
         
-        print("DEBUG: Got hint: \(hint != nil)")
         if let hint = hint {
-            print("DEBUG: Hint type: \(hint.hintType)")
-            print("DEBUG: Hint target piece: \(hint.targetPiece.rawValue)")
-            
             // Set the hint directly - no need for nil pattern
-            print("DEBUG: Setting currentHint directly")
             currentHint = hint
             
             // Track hint
@@ -731,7 +719,6 @@ class TangramGameViewModel {
                     sessionId: currentSessionId
                 )
             } catch {
-                print("Failed to track hint usage: \(error)")
                 // Don't let tracking errors interrupt gameplay
             }
         }
@@ -771,7 +758,7 @@ class TangramGameViewModel {
                 endGameSession(completed: true)
                 
             } catch {
-                print("Failed to track puzzle completion: \(error)")
+                // Handle error silently
             }
         }
     }

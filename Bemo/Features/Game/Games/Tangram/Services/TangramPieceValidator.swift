@@ -82,12 +82,12 @@ class TangramPieceValidator {
     
     /// Validates placement for SpriteKit scene (uses radians for rotation)
     /// - Parameters:
-    ///   - piecePosition: Current position of the piece
-    ///   - pieceRotation: Current rotation in radians
+    ///   - piecePosition: Current position of the piece (in SpriteKit space)
+    ///   - pieceRotation: Current rotation in radians (zRotation from SpriteKit)
     ///   - pieceType: Type of the piece
     ///   - isFlipped: Whether the piece is flipped
-    ///   - targetTransform: ORIGINAL transform from puzzle data (not adjusted)
-    ///   - targetWorldPos: World position for the target (already adjusted for SpriteKit)
+    ///   - targetTransform: ORIGINAL transform from puzzle data (raw space)
+    ///   - targetWorldPos: World position for the target (in SpriteKit space)
     /// - Returns: Tuple of (positionValid, rotationValid, flipValid)
     func validateForSpriteKit(
         piecePosition: CGPoint,
@@ -98,30 +98,19 @@ class TangramPieceValidator {
         targetWorldPos: CGPoint
     ) -> ValidationResult {
         
-        // Extract rotation from the ORIGINAL transform (not the sprite's)
-        // IMPORTANT: Target silhouettes are rendered with Y inverted in SpriteKit.
-        // Use sceneRotation to convert to the scene's coordinate space.
-        let targetRotation = TangramGeometryUtilities.sceneRotation(from: targetTransform)
-        
-        #if DEBUG
-        print("  🎯 \(pieceType.rawValue) validation:")
-        print("    Transform a,b,c,d: \(targetTransform.a), \(targetTransform.b), \(targetTransform.c), \(targetTransform.d)")
-        print("    Raw rotation from transform: \(TangramGeometryUtilities.extractRotation(from: targetTransform) * 180 / .pi)°")
-        print("    Scene-space target rotation: \(targetRotation * 180 / .pi)°")
-        print("    Current piece rotation: \(pieceRotation * 180 / .pi)°")
-        print("    Rotation difference: \((pieceRotation - targetRotation) * 180 / .pi)°")
-        print("    Tolerance: \(rotationTolerance)°")
-        print("    Is flipped: \(isFlipped)")
-        #endif
+        // Convert target transform from raw space to SpriteKit space using PoseMapper
+        let rawAngle = TangramPoseMapper.rawAngle(from: targetTransform)
+        let targetRotationSK = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
         
         // Validate position
         let distance = hypot(piecePosition.x - targetWorldPos.x, piecePosition.y - targetWorldPos.y)
         let positionValid = distance < positionTolerance
         
         // Validate rotation (accounting for symmetry)
+        // Both pieceRotation and targetRotationSK are now in the same space (SpriteKit)
         let rotationValid = TangramRotationValidator.isRotationValid(
             currentRotation: pieceRotation,
-            targetRotation: targetRotation,
+            targetRotation: targetRotationSK,
             pieceType: pieceType,
             isFlipped: isFlipped,
             toleranceDegrees: rotationTolerance

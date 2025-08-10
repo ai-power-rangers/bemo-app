@@ -130,7 +130,7 @@ struct AutomatedPipelineTestView: View {
             var puzzles: [GamePuzzleData] = []
             
             for path in testPaths {
-                if let puzzle = await AutomatedPipelineLoader.loadFromFile(at: path) {
+                if let puzzle = AutomatedPipelineLoader.loadFromFile(at: path) {
                     puzzles.append(puzzle)
                 }
             }

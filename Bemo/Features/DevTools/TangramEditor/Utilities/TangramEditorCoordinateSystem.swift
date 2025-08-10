@@ -11,6 +11,7 @@
 
 import Foundation
 import CoreGraphics
+import OSLog
 
 /// Centralized coordinate system management for Tangram Editor
 /// Handles all transformations between normalized, visual, and world spaces
@@ -250,63 +251,9 @@ class TangramEditorCoordinateSystem {
         existingPieces: [TangramPiece]
     ) -> CGAffineTransform? {
         
-        var finalRotation = baseRotation
-        
-        // Special handling for edge-to-edge connections - auto-rotate to align
-        if case .edge(let canvasEdgeIndex) = connection.canvas.type,
-           case .edge(let pieceEdgeIndex) = connection.piece.type {
-            
-            // Find the canvas piece that owns this connection point
-            if let canvasPiece = existingPieces.first(where: { $0.id == connection.canvas.pieceId }) {
-                let canvasVertices = getWorldVertices(for: canvasPiece)
-                let canvasEdges = TangramGeometry.edges(for: canvasPiece.type)
-                
-                if canvasEdgeIndex < canvasEdges.count {
-                    let canvasEdgeDef = canvasEdges[canvasEdgeIndex]
-                    let canvasEdgeStart = canvasVertices[canvasEdgeDef.startVertex]
-                    let canvasEdgeEnd = canvasVertices[canvasEdgeDef.endVertex]
-                    let canvasEdgeAngle = atan2(
-                        canvasEdgeEnd.y - canvasEdgeStart.y,
-                        canvasEdgeEnd.x - canvasEdgeStart.x
-                    )
-                    
-                    // Get the piece edge direction in local space
-                    // For flipped parallelogram, we need to remap the edge index
-                    let actualPieceEdgeIndex = (isFlipped && pieceType == .parallelogram)
-                        ? remapParallelogramEdgeIndex(pieceEdgeIndex)
-                        : pieceEdgeIndex
-                    
-                    let localVertices = getVisualVertices(for: pieceType)
-                    let pieceEdges = TangramGeometry.edges(for: pieceType)
-                    
-                    if actualPieceEdgeIndex < pieceEdges.count {
-                        let pieceEdgeDef = pieceEdges[actualPieceEdgeIndex]
-                        let pieceEdgeStart = localVertices[pieceEdgeDef.startVertex]
-                        let pieceEdgeEnd = localVertices[pieceEdgeDef.endVertex]
-                        
-                        // For flipped pieces, we need to account for the flip when calculating angle
-                        var pieceEdgeAngle = atan2(
-                            pieceEdgeEnd.y - pieceEdgeStart.y,
-                            pieceEdgeEnd.x - pieceEdgeStart.x
-                        )
-                        
-                        // If flipped, the edge direction is reversed due to the flip transform
-                        if isFlipped && pieceType == .parallelogram {
-                            // The flip reverses the X component of the direction
-                            pieceEdgeAngle = atan2(
-                                pieceEdgeEnd.y - pieceEdgeStart.y,
-                                -(pieceEdgeEnd.x - pieceEdgeStart.x)
-                            )
-                        }
-                        
-                        // Calculate rotation needed to align edges (edges should be anti-parallel)
-                        // Add π to make edges face opposite directions
-                        finalRotation = canvasEdgeAngle - pieceEdgeAngle + .pi
-                        
-                    }
-                }
-            }
-        }
+        // For two connections, don't auto-rotate - use user's rotation
+        // Only auto-rotate for single edge-to-edge when sliding is allowed
+        let finalRotation = baseRotation
         
         // Start with flip if needed (for parallelogram)
         var transform = CGAffineTransform.identity
@@ -344,9 +291,11 @@ class TangramEditorCoordinateSystem {
         
         // Validate transform
         if !isValidTransform(transform) {
+            Logger.tangramPlacement.error("[CoordinateSystem] Single-point alignment produced invalid transform")
             return nil
         }
         
+        Logger.tangramPlacement.info("[CoordinateSystem] Single-point alignment successful")
         return transform
     }
     
@@ -438,6 +387,8 @@ class TangramEditorCoordinateSystem {
         let rotatedLocal2 = local2.applying(transform)
         let secondaryError = distance(from: rotatedLocal2, to: canvas2)
         
+        Logger.tangramPlacement.debug("[CoordinateSystem] Multi-point alignment check: error=\(String(format: "%.2f", secondaryError))")
+        
         
         // Define tolerance based on connection types
         let tolerance: CGFloat = determineAlignmentTolerance(
@@ -447,6 +398,7 @@ class TangramEditorCoordinateSystem {
         
         // Check if both connections can be satisfied
         if secondaryError > tolerance {
+            Logger.tangramPlacement.warning("[CoordinateSystem] Multi-point alignment error: \(String(format: "%.2f", secondaryError)) > tolerance: \(String(format: "%.2f", tolerance))")
             
             // Check connection types
             if connections.count == 2 {
@@ -458,6 +410,7 @@ class TangramEditorCoordinateSystem {
                 let hasEdgeConnection = conn1Type.piece.isEdge || conn2Type.piece.isEdge
                 
                 if hasEdgeConnection {
+                    Logger.tangramPlacement.info("[CoordinateSystem] Has edge connection - allowing sliding tolerance")
                     // With an edge connection, different lengths are expected and valid
                     // The piece can slide along the edge after placement
                     return transform
@@ -467,14 +420,19 @@ class TangramEditorCoordinateSystem {
             // For pure vertex-to-vertex connections, we need tight tolerance
             let bothVertices = connections[0].piece.type.isVertex && connections[1].piece.type.isVertex
             if bothVertices && secondaryError > tolerance {
+                Logger.tangramPlacement.error("[CoordinateSystem] Multi-point alignment failed: both vertices, error too large")
                 return nil
             }
             
+            Logger.tangramPlacement.error("[CoordinateSystem] Multi-point alignment failed: secondary point doesn't align")
             return nil
         }
         
+        Logger.tangramPlacement.info("[CoordinateSystem] Multi-point alignment successful")
+        
         // Validate transform
         if !isValidTransform(transform) {
+            Logger.tangramPlacement.error("[CoordinateSystem] Multi-point alignment produced invalid transform")
             return nil
         }
         
@@ -491,25 +449,23 @@ class TangramEditorCoordinateSystem {
         let hasVertex = (connection1.piece.type.isVertex || connection2.piece.type.isVertex)
         let hasEdge = (connection1.piece.type.isEdge || connection2.piece.type.isEdge)
         
-        
-        // For vertex+edge combination, we need more tolerance
-        // The edge might not be exactly the same length
+        // For vertex+edge combination, use mixed tolerance
         if hasVertex && hasEdge {
-            return TangramConstants.mixedConnectionTolerance
+            return TangramConstants.mixedConnectionTolerance  // 2.0
         }
         
         // Both vertices - need tight alignment
         if connection1.piece.type.isVertex && connection2.piece.type.isVertex {
-            return TangramConstants.vertexToVertexTolerance
+            return TangramConstants.vertexToVertexTolerance  // 1.5
         }
         
-        // Both edges - can have more tolerance (for sliding)
+        // Both edges - use consistent edge tolerance
         if connection1.piece.type.isEdge && connection2.piece.type.isEdge {
-            return TangramConstants.edgeToEdgeTolerance
+            return TangramConstants.edgeToEdgeTolerance  // 2.0
         }
         
-        // Default
-        return TangramConstants.defaultConnectionTolerance
+        // Default to mixed tolerance for consistency
+        return TangramConstants.mixedConnectionTolerance  // 2.0
     }
     
     /// Check if connection configuration allows sliding

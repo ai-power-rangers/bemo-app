@@ -40,17 +40,12 @@ class SupabaseService {
         let supabaseKey: String
         if useServiceRole, let serviceKey = config.supabaseServiceRoleKey {
             supabaseKey = serviceKey
-            print("[SupabaseService] Using service role key for authentication (bypasses RLS)")
         } else {
             supabaseKey = config.supabaseAnonKey
-            print("[SupabaseService] Using anonymous key for authentication")
         }
-        
-        print("[SupabaseService] Initializing with URL: '\(config.supabaseURL)'")
         
         guard let supabaseURL = URL(string: config.supabaseURL),
               !supabaseKey.isEmpty else {
-            print("[SupabaseService] Failed to create URL from: '\(config.supabaseURL)'")
             fatalError("Supabase configuration missing. Please configure SUPABASE_URL and SUPABASE_ANON_KEY in .xcconfig files")
         }
         
@@ -95,15 +90,12 @@ class SupabaseService {
             isConnected = true
             syncError = nil
             lastSyncDate = Date()
-            print("Supabase: User signed in - \(session?.user.id.uuidString ?? "unknown")")
             
         case .signedOut:
             isConnected = false
-            print("Supabase: User signed out")
             
         case .tokenRefreshed:
             lastSyncDate = Date()
-            print("Supabase: Token refreshed")
             
         default:
             break
@@ -134,8 +126,6 @@ class SupabaseService {
                 email: email,
                 fullName: fullName
             )
-            
-            print("Supabase: Successfully signed in with Apple ID - \(session.user.id)")
             
         } catch {
             syncError = error
@@ -173,15 +163,9 @@ class SupabaseService {
         fullName: PersonNameComponents?
     ) async throws {
         let fullNameString = fullName?.formatted(.name(style: .long))
-        let firstName = fullName?.givenName
+        let _ = fullName?.givenName
         
-        // Log first-time signup information
-        if email != nil || fullName != nil {
-            print("Supabase: First-time signup detected")
-            print("  - Email: \(email ?? "not provided")")
-            print("  - First Name: \(firstName ?? "not provided")")
-            print("  - Full Name: \(fullNameString ?? "not provided")")
-        }
+        // First-time signup detected
         
         let profileData = ParentProfileInsert(
             user_id: supabaseUserID,
@@ -194,23 +178,15 @@ class SupabaseService {
             .from("parent_profiles")
             .upsert(profileData, onConflict: "apple_user_id")
             .execute()
-        
-        print("Supabase: Parent profile upserted for user \(supabaseUserID)")
     }
     
     func syncChildProfile(_ profile: UserProfile) async throws {
-        print("DEBUG: SupabaseService - syncChildProfile called for: \(profile.name)")
-        print("DEBUG: SupabaseService - isConnected: \(isConnected)")
-        
         guard isConnected else {
-            print("DEBUG: SupabaseService - Not connected, throwing notAuthenticated error")
             throw SupabaseError.notAuthenticated
         }
         
         do {
-            print("DEBUG: SupabaseService - Getting current user ID...")
             let parentUserId = try await getCurrentUserID()
-            print("DEBUG: SupabaseService - Current user ID: \(parentUserId)")
             
             let profileData = ChildProfileUpsert(
                 id: profile.id,
@@ -222,16 +198,12 @@ class SupabaseService {
                 preferences: try encodePreferences(profile.preferences)
             )
             
-            print("DEBUG: SupabaseService - Upserting profile data to child_profiles table...")
             try await client
                 .from("child_profiles")
                 .upsert(profileData, onConflict: "id")
                 .execute()
             
-            print("DEBUG: SupabaseService - Profile upsert successful!")
-            
             lastSyncDate = Date()
-            print("Supabase: Child profile synced - \(profile.name)")
             
         } catch {
             syncError = error
@@ -261,7 +233,6 @@ class SupabaseService {
             let profiles = try response.map { try convertToUserProfile($0) }
             lastSyncDate = Date()
             
-            print("Supabase: Fetched \(profiles.count) child profiles")
             return profiles
             
         } catch {
@@ -288,7 +259,6 @@ class SupabaseService {
                 .execute()
             
             lastSyncDate = Date()
-            print("Supabase: Child profile deleted - \(profileId)")
             
         } catch {
             syncError = error
@@ -325,8 +295,8 @@ class SupabaseService {
                 throw SupabaseError.notAuthenticated
             }
             
-            let currentSession = try await client.auth.session
-            print("Supabase: Tracking learning event for user \(currentSession.user.id)")
+            let _ = try await client.auth.session
+            // Tracking learning event
             
             // Insert learning event - RLS will ensure only authorized events are allowed
             let eventId = UUID()
@@ -369,7 +339,6 @@ class SupabaseService {
             }
             
             lastSyncDate = Date()
-            print("Supabase: Learning event tracked - \(eventType) for child \(childProfileId)")
             
         } catch {
             syncError = error
@@ -405,8 +374,8 @@ class SupabaseService {
                 throw SupabaseError.notAuthenticated
             }
             
-            let currentSession = try await client.auth.session
-            print("Supabase: Starting game session for user \(currentSession.user.id)")
+            let _ = try await client.auth.session
+            // Starting game session
             
             // Insert into game_sessions table with RLS enforcement
             let sessionId = UUID().uuidString
@@ -458,8 +427,6 @@ class SupabaseService {
             )
             
             lastSyncDate = Date()
-            print("Supabase: Game session started - \(sessionId)")
-            
             return sessionId
             
         } catch {
@@ -496,8 +463,8 @@ class SupabaseService {
                 throw SupabaseError.notAuthenticated
             }
             
-            let currentSession = try await client.auth.session
-            print("Supabase: Ending game session for user \(currentSession.user.id)")
+            let _ = try await client.auth.session
+            // Ending game session
             
             // Update game_sessions table with RLS enforcement
             let encodedSessionData = try encodeEventData(finalSessionData)
@@ -550,7 +517,6 @@ class SupabaseService {
             )
             
             lastSyncDate = Date()
-            print("Supabase: Game session ended - \(sessionId)")
             
         } catch {
             syncError = error
@@ -890,7 +856,6 @@ extension SupabaseService {
                 .execute()
             
             let puzzles = try JSONDecoder().decode([TangramPuzzleDTO].self, from: response.data)
-            print("Supabase: Fetched \(puzzles.count) official tangram puzzles")
             return puzzles
             
         } catch {
@@ -915,8 +880,6 @@ extension SupabaseService {
                 .from("tangram_puzzles")
                 .upsert(puzzle, onConflict: "puzzle_id")
                 .execute()
-            
-            print("Supabase: Saved tangram puzzle - \(puzzle.puzzle_id)")
             
         } catch {
             print("Supabase: Failed to save tangram puzzle - \(error)")
@@ -956,7 +919,6 @@ extension SupabaseService {
                 .from("tangram-thumbnails")
                 .getPublicURL(path: path)
             
-            print("Supabase: Uploaded thumbnail for puzzle \(puzzleId)")
             return publicURL.absoluteString
             
         } catch {
@@ -1029,8 +991,6 @@ extension SupabaseService {
                 .delete()
                 .eq("puzzle_id", value: puzzleId)
                 .execute()
-            
-            print("Supabase: Deleted tangram puzzle - \(puzzleId)")
             
         } catch {
             print("Supabase: Failed to delete tangram puzzle - \(error)")

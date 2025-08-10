@@ -106,6 +106,11 @@ class TangramCVPuzzleState {
         assembledPieces.removeAll { $0.id == piece.id }
     }
     
+    /// Clear all assembled pieces (for fresh CV update)
+    func clearAssembledPieces() {
+        assembledPieces.removeAll()
+    }
+    
     /// Set a new anchor piece (clears previous anchor)
     func setAnchor(_ piece: CVPuzzlePieceNode?) {
         anchorPiece?.isAnchor = false

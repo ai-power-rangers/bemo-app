@@ -16,75 +16,55 @@ class AutomatedPipelineLoader {
     
     /// Load a puzzle from automated pipeline JSON file (synchronous for immediate loading)
     static func loadFromFile(at path: String) -> GamePuzzleData? {
-        print("🔍 Attempting to load file: \(path)")
         
         // Check if file exists
         let fileManager = FileManager.default
         if !fileManager.fileExists(atPath: path) {
-            print("❌ File does not exist at path: \(path)")
             // Try relative to bundle
-            if let bundlePath = Bundle.main.path(forResource: "cat_fixed_separation", ofType: "json") {
-                print("Found in bundle: \(bundlePath)")
+            if Bundle.main.path(forResource: "cat_fixed_separation", ofType: "json") != nil {
+                // File exists in bundle but not at the specified path
             }
             return nil
         }
         
         do {
             let url = URL(fileURLWithPath: path)
-            print("📁 File URL: \(url)")
             let data = try Data(contentsOf: url)
-            print("✅ File loaded, size: \(data.count) bytes")
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
             
             guard let json = json else {
-                print("❌ Failed to parse JSON from file: \(path)")
                 return nil
             }
             
-            print("📄 JSON parsed successfully")
             let puzzle = convertPipelineFormat(json)
             if puzzle != nil {
-                print("✅ Puzzle converted successfully")
             } else {
-                print("❌ Failed to convert puzzle format")
             }
             return puzzle
         } catch {
-            print("❌ Error loading pipeline file: \(error)")
-            print("   Error details: \(error.localizedDescription)")
             return nil
         }
     }
     
     /// Convert automated pipeline format to GamePuzzleData
     static func convertPipelineFormat(_ json: [String: Any]) -> GamePuzzleData? {
-        print("🔄 Converting pipeline format...")
-        print("  Keys in JSON: \(json.keys.sorted())")
         
         guard let id = json["id"] as? String else {
-            print("❌ Missing or invalid 'id' field")
             return nil
         }
         guard let name = json["name"] as? String else {
-            print("❌ Missing or invalid 'name' field")
             return nil
         }
         guard let category = json["category"] as? String else {
-            print("❌ Missing or invalid 'category' field")
             return nil
         }
         guard let difficulty = json["difficulty"] as? String else {
-            print("❌ Missing or invalid 'difficulty' field")
             return nil
         }
         guard let pieces = json["pieces"] as? [[String: Any]] else {
-            print("❌ Missing or invalid 'pieces' field")
-            print("  pieces type: \(type(of: json["pieces"]))")
             return nil
         }
         
-        print("  Found puzzle: \(name), category: \(category), difficulty: \(difficulty)")
-        print("  Pieces count: \(pieces.count)")
         
         // Convert difficulty string to int
         let difficultyValue: Int = {
@@ -98,19 +78,14 @@ class AutomatedPipelineLoader {
         }()
         
         // Convert pieces
-        print("  Converting \(pieces.count) pieces...")
         let targetPieces = pieces.compactMap { pieceData -> GamePuzzleData.TargetPiece? in
             guard let type = pieceData["type"] as? String else {
-                print("    ❌ Piece missing 'type' field")
                 return nil
             }
             guard let pieceType = TangramPieceType(rawValue: type) else {
-                print("    ❌ Unknown piece type: \(type)")
-                print("    Valid types: \(TangramPieceType.allCases.map { $0.rawValue })")
                 return nil
             }
             guard let transform = pieceData["transform"] as? [String: Any] else {
-                print("    ❌ Piece missing 'transform' field")
                 return nil
             }
             
@@ -131,17 +106,14 @@ class AutomatedPipelineLoader {
                 ty: CGFloat(ty)
             )
             
-            print("    ✅ Converted piece: \(pieceType.rawValue)")
             return GamePuzzleData.TargetPiece(
                 pieceType: pieceType,
                 transform: affineTransform
             )
         }
         
-        print("  Total pieces converted: \(targetPieces.count) out of \(pieces.count)")
         
         guard targetPieces.count == 7 else {
-            print("Invalid number of pieces: \(targetPieces.count), expected 7")
             return nil
         }
         
@@ -157,7 +129,6 @@ class AutomatedPipelineLoader {
     /// Load the test puzzles - using embedded data due to iOS sandbox restrictions
     /// TEMPORARY: Using embedded data instead of files for iOS compatibility
     static func loadTestPuzzles() -> [GamePuzzleData] {
-        print("📦 Loading embedded pipeline test puzzles...")
         
         // Use embedded test data since iOS apps can't access files outside their sandbox
         // Apply adapter to fix transform issues
@@ -166,9 +137,7 @@ class AutomatedPipelineLoader {
             PipelineTransformAdapter.adaptPipelinePuzzle(AutomatedPipelineTestData.getHousePuzzle())
         ]
         
-        for puzzle in puzzles {
-            print("✅ Loaded automated puzzle: \(puzzle.name)")
-        }
+        // Puzzles are ready to use
         
         return puzzles
     }
@@ -228,26 +197,12 @@ extension TangramCVGameViewModel {
     /// Load automated pipeline puzzles for testing
     /// TEMPORARY: Remove this method after pipeline validation
     func loadAutomatedPuzzles() {
-        print("🚀 Starting automated pipeline puzzle loading...")
         
         let testPuzzles = AutomatedPipelineLoader.loadTestPuzzles()
         
         if !testPuzzles.isEmpty {
             // Store test puzzles in our temporary array
             self.pipelineTestPuzzles = testPuzzles
-            
-            print("============================================================")
-            print("🎮 AUTOMATED PIPELINE TEST PUZZLES LOADED")
-            print("============================================================")
-            for puzzle in testPuzzles {
-                print("  ✅ \(puzzle.name) (Category: \(puzzle.category))")
-            }
-            print("============================================================")
-            print("These puzzles are now visible in the puzzle library")
-            print("Look for puzzles with category 'generated'")
-            print("============================================================")
-        } else {
-            print("⚠️ No pipeline test puzzles were loaded")
         }
     }
 }

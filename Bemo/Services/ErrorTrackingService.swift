@@ -34,7 +34,7 @@ class ErrorTrackingService {
         SentrySDK.start { options in
             options.dsn = config.sentryDSN
             options.environment = config.sentryEnvironment
-            options.debug = config.isDebugBuild
+            options.debug = false
             
             // Performance monitoring - lower sample rate for production
             options.tracesSampleRate = config.isDebugBuild ? 1.0 : 0.25

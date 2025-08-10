@@ -384,4 +384,57 @@ class TangramThreeZoneScene: SKScene {
     func updateAnchor(_ piece: CVPuzzlePieceNode?) {
         gameState.setAnchor(piece)
     }
+    
+    // MARK: - CV Data Processing
+    
+    /// Processes CV detection data and updates piece positions using PoseMapper
+    /// - Parameters:
+    ///   - detections: Array of CV detections with rotation and translation
+    ///   - homography: Optional homography matrix for planar transformation
+    ///   - needsCameraInversion: Whether camera inversion is needed
+    func processCVDetections(
+        _ detections: [(pieceType: String, rotation: Double, translation: [Double])],
+        homography: [[Double]]? = nil,
+        needsCameraInversion: Bool = false
+    ) {
+        // Clear current assembled pieces for fresh CV update
+        gameState.clearAssembledPieces()
+        
+        for detection in detections {
+            // Convert CV data to raw transform
+            let rawTransform = CVToInternalConverter.convertToRawTransform(
+                rotationDegrees: detection.rotation,
+                translation: detection.translation,
+                homography: homography,
+                needsCameraInversion: needsCameraInversion
+            )
+            
+            // Convert raw transform to SpriteKit space using PoseMapper
+            let (skAngle, skPosition) = TangramCVPoseMapper.spriteKitComponents(fromRawTransform: rawTransform)
+            
+            // Find or create the piece
+            if let existingPiece = gameState.availablePieces[detection.pieceType] {
+                // Update existing piece position and rotation
+                existingPiece.position = assemblyZone.convert(skPosition, from: self)
+                existingPiece.zRotation = skAngle
+                
+                // Move to assembly zone if not already there
+                if existingPiece.parent != assemblyZone {
+                    existingPiece.removeFromParent()
+                    assemblyZone.addChild(existingPiece)
+                }
+                
+                // Add to assembled pieces
+                gameState.addAssembledPiece(existingPiece)
+            }
+        }
+        
+        // Update anchor if needed
+        if let firstPiece = gameState.assembledPieces.first, gameState.anchorPiece == nil {
+            gameState.setAnchor(firstPiece)
+        }
+        
+        // Notify delegate of CV update
+        gameDelegate?.sceneDidUpdateFromCV(state: gameState)
+    }
 }

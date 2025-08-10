@@ -186,8 +186,14 @@ struct TangramEditorCanvasView: View {
     private func pieceWithInteractions(_ piece: TangramPiece) -> some View {
         ZStack {
             PieceView(
-                piece: viewModel.uiState.manipulatingPieceId == piece.id && viewModel.uiState.ghostTransform != nil ? 
-                    TangramPiece(type: piece.type, transform: viewModel.uiState.ghostTransform!) : piece,
+                piece: {
+                    if viewModel.uiState.manipulatingPieceId == piece.id,
+                       let ghostTransform = viewModel.uiState.ghostTransform {
+                        return TangramPiece(type: piece.type, transform: ghostTransform)
+                    } else {
+                        return piece
+                    }
+                }(),
                 isSelected: viewModel.uiState.selectedPieceIds.contains(piece.id),
                 isGhost: viewModel.uiState.manipulatingPieceId == piece.id,
                 showConnectionPoints: false,
