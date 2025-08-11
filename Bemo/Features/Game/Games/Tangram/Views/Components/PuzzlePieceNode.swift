@@ -17,7 +17,7 @@ class PuzzlePieceNode: SKNode {
     var isSelected: Bool = false
     var isCompleted: Bool = false
     var isFlipped: Bool = false  // Track if piece is flipped
-    private var shapeNode: SKShapeNode?
+    var shapeNode: SKShapeNode?  // Made public for nudge color changes
     
     // State tracking
     var pieceState: PieceState?
@@ -216,19 +216,19 @@ class PuzzlePieceNode: SKNode {
             }
             
         case .validated:
-            indicator.isHidden = false
-            background.fillColor = SKColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 0.5)
-            icon.text = "✓"
+            // Don't show indicator - validation is shown in target section
+            indicator.isHidden = true
             self.alpha = 1.0
+            shapeNode?.strokeColor = .systemGreen
+            shapeNode?.lineWidth = 2
             shapeNode?.glowWidth = 0
             
-        case .invalid(let reason):
-            indicator.isHidden = false
-            background.fillColor = SKColor(red: 1.0, green: 0.0, blue: 0.0, alpha: 0.5)
-            icon.text = "✗"
+        case .invalid(_):
+            // Don't show indicator on the piece itself - nudges are shown in target section
+            indicator.isHidden = true
             self.alpha = state.displayOpacity
-            // Show nudge based on reason
-            showNudge(for: reason)
+            shapeNode?.strokeColor = .systemRed.withAlphaComponent(0.5)  // Subtle red outline
+            shapeNode?.lineWidth = 2
         }
     }
     

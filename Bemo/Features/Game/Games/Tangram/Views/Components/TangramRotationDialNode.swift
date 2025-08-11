@@ -20,6 +20,12 @@ class TangramRotationDialNode: SKNode {
     private var originalRotation: CGFloat = 0
     private var originalFlipState: Bool = false
     
+    // Angle snapping configuration
+    private let snapAngles: [CGFloat] = [0, 45, 90, 135, 180, 225, 270, 315].map { $0 * .pi / 180 }
+    private let snapThreshold: CGFloat = 10 * .pi / 180  // Snap within 10 degrees
+    private var isSnapped: Bool = false
+    private var snapIndicators: [SKShapeNode] = []
+    
     func showForPiece(_ piece: PuzzlePieceNode) {
         targetPiece = piece
         initialRotation = piece.zRotation
@@ -37,29 +43,44 @@ class TangramRotationDialNode: SKNode {
         dial.alpha = 0.8
         addChild(dial)
         
-        // Add angle markers every 45°
+        // Add angle markers every 45° with enhanced snap indicators
         for i in 0..<8 {
             let angle = CGFloat(i) * .pi / 4
-            let marker = SKShapeNode(circleOfRadius: 2)
+            
+            // Create larger snap indicators that will pulse when snapped
+            let snapIndicator = SKShapeNode(circleOfRadius: 4)
+            snapIndicator.fillColor = .systemGreen.withAlphaComponent(0.3)
+            snapIndicator.strokeColor = .systemGreen
+            snapIndicator.lineWidth = 1
+            snapIndicator.alpha = 0  // Hidden by default
+            snapIndicator.position = CGPoint(
+                x: cos(angle) * dialRadius,
+                y: sin(angle) * dialRadius
+            )
+            dial.addChild(snapIndicator)
+            snapIndicators.append(snapIndicator)
+            
+            // Regular marker on top
+            let marker = SKShapeNode(circleOfRadius: 3)
             marker.fillColor = .white
             marker.strokeColor = .systemBlue
+            marker.lineWidth = 1.5
             marker.position = CGPoint(
                 x: cos(angle) * dialRadius,
                 y: sin(angle) * dialRadius
             )
             dial.addChild(marker)
             
-            // Add labels at 0°, 90°, 180°, 270°
-            if i % 2 == 0 {
-                let label = SKLabelNode(text: "\(i * 45)°")
-                label.fontSize = 8  // Smaller font
-                label.fontColor = .systemBlue
-                label.position = CGPoint(
-                    x: cos(angle) * (dialRadius + 15),
-                    y: sin(angle) * (dialRadius + 15) - 3
-                )
-                dial.addChild(label)
-            }
+            // Add labels at all 45° increments for clarity
+            let label = SKLabelNode(text: "\(i * 45)°")
+            label.fontSize = i % 2 == 0 ? 10 : 8  // Larger for cardinal directions
+            label.fontColor = i % 2 == 0 ? .systemBlue : .systemGray
+            label.fontName = i % 2 == 0 ? "System-Bold" : "System"
+            label.position = CGPoint(
+                x: cos(angle) * (dialRadius + 18),
+                y: sin(angle) * (dialRadius + 18) - 3
+            )
+            dial.addChild(label)
         }
         
         // Create rotation handle
@@ -144,7 +165,7 @@ class TangramRotationDialNode: SKNode {
             flipButton.fillColor = .systemPurple
             flipButton.strokeColor = .white
             flipButton.lineWidth = 2
-            flipButton.position = CGPoint(x: 0, y: -140)  // Move down to avoid overlap with angle label
+            flipButton.position = CGPoint(x: 0, y: -(dialRadius + 60))  // Position relative to dial radius
             flipButton.name = "flipPiece"
             flipButton.zPosition = 10  // Ensure it's on top
             
@@ -165,10 +186,54 @@ class TangramRotationDialNode: SKNode {
     func updateRotation(to angle: CGFloat) {
         guard let piece = targetPiece else { return }
         
-        let dialRadius: CGFloat = 60  // Match the radius used in showForPiece
+        let dialRadius: CGFloat = 40  // Match the radius used in showForPiece
         
         // Normalize angle to [-π, π] range for consistent behavior
-        let normalizedAngle = normalizeAngle(angle)
+        var normalizedAngle = normalizeAngle(angle)
+        
+        // Check for snapping to 45-degree increments
+        var snappedToIndex: Int? = nil
+        for (index, snapAngle) in snapAngles.enumerated() {
+            let snapAngleNormalized = normalizeAngle(snapAngle)
+            let angleDiff = abs(normalizedAngle - snapAngleNormalized)
+            let wrappedDiff = min(angleDiff, 2 * .pi - angleDiff)
+            
+            if wrappedDiff < snapThreshold {
+                // Snap to this angle
+                normalizedAngle = snapAngleNormalized
+                snappedToIndex = index
+                
+                // Provide haptic feedback when snapping (if not already snapped to this angle)
+                if !isSnapped || snappedToIndex != index {
+                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                    impactFeedback.impactOccurred()
+                    isSnapped = true
+                }
+                break
+            }
+        }
+        
+        // Update snap indicators
+        for (index, indicator) in snapIndicators.enumerated() {
+            if let snapped = snappedToIndex, snapped == index {
+                // Show and pulse the snapped indicator
+                if indicator.alpha == 0 {
+                    indicator.alpha = 1.0
+                    let pulse = SKAction.sequence([
+                        SKAction.scale(to: 1.5, duration: 0.1),
+                        SKAction.scale(to: 1.0, duration: 0.1)
+                    ])
+                    indicator.run(pulse)
+                }
+            } else {
+                // Hide non-snapped indicators
+                indicator.alpha = 0
+            }
+        }
+        
+        if snappedToIndex == nil {
+            isSnapped = false
+        }
         
         // Update piece rotation
         piece.zRotation = normalizedAngle
@@ -181,9 +246,19 @@ class TangramRotationDialNode: SKNode {
             y: sin(-normalizedAngle) * dialRadius
         )
         
-        // Add visual feedback - make handle bigger when dragging
-        if handle.xScale != 1.2 {
-            handle.run(SKAction.scale(to: 1.2, duration: 0.1))
+        // Visual feedback for handle
+        if isSnapped {
+            // Make handle glow green when snapped
+            handle.fillColor = .systemGreen
+            if handle.xScale != 1.3 {
+                handle.run(SKAction.scale(to: 1.3, duration: 0.1))
+            }
+        } else {
+            // Normal blue when not snapped
+            handle.fillColor = .systemBlue
+            if handle.xScale != 1.2 {
+                handle.run(SKAction.scale(to: 1.2, duration: 0.1))
+            }
         }
         
         // Update angle label with positive degrees
@@ -192,9 +267,16 @@ class TangramRotationDialNode: SKNode {
         while degrees >= 360 { degrees -= 360 }
         angleLabel.text = "\(degrees)°"
         
-        // Make label bold during rotation
-        angleLabel.fontName = "System-Bold"
-        angleLabel.fontSize = 18
+        // Make label bold and green when snapped
+        if isSnapped {
+            angleLabel.fontName = "System-Bold"
+            angleLabel.fontSize = 20
+            angleLabel.fontColor = .systemGreen
+        } else {
+            angleLabel.fontName = "System-Bold"
+            angleLabel.fontSize = 18
+            angleLabel.fontColor = .systemBlue
+        }
     }
     
     private func normalizeAngle(_ angle: CGFloat) -> CGFloat {
@@ -226,8 +308,16 @@ class TangramRotationDialNode: SKNode {
     }
     
     func finishRotation() {
-        // Reset handle size when done rotating
+        // Reset handle size and color when done rotating
         handle?.run(SKAction.scale(to: 1.0, duration: 0.1))
+        handle?.fillColor = .systemBlue
         angleLabel?.fontSize = 16
+        angleLabel?.fontColor = .systemBlue
+        
+        // Hide all snap indicators
+        for indicator in snapIndicators {
+            indicator.alpha = 0
+        }
+        isSnapped = false
     }
 }

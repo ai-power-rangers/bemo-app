@@ -216,6 +216,9 @@ class CVEventBus: ObservableObject {
     
     #if DEBUG
     private func logEvent(_ event: TangramCVEvent) {
+        // CV event logging disabled for cleaner console
+        // To re-enable, uncomment the following:
+        /*
         let description: String
         switch event {
         case .pieceMoved(let id, let pos, let rot):
@@ -231,7 +234,8 @@ class CVEventBus: ObservableObject {
         case .validationChanged(let id, let valid):
             description = "Validation \(id): \(valid ? "✓" : "✗")"
         }
-        // Removed CV event logging for cleaner console
+        print("🔵 CV Event: \(description)")
+        */
     }
     #endif
     
