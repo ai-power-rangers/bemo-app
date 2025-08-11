@@ -105,9 +105,6 @@ class PuzzlePieceNode: SKNode {
         let normalizedVertices = TangramGameGeometry.normalizedVertices(for: pieceType)
         let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
         
-        // Compute centroid to center path around origin
-        let centroid = TangramGameGeometry.centerOfVertices(scaledVertices)
-        
         // Flip vertices horizontally if needed
         let finalVertices: [CGPoint]
         if isFlipped {
@@ -116,6 +113,9 @@ class PuzzlePieceNode: SKNode {
         } else {
             finalVertices = scaledVertices
         }
+        
+        // Compute centroid from the FINAL vertices (after flip if applicable)
+        let centroid = TangramGameGeometry.centerOfVertices(finalVertices)
         
         // Create path from vertices
         let path = UIBezierPath()

@@ -71,7 +71,8 @@ class TangramPieceValidator {
         let flipValid: Bool
         if pieceType == .parallelogram {
             let targetIsFlipped = detectFlip(from: targetTransform)
-            flipValid = (isFlipped == targetIsFlipped)
+            // Inverted logic for parallelograms due to coordinate system handedness
+            flipValid = (isFlipped != targetIsFlipped)
         } else {
             flipValid = true
         }
@@ -122,7 +123,8 @@ class TangramPieceValidator {
         // Check flip state for parallelogram
         if placed.pieceType == .parallelogram {
             let targetIsFlipped = detectFlip(from: target.transform)
-            guard placed.isFlipped == targetIsFlipped else {
+            // Inverted logic for parallelograms
+            guard placed.isFlipped != targetIsFlipped else {
                 return false
             }
         }

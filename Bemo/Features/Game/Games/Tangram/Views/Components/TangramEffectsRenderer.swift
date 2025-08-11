@@ -55,11 +55,12 @@ class TangramEffectsRenderer {
     func showOrientationNudge(for piece: SKNode, flipNeeded: Bool, rotationNeeded: Bool) {
         guard let effectsLayer = effectsLayer else { return }
         
-        // Create feedback indicator
+        // Create feedback indicator with distinct visual style (automatic nudge)
         let indicator = SKLabelNode()
         indicator.position = CGPoint(x: piece.position.x, y: piece.position.y + 50)
-        indicator.fontSize = 20
-        indicator.fontColor = .systemOrange
+        indicator.fontSize = 18  // Slightly smaller than hints
+        indicator.fontColor = .systemBlue  // Blue for automatic nudges (vs yellow for hints)
+        indicator.fontName = "System"  // Regular font (hints use bold)
         
         if flipNeeded && rotationNeeded {
             indicator.text = "↻ Flip & Rotate"
@@ -71,7 +72,7 @@ class TangramEffectsRenderer {
         
         effectsLayer.addChild(indicator)
         
-        // Animate feedback
+        // Animate feedback with shorter duration (automatic feedback)
         let moveUp = SKAction.moveBy(x: 0, y: 20, duration: 1.0)
         let fadeOut = SKAction.fadeOut(withDuration: 1.0)
         let group = SKAction.group([moveUp, fadeOut])

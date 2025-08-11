@@ -220,9 +220,9 @@ class TangramGameViewModel {
             // Cancel any existing dismiss task
             hintDismissTask?.cancel()
             
-            // Auto-dismiss hint after 3 seconds
+            // Auto-dismiss hint after 7 seconds (increased for better user comprehension)
             hintDismissTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
+                try? await Task.sleep(nanoseconds: 7_000_000_000) // 7 seconds
                 guard !Task.isCancelled else { return }
                 self?.clearHint()
             }

@@ -287,9 +287,17 @@ class TangramHintEngine {
         )
         
         // Compute feature angles for proper comparison
-        // Get canonical feature angle for the piece type (accounting for flip)
-        let canonicalFeature = TangramGameConstants.CanonicalFeatures.canonicalFeatureAngle(for: current.pieceType)
-        let adjustedLocalBaseline = current.isFlipped ? -canonicalFeature : canonicalFeature
+        // Use the actual piece canonical (135° for triangles, not 45°)
+        let pieceCanonical: CGFloat
+        switch current.pieceType {
+        case .smallTriangle1, .smallTriangle2, .mediumTriangle, .largeTriangle1, .largeTriangle2:
+            pieceCanonical = 3 * .pi / 4  // 135° - actual hypotenuse direction
+        case .square:
+            pieceCanonical = 0
+        case .parallelogram:
+            pieceCanonical = 0
+        }
+        let adjustedLocalBaseline = current.isFlipped ? -pieceCanonical : pieceCanonical
         let currentFeatureAngle = TangramRotationValidator.normalizeAngle(current.rotation * .pi / 180 + adjustedLocalBaseline)
         
         // Compute target feature angle from the baked vertices
@@ -336,9 +344,10 @@ class TangramHintEngine {
         let targetDeterminant = target.transform.a * target.transform.d - target.transform.b * target.transform.c
         let targetIsFlipped = targetDeterminant < 0
         
-        // Flip is needed when current state doesn't match target state
-        // This aligns with validator logic: flipValid = (isFlipped == targetIsFlipped)
-        return placed.isFlipped != targetIsFlipped
+        // Flip is needed when current state MATCHES target state (inverted logic)
+        // Due to coordinate system handedness, our parallelogram is mirrored
+        // This aligns with validator logic: flipValid = (isFlipped != targetIsFlipped)
+        return placed.isFlipped == targetIsFlipped
     }
     
     private func createAnimationSteps(

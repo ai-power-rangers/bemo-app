@@ -66,6 +66,7 @@ class TangramPuzzleScene: SKScene {
     private var puzzleLayer = SKNode()
     private var piecesLayer = SKNode()
     private var effectsLayer = SKNode()
+    private var hintLayer = SKNode()  // Dedicated layer for hints above pieces
     private var uiLayer = SKNode()  // Layer for UI elements
     
     // Instance-based target tracking
@@ -92,6 +93,7 @@ class TangramPuzzleScene: SKScene {
     private var initialTouchAngle: CGFloat = 0
     private var initialPieceRotation: CGFloat = 0
     private var isRotating: Bool = false
+    private var rotationTouchOffset: CGFloat = 0  // Offset between touch and current rotation
     
     
     // Rotation dial
@@ -102,7 +104,7 @@ class TangramPuzzleScene: SKScene {
     private var tapStartLocation: CGPoint = .zero
     
     // Renderer components
-    private lazy var hintRenderer = TangramHintRenderer(effectsLayer: effectsLayer, puzzleLayer: puzzleLayer, scene: self)
+    private lazy var hintRenderer = TangramHintRenderer(effectsLayer: hintLayer, puzzleLayer: puzzleLayer, scene: self)
     private lazy var effectsRenderer = TangramEffectsRenderer(effectsLayer: effectsLayer, scene: self)
     
     // MARK: - Scene Lifecycle
@@ -128,10 +130,13 @@ class TangramPuzzleScene: SKScene {
         piecesLayer.zPosition = 2
         addChild(piecesLayer)
         
-        effectsLayer.zPosition = 10  // High z-position for hints and effects
+        effectsLayer.zPosition = 10  // For celebration effects
         addChild(effectsLayer)
         
-        uiLayer.zPosition = 100  // UI on top
+        hintLayer.zPosition = 500  // Above pieces and effects for hint visibility
+        addChild(hintLayer)
+        
+        uiLayer.zPosition = 1000  // UI on top
         addChild(uiLayer)
         
         // Use gameplay service for layout calculations
@@ -269,7 +274,7 @@ class TangramPuzzleScene: SKScene {
         targetMetaById[target.id] = (
             pieceType: target.pieceType,
             targetFeatureAngle: targetFeatureAngleSK,  // Store feature angle for validation
-            centerScene: CGPoint(x: centroidSK.x, y: centroidSK.y)
+            centerScene: localPos  // Store the local position relative to puzzleLayer
         )
         
         puzzleLayer.addChild(shape)
@@ -425,11 +430,25 @@ class TangramPuzzleScene: SKScene {
         let location = touch.location(in: self)
         
         // Check if we're rotating with the dial
-        if isShowingRotationDial, let dial = rotationDial {
-            // Calculate angle from dial center to touch point (CW convention)
+        if isShowingRotationDial, let dial = rotationDial, let piece = selectedPiece {
+            // Calculate angle from dial center to touch point
             let dialPos = dial.position
-            let angleCW = -atan2(location.y - dialPos.y, location.x - dialPos.x)
-            dial.updateRotation(to: angleCW)
+            let currentTouchAngle = atan2(location.y - dialPos.y, location.x - dialPos.x)
+            
+            // On first move, calculate the offset between touch angle and piece rotation
+            if !isRotating {
+                isRotating = true
+                initialTouchAngle = currentTouchAngle
+                initialPieceRotation = piece.zRotation
+                rotationTouchOffset = 0
+            }
+            
+            // Calculate rotation delta from initial touch
+            let angleDelta = currentTouchAngle - initialTouchAngle
+            
+            // Apply rotation to piece (note: SpriteKit uses clockwise rotation)
+            let newRotation = initialPieceRotation - angleDelta  // Negative because SK is clockwise
+            dial.updateRotation(to: newRotation)
             return
         }
         
@@ -459,8 +478,13 @@ class TangramPuzzleScene: SKScene {
         guard let touch = touches.first else { return }
         let location = touch.location(in: self)
         
-        // If we're showing the rotation dial, don't process normal touch ended
+        // If we're showing the rotation dial, handle rotation end
         if isShowingRotationDial {
+            if isRotating {
+                // Finish rotation interaction
+                rotationDial?.finishRotation()
+                isRotating = false
+            }
             return
         }
         
@@ -495,7 +519,9 @@ class TangramPuzzleScene: SKScene {
         
         // Get positions in scene space for validation
         let piecePosScene = piecesLayer.convert(selected.position, to: self)
-        let targetPosScene = puzzleLayer.convert(targetNode.position, to: self)
+        // The centerScene stored in targetMeta is now the local position relative to puzzleLayer
+        // Convert it to scene space for validation
+        let targetPosScene = puzzleLayer.convert(targetMeta.centerScene, to: self)
         
         // Get feature angles for validation
         let localFeatureAngle = (selected.userData?["localFeatureAngleSK"] as? CGFloat) ?? 0
@@ -521,7 +547,9 @@ class TangramPuzzleScene: SKScene {
         if pieceType == .parallelogram {
             let targetDeterminant = targetData.transform.a * targetData.transform.d - targetData.transform.b * targetData.transform.c
             let targetIsFlipped = targetDeterminant < 0
-            flipValid = (selected.isFlipped == targetIsFlipped)
+            // Invert the flip check for parallelograms due to coordinate system handedness
+            // Our Y-up SpriteKit creates the mirror of what Y-down editor expects
+            flipValid = (selected.isFlipped != targetIsFlipped)
         } else {
             flipValid = true
         }
@@ -625,7 +653,8 @@ class TangramPuzzleScene: SKScene {
               let targetMeta = targetMetaById[assignedTargetId] else { return }
         
         let piecePosScene = piecesLayer.convert(piece.position, to: self)
-        let targetPosScene = puzzleLayer.convert(targetNode.position, to: self)
+        // Use the stored centerScene position (local to puzzleLayer) and convert to scene space
+        let targetPosScene = puzzleLayer.convert(targetMeta.centerScene, to: self)
         let distance = hypot(piecePosScene.x - targetPosScene.x, piecePosScene.y - targetPosScene.y)
         
         // Show preview effect when close
@@ -721,21 +750,44 @@ class TangramPuzzleScene: SKScene {
         let rawPosition = TangramPoseMapper.rawPosition(from: hint.targetTransform)
         let targetPosition = TangramPoseMapper.spriteKitPosition(fromRawPosition: rawPosition)
         
-        // CRITICAL: Convert rotation from raw to SK space to match validation
-        let rawAngle = TangramPoseMapper.rawAngle(from: hint.targetTransform)
-        let targetRotation = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
+        // Compute the rotation the piece needs to be at
+        // This is NOT the raw target rotation, but the piece zRotation that would make it match
+        let targetFeatureAngle = computeTargetFeatureAngleForHint(hint.targetTransform, hint.targetPiece)
+        let pieceCanonical = getPieceCanonicalAngle(hint.targetPiece)
+        let targetPieceRotation = TangramRotationValidator.normalizeAngle(targetFeatureAngle - pieceCanonical)
         
         switch hint.hintType {
         case .nudge:
-            hintRenderer.showHint(for: hint.targetPiece, at: targetPosition, rotation: targetRotation)
-        case .rotation:
-            hintRenderer.showRotationHint(at: targetPosition, targetRotation: targetRotation)
+            hintRenderer.showHint(for: hint.targetPiece, at: targetPosition, rotation: targetPieceRotation)
+        case .rotation(let degrees):
+            // Use the degrees from hint which is already computed correctly
+            hintRenderer.showRotationHint(at: targetPosition, targetRotation: CGFloat(degrees) * .pi / 180)
         case .flip:
             hintRenderer.showFlipHint(at: targetPosition)
         case .position(let from, let to):
-            hintRenderer.showMovementHint(from: from, to: to)
+            // The 'from' position from hint engine is already in SK space
+            // The 'to' position needs to use our converted targetPosition for consistency
+            hintRenderer.showMovementHint(from: from, to: targetPosition)
         case .fullSolution:
-            hintRenderer.showHint(for: hint.targetPiece, at: targetPosition, rotation: targetRotation)
+            hintRenderer.showHint(for: hint.targetPiece, at: targetPosition, rotation: targetPieceRotation)
+        }
+    }
+    
+    private func computeTargetFeatureAngleForHint(_ transform: CGAffineTransform, _ pieceType: TangramPieceType) -> CGFloat {
+        let canonicalFeatureSK = TangramGameConstants.CanonicalFeatures.canonicalFeatureAngle(for: pieceType)
+        let rawAngle = TangramPoseMapper.rawAngle(from: transform)
+        let expectedZRotationSK = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
+        return TangramRotationValidator.normalizeAngle(canonicalFeatureSK + expectedZRotationSK)
+    }
+    
+    private func getPieceCanonicalAngle(_ pieceType: TangramPieceType) -> CGFloat {
+        switch pieceType {
+        case .smallTriangle1, .smallTriangle2, .mediumTriangle, .largeTriangle1, .largeTriangle2:
+            return 3 * .pi / 4  // 135° - actual hypotenuse direction for pieces
+        case .square:
+            return 0
+        case .parallelogram:
+            return 0
         }
     }
     
@@ -756,6 +808,12 @@ class TangramPuzzleScene: SKScene {
             // Restore original rotation if canceling
             dial.restoreOriginalRotation()
         }
+        
+        // Reset rotation tracking
+        isRotating = false
+        initialTouchAngle = 0
+        initialPieceRotation = 0
+        rotationTouchOffset = 0
         
         // Remove dial first
         rotationDial?.removeFromParent()

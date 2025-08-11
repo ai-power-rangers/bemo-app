@@ -64,9 +64,11 @@ class TangramRotationDialNode: SKNode {
         handle.fillColor = .systemBlue
         handle.strokeColor = .white
         handle.lineWidth = 2
+        // Position handle to match current piece rotation
+        // Note: negate angle because SpriteKit zRotation is clockwise
         handle.position = CGPoint(
-            x: cos(initialRotation) * 80,
-            y: sin(initialRotation) * 80
+            x: cos(-initialRotation) * 80,
+            y: sin(-initialRotation) * 80
         )
         handle.zPosition = 10
         addChild(handle)
@@ -163,20 +165,31 @@ class TangramRotationDialNode: SKNode {
         // Normalize angle to [-π, π] range for consistent behavior
         let normalizedAngle = normalizeAngle(angle)
         
-        // Update piece rotation (angle is already in CW convention)
+        // Update piece rotation
         piece.zRotation = normalizedAngle
         
-        // Update handle position (use original angle for smooth visual)
+        // Update handle position to match piece rotation
+        // Note: In SpriteKit, 0° is right, positive is counter-clockwise visually
+        // But zRotation is clockwise, so we negate for visual
         handle.position = CGPoint(
-            x: cos(angle) * 80,
-            y: sin(angle) * 80
+            x: cos(-normalizedAngle) * 80,
+            y: sin(-normalizedAngle) * 80
         )
         
-        // Update angle label
+        // Add visual feedback - make handle bigger when dragging
+        if handle.xScale != 1.2 {
+            handle.run(SKAction.scale(to: 1.2, duration: 0.1))
+        }
+        
+        // Update angle label with positive degrees
         var degrees = Int(round(normalizedAngle * 180 / .pi))
         while degrees < 0 { degrees += 360 }
         while degrees >= 360 { degrees -= 360 }
         angleLabel.text = "\(degrees)°"
+        
+        // Make label bold during rotation
+        angleLabel.fontName = "System-Bold"
+        angleLabel.fontSize = 18
     }
     
     private func normalizeAngle(_ angle: CGFloat) -> CGFloat {
@@ -202,5 +215,14 @@ class TangramRotationDialNode: SKNode {
                 piece.flip()  // This will toggle it back to original state
             }
         }
+        
+        // Reset handle size
+        handle?.run(SKAction.scale(to: 1.0, duration: 0.1))
+    }
+    
+    func finishRotation() {
+        // Reset handle size when done rotating
+        handle?.run(SKAction.scale(to: 1.0, duration: 0.1))
+        angleLabel?.fontSize = 16
     }
 }
