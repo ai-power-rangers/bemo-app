@@ -72,18 +72,65 @@ The Tangram CV Mock Game is a transitional implementation that simulates the fut
 
 ### 3. Validation System
 
+#### Movement-Based Validation Strategy
+**Core Principle**: We don't validate until intent is demonstrated through movement.
+
+##### Piece State Machine
+```
+UNOBSERVED → DETECTED → MOVED → PLACED → VALIDATING → VALIDATED/INVALID
+     ↑          ↓         ↓        ↓          ↓            ↓
+     └──────────┴─────────┴────────┴──────────┴────────────┘
+                    (can return to earlier states)
+```
+
+##### State Definitions
+- **UNOBSERVED**: Not yet seen by CV (initial frame)
+- **DETECTED**: CV sees piece but no movement (baseline established)
+- **MOVED**: Significant position/rotation change detected (>20mm or >10°)
+- **PLACED**: Movement stopped for >1 second (intentional placement)
+- **VALIDATING**: Checking against other validated pieces
+- **VALIDATED/INVALID**: Final determination with feedback
+
+##### Movement Detection
+```swift
+struct PieceState {
+    var detectionState: DetectionState
+    var baselinePosition: CGPoint?  // Initial position when detected
+    var baselineRotation: CGFloat?  // Initial rotation when detected
+    var lastMovedTime: Date?
+    var placedTime: Date?
+    var validationResult: ValidationResult?
+    var isAnchor: Bool
+    var interactionCount: Int
+}
+
+// Movement thresholds
+let MOVEMENT_THRESHOLD: CGFloat = 20  // pixels/mm
+let ROTATION_THRESHOLD: CGFloat = 0.174  // ~10 degrees
+let PLACEMENT_TIME: TimeInterval = 1.0  // seconds
+```
+
+#### Validation Sequencing
+1. **No validation on initial detection** - Pieces can be anywhere when dumped out
+2. **First moved piece** - Becomes reference (anchor), always "valid" 
+3. **Subsequent pieces** - Validate only against already-validated pieces
+4. **Growing validation network** - Each validated piece expands reference frame
+
 #### Anchor-Based Relative Positioning
-- First placed piece becomes "anchor"
-- All other pieces validated relative to anchor
+- First MOVED piece becomes anchor (not first detected)
+- All validations relative to anchor and validated pieces
 - Handles arbitrary puzzle positioning on tabletop
-- If anchor removed, next piece promoted to anchor
+- If anchor removed, next validated piece promoted
+- Supports multiple "puzzle islands" being built
 
 #### Validation Process
 ```swift
-1. Calculate relative transforms between pieces
-2. Compare against database solution connections
-3. Account for rotation/flip variations
-4. Provide real-time feedback
+1. Detect movement from baseline position
+2. Wait for placement (movement stopped)
+3. Calculate relative transforms to validated pieces
+4. Compare against database solution connections
+5. Account for rotation/flip variations
+6. Provide real-time feedback (nudges)
 ```
 
 ### 4. Data Models
@@ -139,28 +186,46 @@ The Tangram CV Mock Game is a transitional implementation that simulates the fut
 ### 6. User Interactions
 
 #### Physical World Section (Bottom)
-- **Drag**: Move pieces around tabletop
+- **Drag**: Move pieces around tabletop (triggers MOVED state)
 - **Tap & Hold**: Show rotation dial
 - **Double Tap**: Flip piece
-- **Release**: Snap to position if valid
+- **Release**: Piece enters PLACED state, validation begins
 
 #### Generated CV Events
-- `pieceMoved`: Position/rotation changed
+- `pieceDetected`: First time CV sees piece (establish baseline)
+- `pieceMoved`: Position/rotation changed beyond threshold
 - `pieceFlipped`: Piece flipped
-- `pieceLifted`: Piece picked up
-- `piecePlaced`: Piece set down
+- `pieceLifted`: Piece picked up (MOVED state)
+- `piecePlaced`: Piece set down (PLACED state)
+- `validationChanged`: Validation result updated
+
+#### State-Based Behavior
+- **DETECTED pieces**: No validation, just tracking
+- **MOVED pieces**: Visual feedback showing activity
+- **PLACED pieces**: Begin validation after placement timeout
+- **VALIDATED pieces**: Show success feedback, become reference for others
+- **INVALID pieces**: Show nudges (rotation, flip, position hints)
 
 ### 7. Hint System
 
-#### Hint Types
-- **Placement Hints**: Where to place piece
-- **Rotation Hints**: Correct orientation
-- **Connection Hints**: Which pieces connect
+#### Nudge System (Automatic)
+Triggered after piece placement when validation fails:
+- **Rotation Nudge**: "Try rotating" - piece in right area, wrong angle
+- **Flip Nudge**: "Try flipping" - correct position but needs flip
+- **Position Nudge**: Arrow showing direction - close but not aligned
+- **Wrong Piece Nudge**: "Try a different piece" - after multiple attempts
+
+#### Hint Types (Manual Request)
+- **Placement Hints**: Where to place next piece
+- **Rotation Hints**: Correct orientation for selected piece
+- **Connection Hints**: Which pieces connect to validated pieces
+- **Sequence Hints**: Suggested order of placement
 
 #### Hint Triggers
-- No progress for 30+ seconds
-- Multiple failed attempts
-- Manual hint request
+- **Automatic Nudges**: Immediately after invalid placement
+- **Progressive Hints**: No progress for 30+ seconds
+- **Multiple Failed Attempts**: Same piece tried 3+ times
+- **Manual Request**: Student asks for help
 
 ### 8. Metrics & Analytics
 
@@ -197,6 +262,18 @@ The Tangram CV Mock Game is a transitional implementation that simulates the fut
 - SpriteKit uses scene coordinates
 - Transform matrices handle conversion
 - Relative positioning for validation
+
+### Movement Detection
+**Real CV Considerations:**
+- Table vibrations filtered by movement threshold
+- Lighting changes don't affect position tracking
+- Hand occlusion handled by last-known-good position
+- Multiple pieces moving simultaneously tracked
+
+**Mock Game Mapping:**
+- Touch events map directly to state transitions
+- Drag = MOVED, Release = PLACED
+- Simulates real CV timing delays
 
 ### Performance
 - Event batching at 30 FPS

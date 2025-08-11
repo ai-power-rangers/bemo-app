@@ -1,29 +1,100 @@
 # CV Mock Game - Remaining Implementation Steps
 
-## Priority 1: Core CV Mock Infrastructure
+## 🔴 IMMEDIATE NEXT STEPS - Movement-Based Validation
 
-### 1.1 Complete 4-Section Layout ⚠️ CRITICAL
+### Step 1: Create PieceState Model
+**File**: `Models/PieceState.swift` (NEW)
+```swift
+enum DetectionState {
+    case unobserved
+    case detected(baseline: CGPoint, rotation: CGFloat)
+    case moved
+    case placed(at: Date)
+    case validating
+    case validated
+    case invalid(reason: ValidationFailure)
+}
+
+struct PieceState {
+    let pieceId: String
+    var state: DetectionState = .unobserved
+    var currentPosition: CGPoint
+    var currentRotation: CGFloat
+    var lastMovedTime: Date?
+    var interactionCount: Int = 0
+    var isAnchor: Bool = false
+    var validatedConnections: Set<String> = []
+}
+```
+
+### Step 2: Update PuzzlePieceNode
+**File**: `PuzzlePieceNode.swift`
+- Add `pieceState: PieceState` property
+- Update state on drag start (MOVED)
+- Update state on drag end (PLACED)
+- Track interaction count
+
+### Step 3: Implement Movement Detection
 **File**: `TangramPuzzleScene.swift`
-- [ ] Fix section positioning and bounds calculations
-- [ ] Implement proper safe area handling for all devices
-- [ ] Add section divider lines/borders for clarity
-- [ ] Ensure responsive layout for different iPad sizes
-- [ ] Add section labels/headers (subtle, non-intrusive)
+- Track all piece states in dictionary
+- On first detection: establish baseline
+- On touch/drag: check movement threshold
+- On release: start placement timer
+- After 1 second: transition to VALIDATING
 
-### 1.2 CV Event Generation System
-**Files**: `PuzzlePieceNode.swift`, `CVEventBus.swift`
-- [ ] Generate proper CV format events on piece manipulation
-- [ ] Implement frame batching (30 FPS simulation)
-- [ ] Add homography matrix calculations
-- [ ] Convert SpriteKit coordinates to CV pixel coordinates
-- [ ] Include proper vertices calculation for each piece
-- [ ] Add class_id mapping for piece types
+### Step 4: Update Validation Logic
+**File**: `TangramPieceValidator.swift`
+- Only validate PLACED/VALIDATING pieces
+- Skip DETECTED pieces entirely
+- First MOVED piece = anchor
+- Build validation network incrementally
 
-### 1.3 Physical World Section (Bottom)
+### Step 5: Visual State Indicators
 **File**: `TangramPuzzleScene.swift`
-- [ ] Implement piece spawning in random positions
-- [ ] Add physics bodies for realistic movement
-- [ ] Implement rotation gesture (tap & hold for dial)
+- DETECTED: 50% opacity
+- MOVED: 100% opacity + glow
+- PLACED: Stable display
+- VALIDATING: Pulse animation
+- VALIDATED: Green checkmark overlay
+- INVALID: Red X + nudge arrow
+
+## Priority 1: Core CV Mock Infrastructure ✅ MOSTLY COMPLETE
+
+### 1.1 Complete 4-Section Layout ✅ COMPLETED
+**File**: `TangramPuzzleScene.swift`
+- [x] Fix section positioning and bounds calculations
+- [x] Implement proper safe area handling for all devices
+- [x] Add section divider lines/borders for clarity (color-coded)
+- [x] Ensure responsive layout for different iPad sizes
+- [x] Remove section labels (cleaner look)
+- [x] Fix navbar overlap issues
+- [x] Consistent scaling across all sections
+
+### 1.2 CV Event Generation System ✅ COMPLETED
+**Files**: `PuzzlePieceNode.swift`, `CVEventBus.swift`, `TangramPuzzleScene.swift`
+- [x] Generate proper CV format events on piece manipulation
+- [x] Implement threshold-based event emission (reduces jitter)
+- [x] Add homography matrix calculations (default values)
+- [x] Convert SpriteKit coordinates to CV pixel coordinates
+- [x] Include proper vertices calculation for each piece
+- [x] Add class_id mapping for piece types
+- [x] Emit CV frames only when pieces actually move
+
+### 1.3 Movement-Based State System 🆕 NEW PRIORITY
+**Files**: `PlacedPiece.swift`, `TangramPuzzleScene.swift`
+- [ ] Implement PieceState struct with detection states
+- [ ] Add baseline position/rotation tracking
+- [ ] Implement movement detection with thresholds
+- [ ] Add placement timer (1 second for PLACED state)
+- [ ] Create state transition logic
+- [ ] Track interaction count per piece
+- [ ] Implement state visualization (debug mode)
+
+### 1.4 Physical World Section (Bottom)
+**File**: `TangramPuzzleScene.swift`
+- [x] Piece spawning in organized positions
+- [x] Basic drag functionality
+- [ ] Fix rotation gesture (tap & hold for dial)
 - [ ] Add flip gesture (double tap)
 - [ ] Create piece "pickup" animation
 - [ ] Add drop shadow when piece is lifted
@@ -31,14 +102,15 @@
 
 ## Priority 2: CV Render Section Implementation
 
-### 2.1 Real-time CV Visualization
+### 2.1 Real-time CV Visualization ✅ COMPLETED
 **File**: `TangramPuzzleScene.swift` (updateCVRender method)
-- [ ] Parse incoming CV events
-- [ ] Create/update piece visualizations
-- [ ] Apply CV transforms to visual pieces
-- [ ] Show piece confidence levels
-- [ ] Add motion trails for moving pieces
-- [ ] Implement smooth interpolation between frames
+- [x] Parse incoming CV events
+- [x] Create/update piece visualizations
+- [x] Apply CV transforms to visual pieces (stable, no jitter)
+- [x] Remove old pieces not in frame
+- [x] Implement smooth position updates
+- [ ] Show piece confidence levels (optional)
+- [ ] Add motion trails for moving pieces (optional)
 
 ### 2.2 CV Piece Representation
 **New File**: `CVPieceVisualization.swift`
@@ -48,15 +120,36 @@
 - [ ] Color-code by validation state
 - [ ] Add confidence indicators
 
+## Priority 2.5: State-Based CV Rendering 🆕 NEW
+
+### 2.5.1 State Visualization in CV Section
+**File**: `TangramPuzzleScene.swift`
+- [ ] Show piece states with visual indicators
+- [ ] DETECTED: Semi-transparent
+- [ ] MOVED: Full opacity with highlight
+- [ ] PLACED: Stable display
+- [ ] VALIDATING: Pulsing effect
+- [ ] VALIDATED: Green checkmark
+- [ ] INVALID: Red X with nudge arrow
+
+### 2.5.2 Baseline Tracking
+- [ ] Store initial positions when pieces first detected
+- [ ] Show baseline ghost in debug mode
+- [ ] Track movement deltas from baseline
+- [ ] Reset baseline on significant moves
+
 ## Priority 3: Validation System
 
-### 3.1 Anchor-Based Validation ⚠️ CRITICAL
+### 3.1 Movement-Based Validation ⚠️ CRITICAL
 **File**: `TangramPieceValidator.swift`
-- [ ] Implement anchor piece selection logic
-- [ ] Calculate relative positions to anchor
+- [ ] Only validate pieces in PLACED state
+- [ ] First MOVED piece becomes anchor (not first detected)
+- [ ] Calculate relative positions to anchor and validated pieces
 - [ ] Handle anchor piece removal/promotion
 - [ ] Support arbitrary puzzle positioning
 - [ ] Add tolerance thresholds for validation
+- [ ] Skip validation for DETECTED (unmoved) pieces
+- [ ] Implement validation cascade (growing network)
 
 ### 3.2 Connection Validation
 **File**: `TangramPieceValidator.swift`
@@ -66,13 +159,18 @@
 - [ ] Handle rotation constraints
 - [ ] Support translation ranges
 
-### 3.3 Visual Feedback
+### 3.3 Visual Feedback & Nudges
 **File**: `TangramPuzzleScene.swift`
 - [ ] Highlight valid placements in target section
 - [ ] Show connection indicators
 - [ ] Add success animations
-- [ ] Implement error feedback (shake, red flash)
+- [ ] Implement automatic nudges after invalid placement:
+  - [ ] Rotation nudge (circular arrow)
+  - [ ] Flip nudge (flip icon)
+  - [ ] Position nudge (directional arrow)
+  - [ ] Wrong piece nudge (try different piece)
 - [ ] Create completion celebration
+- [ ] Show validation only for PLACED pieces
 
 ## Priority 4: Database Integration
 
@@ -109,13 +207,22 @@
 
 ## Priority 6: Hint System Integration
 
-### 6.1 Structured Hints
+### 6.1 Automatic Nudge System 🆕 NEW
+**File**: `TangramNudgeSystem.swift`
+- [ ] Detect validation failure reasons
+- [ ] Generate appropriate nudge type
+- [ ] Display nudge for 3 seconds
+- [ ] Track nudge effectiveness
+- [ ] Escalate to hints after 3 failed attempts
+
+### 6.2 Structured Hints
 **File**: `TangramHintEngine.swift`
 - [ ] Connect hints to CV sections
 - [ ] Show hint in target section
 - [ ] Highlight piece in physical section
 - [ ] Add arrow/path indicators
 - [ ] Implement hint animations
+- [ ] Only suggest MOVED or VALIDATED pieces
 
 ### 6.2 Hint Types
 - [ ] Placement hints (where to put piece)
@@ -193,17 +300,20 @@
 
 ## Implementation Order
 
-### Phase 1: Foundation (Week 1)
-1. Fix 4-section layout (1.1)
-2. Implement CV event generation (1.2)
-3. Complete physical world section (1.3)
-4. Basic anchor validation (3.1)
+### Phase 1: Foundation (Week 1) ✅ MOSTLY COMPLETE
+1. Fix 4-section layout (1.1) ✅
+2. Implement CV event generation (1.2) ✅
+3. CV render section (2.1) ✅
+4. Movement-based state system (1.3) - 🔴 NEXT PRIORITY
+5. Movement-based validation (3.1) - AFTER STATES
 
 ### Phase 2: Core Gameplay (Week 2)
-1. CV render section (2.1, 2.2)
-2. Connection validation (3.2)
-3. Database integration (4.1, 4.2)
-4. Target section display (5.1)
+1. State-based CV rendering (2.5) - NEW
+2. Movement-based validation (3.1)
+3. Connection validation (3.2)
+4. Database integration (4.1, 4.2)
+5. Target section display (5.1)
+6. Automatic nudge system (6.1) - NEW
 
 ### Phase 3: Polish (Week 3)
 1. Visual feedback (3.3)
@@ -221,33 +331,39 @@
 
 These must be completed for basic functionality:
 
-1. **4-Section Layout** - Without this, nothing works
-2. **CV Event Generation** - Core of the mock system
-3. **Anchor Validation** - Essential for puzzle solving
-4. **Database Puzzle Loading** - Need puzzles to play
-5. **Basic CV Render** - Visual feedback required
+1. **4-Section Layout** ✅ - COMPLETED
+2. **CV Event Generation** ✅ - COMPLETED
+3. **Basic CV Render** ✅ - COMPLETED
+4. **Movement-Based State System** - 🔴 NEXT CRITICAL
+5. **Movement-Based Validation** - REQUIRED FOR GAMEPLAY
+6. **Physical World Interactions** - IN PROGRESS (drag works, need rotation/flip)
+7. **Database Puzzle Loading** - WORKING (puzzles load)
+8. **Automatic Nudge System** - IMPROVES UX SIGNIFICANTLY
 
 ## Known Issues to Address
 
-1. **Coordinate System Mismatch**
-   - SpriteKit vs CV pixel coordinates
-   - Need consistent transform pipeline
+1. **State Management**
+   - Need to track piece states persistently
+   - Handle state transitions cleanly
+   - Visualize states for debugging
 
-2. **Piece Rotation**
+2. **Movement Detection**
+   - Balance threshold sensitivity
+   - Filter accidental bumps vs intentional moves
+   - Handle multiple pieces moving simultaneously
+
+3. **Piece Rotation**
    - Current rotation dial not working properly
    - Need smooth rotation with visual feedback
 
-3. **Validation Tolerance**
-   - Too strict = frustrating
-   - Too loose = incorrect solutions pass
+4. **Validation Timing**
+   - 1 second placement delay might feel slow
+   - Need to balance responsiveness vs stability
 
-4. **Performance on Older iPads**
-   - May need quality settings
-   - Reduce particle effects
-
-5. **Network Dependency**
-   - Offline mode for puzzle data
-   - Cache management
+5. **Nudge System**
+   - Determine optimal nudge display duration
+   - Avoid overwhelming user with too many nudges
+   - Track which nudges are most helpful
 
 ## Success Criteria
 

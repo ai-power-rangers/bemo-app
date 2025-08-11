@@ -58,6 +58,8 @@ class TangramPuzzleScene: SKScene {
     private var initialTouchLocation: CGPoint = .zero
     private var initialPieceRotation: CGFloat = 0
     private var isRotating = false
+    private var lastEmittedPositions: [String: CGPoint] = [:]  // Track last emitted position per piece
+    private var lastEmittedRotations: [String: CGFloat] = [:]  // Track last emitted rotation per piece
     
     // MARK: - Rotation Dial
     
@@ -96,11 +98,17 @@ class TangramPuzzleScene: SKScene {
     
     private func setupSections() {
         let halfWidth = size.width / 2
-        let halfHeight = size.height / 2
         
-        // Account for safe area
-        let effectiveTop = size.height - safeAreaTop
-        let topSectionY = effectiveTop * 0.75
+        // Account for safe area and navigation bar
+        let navBarHeight: CGFloat = 100  // Increased to ensure clearance
+        let topPadding: CGFloat = safeAreaTop + navBarHeight
+        let availableHeight = size.height - topPadding - 20  // Bottom padding
+        let sectionHeight = availableHeight / 2
+        
+        // Calculate section centers (Y=0 is at bottom in SpriteKit)
+        // Top sections should be in the upper half of available space
+        let topSectionY = size.height - topPadding - (sectionHeight / 2)  // Center of top half
+        let bottomSectionY = sectionHeight / 2  // Center of bottom half
         
         // TOP LEFT - Target Puzzle Section
         targetSection = SKNode()
@@ -108,7 +116,7 @@ class TangramPuzzleScene: SKScene {
         targetSection.zPosition = 1
         addChild(targetSection)
         
-        targetBounds = CGRect(x: 0, y: halfHeight, width: halfWidth, height: halfHeight)
+        targetBounds = CGRect(x: 0, y: topSectionY - sectionHeight/2, width: halfWidth, height: sectionHeight)
         
         // TOP RIGHT - CV Render Section
         cvRenderSection = SKNode()
@@ -116,44 +124,48 @@ class TangramPuzzleScene: SKScene {
         cvRenderSection.zPosition = 1
         addChild(cvRenderSection)
         
-        cvRenderBounds = CGRect(x: halfWidth, y: halfHeight, width: halfWidth, height: halfHeight)
+        cvRenderBounds = CGRect(x: halfWidth, y: topSectionY - sectionHeight/2, width: halfWidth, height: sectionHeight)
         
         // BOTTOM - Physical World Section
         physicalWorldSection = SKNode()
-        physicalWorldSection.position = CGPoint(x: halfWidth, y: halfHeight/2)
+        physicalWorldSection.position = CGPoint(x: halfWidth, y: bottomSectionY)
         physicalWorldSection.zPosition = 2
         addChild(physicalWorldSection)
         
-        physicalBounds = CGRect(x: 0, y: 0, width: size.width, height: halfHeight)
+        physicalBounds = CGRect(x: 0, y: 0, width: size.width, height: sectionHeight)
     }
     
     private func setupSectionBackgrounds() {
-        let availableHeight = size.height - safeAreaTop - 80
-        let sectionHeight = availableHeight / 2
+        // Match the section setup dimensions
+        let navBarHeight: CGFloat = 100
+        let topPadding: CGFloat = safeAreaTop + navBarHeight
+        let availableHeight = size.height - topPadding - 20
+        let sectionHeight = (availableHeight / 2) - 10  // Small gap between sections
+        let sectionWidth = (size.width / 2) - 10  // Small gap between left/right
         
-        // Target section background (no label - cleaner look)
-        let targetBg = SKShapeNode(rectOf: CGSize(width: size.width/2 - 10, height: sectionHeight - 10))
-        targetBg.fillColor = SKColor.systemGray6.withAlphaComponent(0.2)
-        targetBg.strokeColor = SKColor.systemGray4
-        targetBg.lineWidth = 1
+        // Target section background (top left)
+        let targetBg = SKShapeNode(rectOf: CGSize(width: sectionWidth, height: sectionHeight))
+        targetBg.fillColor = SKColor.systemGray6.withAlphaComponent(0.3)
+        targetBg.strokeColor = SKColor.systemGray3
+        targetBg.lineWidth = 2
         targetBg.position = .zero
         targetBg.zPosition = -1
         targetSection.addChild(targetBg)
         
-        // CV render section background (no label)
-        let cvBg = SKShapeNode(rectOf: CGSize(width: size.width/2 - 10, height: sectionHeight - 10))
-        cvBg.fillColor = SKColor.systemGray6.withAlphaComponent(0.2)
-        cvBg.strokeColor = SKColor.systemGray4
-        cvBg.lineWidth = 1
+        // CV render section background (top right)
+        let cvBg = SKShapeNode(rectOf: CGSize(width: sectionWidth, height: sectionHeight))
+        cvBg.fillColor = SKColor.systemBlue.withAlphaComponent(0.05)
+        cvBg.strokeColor = SKColor.systemBlue.withAlphaComponent(0.3)
+        cvBg.lineWidth = 2
         cvBg.position = .zero
         cvBg.zPosition = -1
         cvRenderSection.addChild(cvBg)
         
-        // Physical world section - assembly area (no label)
-        let assemblyArea = SKShapeNode(rectOf: CGSize(width: size.width - 20, height: sectionHeight - 10))
-        assemblyArea.strokeColor = .systemGray4
-        assemblyArea.lineWidth = 2
-        assemblyArea.fillColor = .clear
+        // Physical world section - assembly area (bottom)
+        let assemblyArea = SKShapeNode(rectOf: CGSize(width: size.width - 30, height: sectionHeight))
+        assemblyArea.strokeColor = SKColor.systemGreen.withAlphaComponent(0.3)
+        assemblyArea.lineWidth = 3
+        assemblyArea.fillColor = SKColor.systemGreen.withAlphaComponent(0.02)
         assemblyArea.position = .zero
         assemblyArea.zPosition = -1
         physicalWorldSection.addChild(assemblyArea)
@@ -187,6 +199,16 @@ class TangramPuzzleScene: SKScene {
         // Update CV render section with frame data
         // This simulates what the iPad would show based on CV input
         
+        // Clear old pieces that aren't in the frame
+        let frameIds = Set(frame.objects.map { pieceIdFromCVName($0.name) })
+        for (pieceId, node) in cvPieces {
+            if !frameIds.contains(pieceId) {
+                node.removeFromParent()
+                cvPieces.removeValue(forKey: pieceId)
+            }
+        }
+        
+        // Update or create pieces from frame
         for object in frame.objects {
             updateCVPiece(object)
         }
@@ -202,19 +224,25 @@ class TangramPuzzleScene: SKScene {
         
         guard let cvNode = cvPieces[pieceId] else { return }
         
-        // Transform position from physical world to CV render section
-        let scale: CGFloat = 0.3  // Scale down for CV view
+        // Find the corresponding physical piece to get its position
+        guard let physicalPiece = availablePieces.first(where: { $0.name == pieceId }) else { return }
+        
+        // Map position from physical world coordinate space to CV render section space
+        // Physical world is centered at (halfWidth, bottomSectionY)
+        // CV render is centered at (3/4 width, topSectionY)
+        // Both sections should show pieces at the same relative scale
+        
+        // Simply map the position directly - pieces are already scaled consistently
+        let scale: CGFloat = 0.8  // Slight scale to keep pieces within bounds
+        
         let cvPos = CGPoint(
-            x: CGFloat(cvPiece.pose.translation[0]) * scale * 0.1,
-            y: CGFloat(cvPiece.pose.translation[1]) * scale * 0.1
+            x: physicalPiece.position.x * scale,
+            y: physicalPiece.position.y * scale
         )
         
-        // Add slight jitter to simulate CV noise
-        let jitterX = CGFloat.random(in: -1...1)
-        let jitterY = CGFloat.random(in: -1...1)
-        
-        cvNode.position = CGPoint(x: cvPos.x + jitterX, y: cvPos.y + jitterY)
-        cvNode.zRotation = CGFloat(cvPiece.pose.rotationDegrees) * .pi / 180
+        // Smooth position update - no jitter
+        cvNode.position = cvPos
+        cvNode.zRotation = physicalPiece.zRotation  // Use actual rotation from physical piece
     }
     
     private func createCVVisualization(for pieceId: String) {
@@ -227,8 +255,9 @@ class TangramPuzzleScene: SKScene {
         // Create a visual copy for CV section
         let cvPiece = PuzzlePieceNode(pieceType: pieceType)
         cvPiece.name = "cv_\(pieceId)"
-        cvPiece.setScale(0.5)  // Match the scale of other sections
-        cvPiece.alpha = 0.8
+        cvPiece.setScale(0.4)  // Match consistent scale across all sections
+        cvPiece.alpha = 0.9
+        cvPiece.isUserInteractionEnabled = false  // No interaction in CV section
         
         cvRenderSection.addChild(cvPiece)
         cvPieces[pieceId] = cvPiece
@@ -264,6 +293,9 @@ class TangramPuzzleScene: SKScene {
         
         // Create physical pieces
         createPhysicalPieces(puzzle)
+        
+        // Emit initial CV frame
+        emitCVFrameUpdate()
     }
     
     private func clearAllSections() {
@@ -300,8 +332,8 @@ class TangramPuzzleScene: SKScene {
         let bounds = TangramBounds.calculatePuzzleBoundsSK(targets: puzzle.targetPieces)
         let boundsCenterSK = CGPoint(x: bounds.midX, y: bounds.midY)
         
-        // Scale for fitting in the smaller target section
-        let displayScale: CGFloat = 0.5  // Half size for display
+        // Scale for fitting in the target section (matches physical pieces)
+        let displayScale: CGFloat = 0.4  // Consistent scale across all sections
         
         for target in puzzle.targetPieces {
             // Create properly transformed silhouette
@@ -367,9 +399,8 @@ class TangramPuzzleScene: SKScene {
         let startX = -size.width * 0.35
         let pieceSpacing: CGFloat = 60  // Adjusted spacing for scaled pieces
         
-        // Scale pieces to fit nicely in the physical world section
-        // but still be interactive and visible
-        let pieceScale: CGFloat = 0.5
+        // Scale pieces consistently across all sections
+        let pieceScale: CGFloat = 0.4
         
         for (index, target) in puzzle.targetPieces.enumerated() {
             let piece = PuzzlePieceNode(pieceType: target.pieceType)
@@ -460,13 +491,23 @@ class TangramPuzzleScene: SKScene {
             let newRotation = initialPieceRotation - angleDelta  // Negative because SK is clockwise
             dial.updateRotation(to: newRotation)
             
-            // Emit rotation event
+            // Only emit rotation event if rotation changed significantly
             if let pieceId = piece.name {
-                eventBus.emit(.pieceMoved(
-                    id: pieceId,
-                    position: piece.position,
-                    rotation: newRotation
-                ))
+                let lastRot = lastEmittedRotations[pieceId] ?? 0
+                let rotDiff = abs(newRotation - lastRot)
+                
+                // Emit only if rotated more than threshold (reduces jitter)
+                if rotDiff > 0.05 {  // About 3 degrees
+                    eventBus.emit(.pieceMoved(
+                        id: pieceId,
+                        position: piece.position,
+                        rotation: newRotation
+                    ))
+                    lastEmittedRotations[pieceId] = newRotation
+                    
+                    // Also emit CV frame event
+                    emitCVFrameUpdate()
+                }
             }
             return
         }
@@ -487,13 +528,23 @@ class TangramPuzzleScene: SKScene {
         let physicalLocation = touch.location(in: physicalWorldSection)
         selected.position = physicalLocation
         
-        // Emit move event
+        // Only emit move event if position changed significantly
         if let pieceId = selected.name {
-            eventBus.emit(.pieceMoved(
-                id: pieceId,
-                position: selected.position,
-                rotation: selected.zRotation
-            ))
+            let lastPos = lastEmittedPositions[pieceId] ?? CGPoint.zero
+            let distance = hypot(selected.position.x - lastPos.x, selected.position.y - lastPos.y)
+            
+            // Emit only if moved more than threshold (reduces jitter)
+            if distance > 2.0 {
+                eventBus.emit(.pieceMoved(
+                    id: pieceId,
+                    position: selected.position,
+                    rotation: selected.zRotation
+                ))
+                lastEmittedPositions[pieceId] = selected.position
+                
+                // Also emit CV frame event for top-right display
+                emitCVFrameUpdate()
+            }
         }
         
         // Check for snap preview
@@ -532,9 +583,14 @@ class TangramPuzzleScene: SKScene {
         // Check for snap
         checkAndSnap(piece: selected)
         
-        // Emit place event
+        // Emit place event and final CV frame
         if let pieceId = selected.name {
             eventBus.emit(.piecePlaced(id: pieceId))
+            
+            // Emit final position in CV frame
+            lastEmittedPositions[pieceId] = selected.position
+            lastEmittedRotations[pieceId] = selected.zRotation
+            emitCVFrameUpdate()
         }
         
         // Validate placement
@@ -691,9 +747,20 @@ class TangramPuzzleScene: SKScene {
             guard let targetNode = targetSilhouettes[target.id] else { return }
             let targetScenePos = targetSection.convert(targetNode.position, to: self)
             
-            let result = validator.validateForSpriteKit(
+            // Calculate feature angles for validation
+            // Get local feature angle from piece's userData (computed during initialization)
+            let localFeatureAngle = piece.userData?["localFeatureAngleSK"] as? CGFloat ?? 0
+            let pieceFeatureAngle = piece.zRotation + localFeatureAngle
+            
+            // Calculate target feature angle from transform
+            let targetRotation = TangramPoseMapper.spriteKitAngle(fromRawAngle: TangramPoseMapper.rawAngle(from: target.transform))
+            let targetLocalFeature = pieceType.isTriangle ? (3 * CGFloat.pi / 4) : 0
+            let targetFeatureAngle = targetRotation + targetLocalFeature
+            
+            let result = validator.validateForSpriteKitWithFeatures(
                 piecePosition: pieceScenePos,
-                pieceRotation: piece.zRotation,
+                pieceFeatureAngle: pieceFeatureAngle,
+                targetFeatureAngle: targetFeatureAngle,
                 pieceType: pieceType,
                 isFlipped: piece.isFlipped,
                 targetTransform: target.transform,
@@ -763,6 +830,90 @@ class TangramPuzzleScene: SKScene {
     func showStructuredHint(_ hint: TangramHintEngine.HintData) {
         // Delegate to showHint
         showHint(for: hint)
+    }
+    
+    // MARK: - CV Frame Updates
+    
+    private func emitCVFrameUpdate() {
+        // Build CV frame from current physical world pieces
+        var cvObjects: [CVPieceEvent] = []
+        
+        for piece in availablePieces {
+            guard let pieceType = piece.pieceType,
+                  let _ = piece.name else { continue }
+            
+            // Map piece type to CV names
+            let cvName = cvNameFromPieceType(pieceType)
+            let classId = classIdFromPieceType(pieceType)
+            
+            // Convert SpriteKit position to CV coordinates
+            let cvTranslation = [
+                Double(piece.position.x),
+                Double(piece.position.y)
+            ]
+            
+            // Convert rotation to degrees
+            let rotationDegrees = Double(piece.zRotation * 180 / .pi)
+            
+            // Calculate vertices (simplified for now)
+            let vertices = calculateVertices(for: pieceType, at: piece.position, rotation: piece.zRotation)
+            
+            let cvPiece = CVPieceEvent(
+                name: cvName,
+                classId: classId,
+                pose: CVPieceEvent.Pose(
+                    rotationDegrees: rotationDegrees,
+                    translation: cvTranslation
+                ),
+                vertices: vertices
+            )
+            
+            cvObjects.append(cvPiece)
+        }
+        
+        // Emit frame event
+        let frame = CVFrameEvent(objects: cvObjects)
+        eventBus.emitFrame(frame)
+    }
+    
+    private func cvNameFromPieceType(_ type: TangramPieceType) -> String {
+        switch type {
+        case .smallTriangle1: return "tangram_triangle_sml"
+        case .smallTriangle2: return "tangram_triangle_sml2"
+        case .mediumTriangle: return "tangram_triangle_med"
+        case .largeTriangle1: return "tangram_triangle_lrg"
+        case .largeTriangle2: return "tangram_triangle_lrg2"
+        case .square: return "tangram_square"
+        case .parallelogram: return "tangram_parallelogram"
+        }
+    }
+    
+    private func classIdFromPieceType(_ type: TangramPieceType) -> Int {
+        switch type {
+        case .parallelogram: return 0
+        case .square: return 1
+        case .largeTriangle1: return 2
+        case .largeTriangle2: return 3
+        case .mediumTriangle: return 4
+        case .smallTriangle1: return 5
+        case .smallTriangle2: return 6
+        }
+    }
+    
+    private func calculateVertices(for pieceType: TangramPieceType, at position: CGPoint, rotation: CGFloat) -> [[Double]] {
+        // Get base vertices
+        let normalizedVertices = TangramGameGeometry.normalizedVertices(for: pieceType)
+        let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale * 0.5)
+        
+        // Apply rotation and translation
+        let transform = CGAffineTransform(rotationAngle: rotation)
+            .translatedBy(x: position.x, y: position.y)
+        
+        // Transform vertices and convert to double arrays
+        return scaledVertices.map { vertex in
+            let transformed = vertex.applying(transform)
+            return [Double(transformed.x), Double(transformed.y)]
+        }
     }
     
     // MARK: - Hints

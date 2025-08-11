@@ -39,7 +39,7 @@ class CVEventBus: ObservableObject {
         }
     }
     
-    /// Emit a frame event with all current piece states
+    /// Emit a frame event with all current piece states (private, timer-based)
     private func emitFrame() {
         guard !currentPieces.isEmpty else { return }
         
@@ -48,6 +48,37 @@ class CVEventBus: ObservableObject {
         
         frameSubscribers.values.forEach { handler in
             handler(frame)
+        }
+    }
+    
+    /// Public method to emit a custom frame event
+    func emitFrame(_ frame: CVFrameEvent) {
+        lastFrame = frame
+        
+        // Update current pieces from frame
+        currentPieces.removeAll()
+        for object in frame.objects {
+            let id = pieceIdFromCVName(object.name)
+            currentPieces[id] = object
+        }
+        
+        // Notify subscribers
+        frameSubscribers.values.forEach { handler in
+            handler(frame)
+        }
+    }
+    
+    /// Helper to convert CV name back to piece ID
+    private func pieceIdFromCVName(_ cvName: String) -> String {
+        switch cvName {
+        case "tangram_triangle_sml": return "piece_smallTriangle1"
+        case "tangram_triangle_sml2": return "piece_smallTriangle2"
+        case "tangram_triangle_med": return "piece_mediumTriangle"
+        case "tangram_triangle_lrg": return "piece_largeTriangle1"
+        case "tangram_triangle_lrg2": return "piece_largeTriangle2"
+        case "tangram_square": return "piece_square"
+        case "tangram_parallelogram": return "piece_parallelogram"
+        default: return cvName
         }
     }
     
