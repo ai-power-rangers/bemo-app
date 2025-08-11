@@ -26,6 +26,12 @@ class TangramCVGameViewModel {
     
     var isCVMode: Bool = false
     
+    // MARK: - TEST PIPELINE PUZZLES (TEMPORARY - REMOVE AFTER VALIDATION)
+    // This array holds automated pipeline test puzzles loaded from JSON files
+    // These are injected alongside database puzzles for testing CV validation
+    // TO REMOVE: Delete this property and the loadAutomatedPuzzles() call
+    var pipelineTestPuzzles: [GamePuzzleData] = []
+    
     // MARK: - Dependencies
     
     private weak var delegate: GameDelegate?
@@ -53,13 +59,18 @@ class TangramCVGameViewModel {
         
         Task {
             await loadPuzzles()
+            // Also load automated pipeline puzzles for testing
+            loadAutomatedPuzzles()
         }
     }
     
     // MARK: - Public Interface
     
     var availablePuzzles: [GamePuzzleData] {
-        puzzleLibraryService.availablePuzzles
+        // TEMPORARY: Combine database puzzles with pipeline test puzzles
+        // TO REMOVE: Just return puzzleLibraryService.availablePuzzles after validation
+        let combined = puzzleLibraryService.availablePuzzles + pipelineTestPuzzles
+        return combined
     }
     
     func setScene(_ scene: TangramThreeZoneScene) {
@@ -78,13 +89,11 @@ class TangramCVGameViewModel {
         // Load puzzle in scene
         scene?.loadPuzzle(puzzle)
         
-        print("TangramCV: Selected puzzle '\(puzzle.name)'")
     }
     
     func toggleCVMode() {
         isCVMode.toggle()
         scene?.isCVMode = isCVMode
-        print("TangramCV: CV Mode = \(isCVMode)")
     }
     
     func requestQuit() {
@@ -123,7 +132,6 @@ class TangramCVGameViewModel {
     
     private func loadPuzzles() async {
         // Puzzles are loaded via PuzzleLibraryService
-        print("TangramCV: Loaded \(availablePuzzles.count) puzzles")
     }
     
     private func updateProgress() {
@@ -140,7 +148,6 @@ class TangramCVGameViewModel {
     private func handlePuzzleCompletion() {
         currentPhase = .puzzleComplete
         delegate?.gameDidCompleteLevel(xpAwarded: 100)
-        print("🎉 TangramCV: Puzzle completed!")
     }
 }
 
@@ -155,7 +162,6 @@ extension TangramCVGameViewModel: TangramCVSceneDelegate {
     func sceneDidMovePiece(_ piece: CVPuzzlePieceNode, from: Zone, to: Zone) {
         // Track zone transitions if needed
         if from != to {
-            print("Piece \(piece.pieceType?.rawValue ?? "?") moved from \(from) to \(to)")
         }
     }
     
@@ -164,11 +170,9 @@ extension TangramCVGameViewModel: TangramCVSceneDelegate {
     }
     
     func sceneDidAddPieceToAssembly(_ piece: CVPuzzlePieceNode) {
-        print("Added \(piece.pieceType?.rawValue ?? "?") to assembly")
     }
     
     func sceneDidRemovePieceFromAssembly(_ piece: CVPuzzlePieceNode) {
-        print("Removed \(piece.pieceType?.rawValue ?? "?") from assembly")
     }
     
     func sceneRequestsAnchorUpdate(currentAnchor: CVPuzzlePieceNode?, assembledPieces: [CVPuzzlePieceNode]) {
@@ -181,7 +185,6 @@ extension TangramCVGameViewModel: TangramCVSceneDelegate {
                 isCVMode: isCVMode
             )
             scene?.updateAnchor(newAnchor)
-            print("🚩 Anchor updated: \(newAnchor?.pieceType?.rawValue ?? "none")")
         }
     }
     
@@ -195,7 +198,14 @@ extension TangramCVGameViewModel: TangramCVSceneDelegate {
         cvOutputStream = cvService.generateCVOutput(state: state)
         lastCVEmissionTime = now
         
-        print("📸 CV Stream: \(state.assembledPieces.count) pieces, anchor: \(state.anchorPiece?.pieceType?.rawValue ?? "none")")
+    }
+    
+    func sceneDidUpdateFromCV(state: TangramCVPuzzleState) {
+        // Handle CV update - generate output and check completion
+        sceneRequestsCVGeneration(state: state)
+        if sceneRequestsCompletionCheck(state: state) {
+            handlePuzzleCompletion()
+        }
     }
     
     func sceneRequestsValidation(for piece: CVPuzzlePieceNode, at position: CGPoint) -> Bool {
@@ -212,7 +222,6 @@ extension TangramCVGameViewModel: TangramCVSceneDelegate {
                 
                 if isValid && !completedPieces.contains(target.pieceType.rawValue) {
                     completedPieces.insert(target.pieceType.rawValue)
-                    print("✅ Piece completed: \(target.pieceType.rawValue)")
                 }
             }
         }

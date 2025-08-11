@@ -78,6 +78,9 @@ enum PuzzleDataConverter {
                 return nil
             }
             
+            // Extract piece ID (use piece type as fallback if not present)
+            let pieceId = pieceDict["id"] as? String ?? UUID().uuidString
+            
             // Reconstruct CGAffineTransform from components
             let affineTransform = CGAffineTransform(
                 a: CGFloat(transform["a"] ?? 1),
@@ -89,6 +92,7 @@ enum PuzzleDataConverter {
             )
             
             return GamePuzzleData.TargetPiece(
+                id: pieceId,
                 pieceType: pieceType,
                 transform: affineTransform
             )

@@ -89,7 +89,6 @@ class GameHostViewModel {
                         "cv_enabled": true
                     ]
                 )
-                print("Game session started: \(currentSessionId ?? "unknown")")
             } catch {
                 print("Failed to start game session: \(error)")
                 errorTrackingService?.trackError(error, context: ErrorContext(
@@ -111,7 +110,6 @@ class GameHostViewModel {
         // Save game state
         if let _ = game.saveState() {
             // TODO: Persist game state
-            print("Game state saved")
         }
         
         // End game session in Supabase
@@ -219,8 +217,6 @@ extension GameHostViewModel: GameDelegate {
                 ))
             }
         }
-        
-        print("Level completed! XP awarded: \(xpAwarded)")
     }
     
     func gameDidRequestQuit() {
@@ -229,7 +225,6 @@ extension GameHostViewModel: GameDelegate {
     
     func gameDidRequestHint() {
         // Log hint usage for analytics
-        print("Hint requested")
     }
     
     func gameDidEncounterError(_ error: Error) {

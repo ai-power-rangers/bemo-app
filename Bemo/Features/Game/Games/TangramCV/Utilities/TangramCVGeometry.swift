@@ -118,6 +118,12 @@ enum TangramCVGeometry {
         return atan2(transform.b, transform.a)
     }
     
+    /// Extract rotation angle for SpriteKit scene space (negated to account for Y-flip)
+    /// This converts from the stored transform's rotation to the scene's coordinate space
+    static func sceneRotation(from transform: CGAffineTransform) -> CGFloat {
+        return -extractRotation(from: transform)
+    }
+    
     /// Check if transform represents a flip (negative determinant)
     static func isTransformFlipped(_ transform: CGAffineTransform) -> Bool {
         let determinant = transform.a * transform.d - transform.b * transform.c

@@ -1,0 +1,191 @@
+{
+  "id": "5e18d2b5-ac02-4f20-a511-3287cf7e4c99",
+  "name": "house_fixed_separation",
+  "category": "generated",
+  "difficulty": "medium",
+  "created": "2025-08-09T14:53:13.298580",
+  "pieces": [
+    {
+      "id": "e382bbc5-9cfc-4524-a6b6-f83d9e1da070",
+      "type": "largeTriangle1",
+      "transform": {
+        "a": 0.999979,
+        "b": -0.006515,
+        "c": 0.006515,
+        "d": 0.999979,
+        "tx": 322.67,
+        "ty": 259.67
+      },
+      "isLocked": false,
+      "zIndex": 1,
+      "connectionPoints": [],
+      "metadata": {
+        "centroid": {
+          "x": 322.67,
+          "y": 259.67
+        },
+        "rotation_degrees": 359.63,
+        "coordinate_system": "iOS",
+        "detected_color": "red",
+        "classified_type": "large_triangle",
+        "area": 23332.5
+      }
+    },
+    {
+      "id": "ee2c7297-d9f7-41c8-817e-083b82d96f0e",
+      "type": "parallelogram",
+      "transform": {
+        "a": -0.703748,
+        "b": 0.71045,
+        "c": -0.71045,
+        "d": -0.703748,
+        "tx": 487.33,
+        "ty": 261.92
+      },
+      "isLocked": false,
+      "zIndex": 7,
+      "connectionPoints": [],
+      "metadata": {
+        "centroid": {
+          "x": 487.33,
+          "y": 261.92
+        },
+        "rotation_degrees": 134.73,
+        "coordinate_system": "iOS",
+        "detected_color": "orange",
+        "classified_type": "parallelogram",
+        "area": 11289.0
+      }
+    },
+    {
+      "id": "26c00d22-7133-4d8d-a518-84ec35cab635",
+      "type": "smallTriangle1",
+      "transform": {
+        "a": 0.999907,
+        "b": -0.013604,
+        "c": 0.013604,
+        "d": 0.999907,
+        "tx": 483.33,
+        "ty": 175.67
+      },
+      "isLocked": false,
+      "zIndex": 4,
+      "connectionPoints": [],
+      "metadata": {
+        "centroid": {
+          "x": 483.33,
+          "y": 175.67
+        },
+        "rotation_degrees": 359.22,
+        "coordinate_system": "iOS",
+        "detected_color": "yellow",
+        "classified_type": "small_triangle",
+        "area": 5366.0
+      }
+    },
+    {
+      "id": "207d8fc6-b4da-462f-a561-076fb776efe2",
+      "type": "square",
+      "transform": {
+        "a": 0.009174,
+        "b": 0.999958,
+        "c": -0.999958,
+        "d": 0.009174,
+        "tx": 432.0,
+        "ty": 377.0
+      },
+      "isLocked": false,
+      "zIndex": 6,
+      "connectionPoints": [],
+      "metadata": {
+        "centroid": {
+          "x": 432.0,
+          "y": 377.0
+        },
+        "rotation_degrees": 89.47,
+        "coordinate_system": "iOS",
+        "detected_color": "green",
+        "classified_type": "square",
+        "area": 11882.0
+      }
+    },
+    {
+      "id": "47285bc5-8097-4688-b29b-845a3bb0296f",
+      "type": "smallTriangle2",
+      "transform": {
+        "a": 0.013422,
+        "b": -0.99991,
+        "c": 0.99991,
+        "d": 0.013422,
+        "tx": 539.33,
+        "ty": 121.33
+      },
+      "isLocked": false,
+      "zIndex": 5,
+      "connectionPoints": [],
+      "metadata": {
+        "centroid": {
+          "x": 539.33,
+          "y": 121.33
+        },
+        "rotation_degrees": 270.77,
+        "coordinate_system": "iOS",
+        "detected_color": "blue",
+        "classified_type": "small_triangle",
+        "area": 5513.5
+      }
+    },
+    {
+      "id": "90c5b669-5113-44d5-92b3-12f7b8d53ce9",
+      "type": "largeTriangle2",
+      "transform": {
+        "a": 0.999979,
+        "b": -0.006536,
+        "c": 0.006536,
+        "d": 0.999979,
+        "tx": 405.33,
+        "ty": 92.67
+      },
+      "isLocked": false,
+      "zIndex": 2,
+      "connectionPoints": [],
+      "metadata": {
+        "centroid": {
+          "x": 405.33,
+          "y": 92.67
+        },
+        "rotation_degrees": 359.63,
+        "coordinate_system": "iOS",
+        "detected_color": "purple",
+        "classified_type": "large_triangle",
+        "area": 23257.0
+      }
+    },
+    {
+      "id": "81b52a53-f7a2-4bfb-b513-f21f47407c76",
+      "type": "mediumTriangle",
+      "transform": {
+        "a": -0.707107,
+        "b": -0.707107,
+        "c": 0.707107,
+        "d": -0.707107,
+        "tx": 298.0,
+        "ty": 150.0
+      },
+      "isLocked": false,
+      "zIndex": 3,
+      "connectionPoints": [],
+      "metadata": {
+        "centroid": {
+          "x": 298.0,
+          "y": 150.0
+        },
+        "rotation_degrees": 225.0,
+        "coordinate_system": "iOS",
+        "detected_color": "pink",
+        "classified_type": "medium_triangle",
+        "area": 11400.0
+      }
+    }
+  ]
+}

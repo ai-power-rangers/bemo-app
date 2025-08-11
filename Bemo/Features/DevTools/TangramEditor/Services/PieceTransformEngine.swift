@@ -9,6 +9,19 @@
 // ARCHITECTURE: Core service that replaces fragmented transformation logic across multiple services
 // USAGE: Used by ViewModel for both preview AND actual placement - guarantees consistency
 //
+// RESPONSIBILITIES:
+// - Single source of truth for ALL transform calculations
+// - Unified overlap detection using SAT (Separating Axis Theorem)
+// - Connection integrity validation during transforms
+// - Snap point calculations for rotation and sliding
+// - Canvas bounds checking
+//
+// NOT RESPONSIBLE FOR:
+// - UI interaction handling (handled by Views)
+// - State management (handled by ViewModel)
+// - Persistence (handled by ViewModel+Persistence)
+// - Connection creation (use ConnectionService)
+//
 // CRITICAL DESIGN DECISIONS:
 // 1. ROTATION: The piece being manipulated rotates; the connected piece stays stationary
 //    - Maintains connection point at pivot throughout rotation
@@ -661,7 +674,7 @@ class PieceTransformEngine {
         let axes = getAxes(vertices: verticesA) + getAxes(vertices: verticesB)
         
         // Tolerance for floating point comparisons
-        let tolerance: CGFloat = 1.0
+        let tolerance: CGFloat = TangramConstants.overlapTolerance
         
         for axis in axes {
             let projectionA = projectVertices(verticesA, onto: axis)
@@ -780,7 +793,7 @@ class PieceTransformEngine {
                 verticesThis[thisVertex].y - verticesOther[otherVertex].y
             )
             
-            return distance < 2.0 // tolerance
+            return distance < TangramConstants.vertexToVertexTolerance
             
         case .vertexToEdge(let pieceAId, let vertex, let pieceBId, let edge):
             let isVertexPiece = piece.id == pieceAId
@@ -807,7 +820,7 @@ class PieceTransformEngine {
                     point: vertexPoint,
                     lineStart: edgeStart,
                     lineEnd: edgeEnd,
-                    tolerance: 2.0
+                    tolerance: TangramConstants.vertexToEdgeTolerance
                 )
             } else {
                 // This piece has the edge - vertex piece must have its vertex on our edge
@@ -831,7 +844,7 @@ class PieceTransformEngine {
                     point: vertexPoint,
                     lineStart: edgeStart,
                     lineEnd: edgeEnd,
-                    tolerance: 2.0
+                    tolerance: TangramConstants.vertexToEdgeTolerance
                 )
             }
             
@@ -862,12 +875,14 @@ class PieceTransformEngine {
             let otherEnd = verticesOther[otherEdgeDef.endVertex]
             
             // Check if edges are parallel and touching
-            return areEdgesParallelAndTouching(
+            let result = areEdgesParallelAndTouching(
                 edge1Start: thisStart,
                 edge1End: thisEnd,
                 edge2Start: otherStart,
                 edge2End: otherEnd
             )
+            
+            return result
         }
     }
     
@@ -949,7 +964,7 @@ class PieceTransformEngine {
         if !isParallel { return false }
         
         // Check if edges overlap/touch
-        let tolerance: CGFloat = 2.0
+        let tolerance: CGFloat = TangramConstants.edgeToEdgeTolerance
         
         // Check if any endpoint is close to the other edge
         let s1ToE2 = isPointOnLineSegment(point: edge1Start, lineStart: edge2Start, lineEnd: edge2End, tolerance: tolerance)

@@ -1,0 +1,191 @@
+{
+  "id": "2855def8-2022-47df-bbaf-ad4313deedf4",
+  "name": "cat_fixed_separation",
+  "category": "generated",
+  "difficulty": "medium",
+  "created": "2025-08-09T14:56:55.557034",
+  "pieces": [
+    {
+      "id": "6b26dfcf-911e-490f-bb73-46bb67055edb",
+      "type": "mediumTriangle",
+      "transform": {
+        "a": 0.01863,
+        "b": -0.999826,
+        "c": 0.999826,
+        "d": 0.01863,
+        "tx": 277.67,
+        "ty": 281.33
+      },
+      "isLocked": false,
+      "zIndex": 3,
+      "connectionPoints": [],
+      "metadata": {
+        "centroid": {
+          "x": 277.67,
+          "y": 281.33
+        },
+        "rotation_degrees": 271.07,
+        "coordinate_system": "iOS",
+        "detected_color": "red",
+        "classified_type": "medium_triangle",
+        "area": 6481.0
+      }
+    },
+    {
+      "id": "b4b2f62d-00e5-4f8b-9ec9-a95c6ac61bb6",
+      "type": "largeTriangle2",
+      "transform": {
+        "a": 0.006135,
+        "b": -0.999981,
+        "c": 0.999981,
+        "d": 0.006135,
+        "tx": 401.22,
+        "ty": 165.75
+      },
+      "isLocked": false,
+      "zIndex": 2,
+      "connectionPoints": [],
+      "metadata": {
+        "centroid": {
+          "x": 401.22,
+          "y": 165.75
+        },
+        "rotation_degrees": 270.35,
+        "coordinate_system": "iOS",
+        "detected_color": "orange",
+        "classified_type": "large_triangle",
+        "area": 12933.5
+      }
+    },
+    {
+      "id": "dad6209c-d147-435c-99e7-b03dad1497af",
+      "type": "square",
+      "transform": {
+        "a": 0.718988,
+        "b": 0.695022,
+        "c": -0.695022,
+        "d": 0.718988,
+        "tx": 279.34,
+        "ty": 398.83
+      },
+      "isLocked": false,
+      "zIndex": 6,
+      "connectionPoints": [],
+      "metadata": {
+        "centroid": {
+          "x": 279.34,
+          "y": 398.83
+        },
+        "rotation_degrees": 44.03,
+        "coordinate_system": "iOS",
+        "detected_color": "yellow",
+        "classified_type": "square",
+        "area": 6904.0
+      }
+    },
+    {
+      "id": "02ead569-29cd-4914-beca-83a5f2720f3d",
+      "type": "largeTriangle1",
+      "transform": {
+        "a": 0.00862,
+        "b": -0.999963,
+        "c": 0.999963,
+        "d": 0.00862,
+        "tx": 346.67,
+        "ty": 247.67
+      },
+      "isLocked": false,
+      "zIndex": 1,
+      "connectionPoints": [],
+      "metadata": {
+        "centroid": {
+          "x": 346.67,
+          "y": 247.67
+        },
+        "rotation_degrees": 270.49,
+        "coordinate_system": "iOS",
+        "detected_color": "green",
+        "classified_type": "large_triangle",
+        "area": 13458.0
+      }
+    },
+    {
+      "id": "ac37ee69-6560-4b6a-a424-882270a1ddee",
+      "type": "smallTriangle2",
+      "transform": {
+        "a": 0.026539,
+        "b": -0.999648,
+        "c": 0.999648,
+        "d": 0.026539,
+        "tx": 317.67,
+        "ty": 460.33
+      },
+      "isLocked": false,
+      "zIndex": 5,
+      "connectionPoints": [],
+      "metadata": {
+        "centroid": {
+          "x": 317.67,
+          "y": 460.33
+        },
+        "rotation_degrees": 271.52,
+        "coordinate_system": "iOS",
+        "detected_color": "blue",
+        "classified_type": "small_triangle",
+        "area": 3193.0
+      }
+    },
+    {
+      "id": "4528b143-fd7f-4c06-a0ed-35f52f720e69",
+      "type": "smallTriangle1",
+      "transform": {
+        "a": 0.027512,
+        "b": -0.999621,
+        "c": 0.999621,
+        "d": 0.027512,
+        "tx": 239.33,
+        "ty": 460.67
+      },
+      "isLocked": false,
+      "zIndex": 4,
+      "connectionPoints": [],
+      "metadata": {
+        "centroid": {
+          "x": 239.33,
+          "y": 460.67
+        },
+        "rotation_degrees": 271.58,
+        "coordinate_system": "iOS",
+        "detected_color": "purple",
+        "classified_type": "small_triangle",
+        "area": 2916.5
+      }
+    },
+    {
+      "id": "2124e2da-f88b-469d-b7fd-dc675eed0dfa",
+      "type": "parallelogram",
+      "transform": {
+        "a": 0.863469,
+        "b": 0.504402,
+        "c": -0.504402,
+        "d": 0.863469,
+        "tx": 516.88,
+        "ty": 177.2
+      },
+      "isLocked": false,
+      "zIndex": 7,
+      "connectionPoints": [],
+      "metadata": {
+        "centroid": {
+          "x": 516.88,
+          "y": 177.2
+        },
+        "rotation_degrees": 30.29,
+        "coordinate_system": "iOS",
+        "detected_color": "pink",
+        "classified_type": "parallelogram",
+        "area": 6599.0
+      }
+    }
+  ]
+}

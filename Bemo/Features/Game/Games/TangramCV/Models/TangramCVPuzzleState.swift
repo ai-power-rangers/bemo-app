@@ -62,10 +62,24 @@ class TangramCVPuzzleState {
     func reset() {
         currentPuzzle = nil
         pendingPuzzle = nil
+        
+        // Remove all sprite nodes from their parents before clearing dictionary
+        for (_, piece) in availablePieces {
+            piece.removeFromParent()
+        }
         availablePieces.removeAll()
+        
+        // Remove assembled pieces from parents
+        for piece in assembledPieces {
+            piece.removeFromParent()
+        }
         assembledPieces.removeAll()
+        
+        // Clear anchor and selected references
+        anchorPiece?.removeFromParent()
         anchorPiece = nil
         selectedPiece = nil
+        
         lastZoneForSelectedPiece = .storage
         pieceStabilityFrames.removeAll()
         completedPieces.removeAll()
@@ -90,6 +104,11 @@ class TangramCVPuzzleState {
     /// Remove a piece from the assembled collection
     func removeAssembledPiece(_ piece: CVPuzzlePieceNode) {
         assembledPieces.removeAll { $0.id == piece.id }
+    }
+    
+    /// Clear all assembled pieces (for fresh CV update)
+    func clearAssembledPieces() {
+        assembledPieces.removeAll()
     }
     
     /// Set a new anchor piece (clears previous anchor)

@@ -74,9 +74,6 @@ class ProfileSetupViewModel {
         isLoading = true
         errorMessage = nil
         
-        print("DEBUG: Profile creation started for user: \(authenticatedUser.id)")
-        print("DEBUG: Child name: '\(trimmedName)', age: \(age), gender: '\(gender)')")
-        
         // Create profile via API
         apiService.createChildProfile(
             userId: authenticatedUser.id,
@@ -128,8 +125,6 @@ class ProfileSetupViewModel {
         
         // Navigate to main app
         onProfileSetupComplete()
-        
-        print("Child profile created successfully: \(profile.name)")
     }
     
     private func handleProfileCreationError(_ error: APIService.APIError) {
