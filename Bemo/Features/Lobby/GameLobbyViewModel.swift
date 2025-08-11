@@ -144,25 +144,13 @@ class GameLobbyViewModel {
             puzzleManagementService: puzzleManagementService
         )
         
-        // CV-ready version of Tangram for testing
-        let tangramCVGame = TangramCVGame(
-            supabaseService: supabaseService,
-            puzzleManagementService: puzzleManagementService
-        )
-        
-        // Start with regular games
+        // Start with regular games (Tangram is now CV-ready)
         availableGames = [
             GameItem(
                 game: tangramGame,
                 iconName: "square.on.square",
                 color: .blue,
                 badge: nil
-            ),
-            GameItem(
-                game: tangramCVGame,
-                iconName: "camera.viewfinder",
-                color: .green,
-                badge: "CV"
             )
         ]
         
