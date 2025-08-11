@@ -28,3 +28,6 @@ Bemo/Config/Release.xcconfig
 Bemo.xcodeproj/project.pbxproj
 
 Config/
+
+# personal doc
+.doc/
