@@ -98,7 +98,11 @@ class TangramThreeZoneScene: SKScene {
     // MARK: - Public Interface
     
     func loadPuzzle(_ puzzle: GamePuzzleData) {
-        // Reset state
+        // CRITICAL: Reset state BEFORE clearing zones
+        // This ensures piece references are cleared before nodes are removed
+        gameState.reset()  // Clear all dictionaries and references FIRST
+        
+        // Now safe to load the new puzzle
         gameState.loadPuzzle(puzzle)
         
         // Only proceed if zones are initialized (scene is in view)
@@ -108,7 +112,7 @@ class TangramThreeZoneScene: SKScene {
             return
         }
         
-        // Clear scene
+        // Clear all children from zones
         clearAllZones()
         
         // Setup zones
@@ -154,56 +158,94 @@ class TangramThreeZoneScene: SKScene {
     }
     
     private func loadReferenceDisplay(_ puzzle: GamePuzzleData) {
-        var allVertices: [CGPoint] = []
+        // Calculate bounds EXACTLY like original game
+        var minX = CGFloat.greatestFiniteMagnitude
+        var maxX = -CGFloat.greatestFiniteMagnitude
+        var minY = CGFloat.greatestFiniteMagnitude
+        var maxY = -CGFloat.greatestFiniteMagnitude
         
-        // Calculate bounds
         for target in puzzle.targetPieces {
             let vertices = TangramCVGeometry.normalizedVertices(for: target.pieceType)
             let scaled = TangramCVGeometry.scaleVertices(vertices, by: TangramCVConstants.visualScale)
             let transformed = TangramCVGeometry.transformVertices(scaled, with: target.transform)
-            allVertices.append(contentsOf: transformed)
+            
+            for vertex in transformed {
+                minX = min(minX, vertex.x)
+                maxX = max(maxX, vertex.x)
+                minY = min(minY, vertex.y)
+                maxY = max(maxY, vertex.y)
+            }
         }
         
-        let bounds = TangramCVGeometry.boundingBox(of: allVertices)
-        let puzzleCenter = CGPoint(x: bounds.midX, y: bounds.midY)
+        let puzzleBounds = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        let puzzleCenterX = (minX + maxX) / 2
+        let puzzleCenterY = (minY + maxY) / 2
         
-        // Create reference pieces
+        // Create a container for reference pieces to allow scaling
+        let referenceContent = SKNode()
+        referenceContent.position = .zero
+        
+        // Calculate scale to fit in reference zone
+        let referenceHeight = size.height * 2.0 / 5.0
+        let margin: CGFloat = 40
+        let scaleX = (size.width - margin) / puzzleBounds.width
+        let scaleY = (referenceHeight - margin) / puzzleBounds.height
+        let scale = min(scaleX, scaleY, 1.0) * TangramCVConstants.referenceScale
+        referenceContent.setScale(scale)
+        
+        referenceZone.addChild(referenceContent)
+        
+        // Create reference pieces EXACTLY like original
         for target in puzzle.targetPieces {
             let vertices = TangramCVGeometry.normalizedVertices(for: target.pieceType)
             let scaled = TangramCVGeometry.scaleVertices(vertices, by: TangramCVConstants.visualScale)
             let transformed = TangramCVGeometry.transformVertices(scaled, with: target.transform)
             
-            let pieceCentroid = TangramCVGeometry.centroid(of: transformed)
-            
-            // Center vertices and flip Y for SpriteKit
-            let centeredVertices = transformed.map { vertex in
-                CGPoint(x: vertex.x - pieceCentroid.x, y: -(vertex.y - pieceCentroid.y))
+            // Calculate center EXACTLY like original
+            var centerX: CGFloat = 0
+            var centerY: CGFloat = 0
+            for vertex in transformed {
+                centerX += vertex.x
+                centerY += vertex.y
             }
+            centerX /= CGFloat(transformed.count)
+            centerY /= CGFloat(transformed.count)
             
-            // Create path
+            // Create centered vertices EXACTLY like original
             let path = UIBezierPath()
-            if let first = centeredVertices.first {
-                path.move(to: first)
-                for vertex in centeredVertices.dropFirst() {
-                    path.addLine(to: vertex)
+            if let first = transformed.first {
+                let adjustedFirst = CGPoint(
+                    x: first.x - centerX,
+                    y: -(first.y - centerY)  // Flip Y for SpriteKit after centering
+                )
+                path.move(to: adjustedFirst)
+                
+                for vertex in transformed.dropFirst() {
+                    let adjustedVertex = CGPoint(
+                        x: vertex.x - centerX,
+                        y: -(vertex.y - centerY)  // Flip Y for SpriteKit after centering
+                    )
+                    path.addLine(to: adjustedVertex)
                 }
                 path.close()
             }
             
-            // Create reference piece
             let referencePiece = SKShapeNode(path: path.cgPath)
             referencePiece.fillColor = TangramCVColors.targetSilhouetteColor.withAlphaComponent(TangramCVConstants.targetPieceAlpha)
             referencePiece.strokeColor = TangramCVColors.targetStrokeColor
             referencePiece.lineWidth = TangramCVConstants.referencePieceStrokeWidth
             
-            // Position with Y-flip
+            // Position relative to puzzle center for zone-local coordinates
             referencePiece.position = CGPoint(
-                x: pieceCentroid.x - puzzleCenter.x,
-                y: -(pieceCentroid.y - puzzleCenter.y)
+                x: centerX - puzzleCenterX,
+                y: -(centerY - puzzleCenterY)
             )
             
-            referenceZone.addChild(referencePiece)
+            referenceContent.addChild(referencePiece)
         }
+        
+        // Center the entire puzzle in the reference zone
+        // The referenceZone itself is already positioned correctly in setupZones()
     }
     
     private func scatterPiecesInStorage(_ targets: [GamePuzzleData.TargetPiece]) {
@@ -341,5 +383,58 @@ class TangramThreeZoneScene: SKScene {
     
     func updateAnchor(_ piece: CVPuzzlePieceNode?) {
         gameState.setAnchor(piece)
+    }
+    
+    // MARK: - CV Data Processing
+    
+    /// Processes CV detection data and updates piece positions using PoseMapper
+    /// - Parameters:
+    ///   - detections: Array of CV detections with rotation and translation
+    ///   - homography: Optional homography matrix for planar transformation
+    ///   - needsCameraInversion: Whether camera inversion is needed
+    func processCVDetections(
+        _ detections: [(pieceType: String, rotation: Double, translation: [Double])],
+        homography: [[Double]]? = nil,
+        needsCameraInversion: Bool = false
+    ) {
+        // Clear current assembled pieces for fresh CV update
+        gameState.clearAssembledPieces()
+        
+        for detection in detections {
+            // Convert CV data to raw transform
+            let rawTransform = CVToInternalConverter.convertToRawTransform(
+                rotationDegrees: detection.rotation,
+                translation: detection.translation,
+                homography: homography,
+                needsCameraInversion: needsCameraInversion
+            )
+            
+            // Convert raw transform to SpriteKit space using PoseMapper
+            let (skAngle, skPosition) = TangramCVPoseMapper.spriteKitComponents(fromRawTransform: rawTransform)
+            
+            // Find or create the piece
+            if let existingPiece = gameState.availablePieces[detection.pieceType] {
+                // Update existing piece position and rotation
+                existingPiece.position = assemblyZone.convert(skPosition, from: self)
+                existingPiece.zRotation = skAngle
+                
+                // Move to assembly zone if not already there
+                if existingPiece.parent != assemblyZone {
+                    existingPiece.removeFromParent()
+                    assemblyZone.addChild(existingPiece)
+                }
+                
+                // Add to assembled pieces
+                gameState.addAssembledPiece(existingPiece)
+            }
+        }
+        
+        // Update anchor if needed
+        if let firstPiece = gameState.assembledPieces.first, gameState.anchorPiece == nil {
+            gameState.setAnchor(firstPiece)
+        }
+        
+        // Notify delegate of CV update
+        gameDelegate?.sceneDidUpdateFromCV(state: gameState)
     }
 }

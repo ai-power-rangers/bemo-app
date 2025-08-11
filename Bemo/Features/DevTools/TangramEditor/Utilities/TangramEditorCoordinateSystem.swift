@@ -11,6 +11,7 @@
 
 import Foundation
 import CoreGraphics
+import OSLog
 
 /// Centralized coordinate system management for Tangram Editor
 /// Handles all transformations between normalized, visual, and world spaces
@@ -105,7 +106,7 @@ class TangramEditorCoordinateSystem {
     }
     
     /// Remap vertex index for flipped parallelogram
-    private static func remapParallelogramVertexIndex(_ index: Int) -> Int {
+    static func remapParallelogramVertexIndexForFlip(_ index: Int) -> Int {
         // When parallelogram is flipped horizontally, vertices swap: 0↔1, 2↔3
         switch index {
         case 0: return 1
@@ -117,7 +118,7 @@ class TangramEditorCoordinateSystem {
     }
     
     /// Remap edge index for flipped parallelogram
-    private static func remapParallelogramEdgeIndex(_ index: Int) -> Int {
+    static func remapParallelogramEdgeIndexForFlip(_ index: Int) -> Int {
         // When parallelogram is flipped, edges need remapping
         // Original edges: 0(0→1), 1(1→2), 2(2→3), 3(3→0)
         // Flipped edges: 0(1→0), 1(0→3), 2(3→2), 3(2→1)
@@ -131,23 +132,32 @@ class TangramEditorCoordinateSystem {
         }
     }
     
+    // Keep internal versions for both internal and external use
+    static func remapParallelogramVertexIndex(_ index: Int) -> Int {
+        return remapParallelogramVertexIndexForFlip(index)
+    }
+    
+    static func remapParallelogramEdgeIndex(_ index: Int) -> Int {
+        return remapParallelogramEdgeIndexForFlip(index)
+    }
+    
     /// Get all connection points for a piece in world space
     static func getConnectionPoints(for piece: TangramPiece) -> [PiecePlacementService.ConnectionPoint] {
         var points: [PiecePlacementService.ConnectionPoint] = []
         let visualVertices = getVisualVertices(for: piece.type)
         
-        // Detect if parallelogram is flipped
-        let isFlipped = piece.type == .parallelogram && isFlipped(piece.transform)
+        // IMPORTANT: Do NOT remap indices here! Connection points should always use
+        // the actual vertex/edge indices. The placement logic handles any necessary
+        // remapping internally when calculating transforms for flipped pieces.
+        // Remapping here causes inconsistency with getWorldVertices which returns
+        // vertices in their natural order.
         
         // Add vertex connection points
         for (index, vertex) in visualVertices.enumerated() {
             let worldPos = vertex.applying(piece.transform)
             
-            // Remap index for flipped parallelogram to maintain correct topology
-            let connectionIndex = isFlipped ? remapParallelogramVertexIndex(index) : index
-            
             points.append(PiecePlacementService.ConnectionPoint(
-                type: .vertex(index: connectionIndex),
+                type: .vertex(index: index), // Use actual index, no remapping
                 position: worldPos,
                 pieceId: piece.id
             ))
@@ -163,11 +173,8 @@ class TangramEditorCoordinateSystem {
             )
             let worldPos = midpoint.applying(piece.transform)
             
-            // Remap edge index for flipped parallelogram
-            let connectionIndex = isFlipped ? remapParallelogramEdgeIndex(i) : i
-            
             points.append(PiecePlacementService.ConnectionPoint(
-                type: .edge(index: connectionIndex),
+                type: .edge(index: i), // Use actual index, no remapping
                 position: worldPos,
                 pieceId: piece.id
             ))
@@ -244,47 +251,9 @@ class TangramEditorCoordinateSystem {
         existingPieces: [TangramPiece]
     ) -> CGAffineTransform? {
         
-        var finalRotation = baseRotation
-        
-        // Special handling for edge-to-edge connections - auto-rotate to align
-        if case .edge(let canvasEdgeIndex) = connection.canvas.type,
-           case .edge(let pieceEdgeIndex) = connection.piece.type {
-            
-            // Find the canvas piece that owns this connection point
-            if let canvasPiece = existingPieces.first(where: { $0.id == connection.canvas.pieceId }) {
-                let canvasVertices = getWorldVertices(for: canvasPiece)
-                let canvasEdges = TangramGeometry.edges(for: canvasPiece.type)
-                
-                if canvasEdgeIndex < canvasEdges.count {
-                    let canvasEdgeDef = canvasEdges[canvasEdgeIndex]
-                    let canvasEdgeStart = canvasVertices[canvasEdgeDef.startVertex]
-                    let canvasEdgeEnd = canvasVertices[canvasEdgeDef.endVertex]
-                    let canvasEdgeAngle = atan2(
-                        canvasEdgeEnd.y - canvasEdgeStart.y,
-                        canvasEdgeEnd.x - canvasEdgeStart.x
-                    )
-                    
-                    // Get the piece edge direction in local space
-                    let localVertices = getVisualVertices(for: pieceType)
-                    let pieceEdges = TangramGeometry.edges(for: pieceType)
-                    
-                    if pieceEdgeIndex < pieceEdges.count {
-                        let pieceEdgeDef = pieceEdges[pieceEdgeIndex]
-                        let pieceEdgeStart = localVertices[pieceEdgeDef.startVertex]
-                        let pieceEdgeEnd = localVertices[pieceEdgeDef.endVertex]
-                        let pieceEdgeAngle = atan2(
-                            pieceEdgeEnd.y - pieceEdgeStart.y,
-                            pieceEdgeEnd.x - pieceEdgeStart.x
-                        )
-                        
-                        // Calculate rotation needed to align edges (edges should be anti-parallel)
-                        // Add π to make edges face opposite directions
-                        finalRotation = canvasEdgeAngle - pieceEdgeAngle + .pi
-                        
-                    }
-                }
-            }
-        }
+        // For two connections, don't auto-rotate - use user's rotation
+        // Only auto-rotate for single edge-to-edge when sliding is allowed
+        let finalRotation = baseRotation
         
         // Start with flip if needed (for parallelogram)
         var transform = CGAffineTransform.identity
@@ -296,21 +265,19 @@ class TangramEditorCoordinateSystem {
         transform = transform.rotated(by: finalRotation)
         
         // Get local position of piece connection point
-        // Need to account for flip when getting the local point
-        let localPiecePos: CGPoint
+        // For flipped parallelogram, we need to remap the connection point
+        let remappedConnectionType: PiecePlacementService.ConnectionPoint.PointType
         if isFlipped && pieceType == .parallelogram {
-            // For flipped parallelogram, we need to remap the connection point
-            let remappedType: PiecePlacementService.ConnectionPoint.PointType
             switch connection.piece.type {
             case .vertex(let index):
-                remappedType = .vertex(index: remapParallelogramVertexIndex(index))
+                remappedConnectionType = .vertex(index: remapParallelogramVertexIndex(index))
             case .edge(let index):
-                remappedType = .edge(index: remapParallelogramEdgeIndex(index))
+                remappedConnectionType = .edge(index: remapParallelogramEdgeIndex(index))
             }
-            localPiecePos = getLocalConnectionPoint(for: pieceType, connectionType: remappedType)
         } else {
-            localPiecePos = getLocalConnectionPoint(for: pieceType, connectionType: connection.piece.type)
+            remappedConnectionType = connection.piece.type
         }
+        let localPiecePos = getLocalConnectionPoint(for: pieceType, connectionType: remappedConnectionType)
         
         let rotatedPiecePos = localPiecePos.applying(transform)
         
@@ -324,9 +291,11 @@ class TangramEditorCoordinateSystem {
         
         // Validate transform
         if !isValidTransform(transform) {
+            Logger.tangramPlacement.error("[CoordinateSystem] Single-point alignment produced invalid transform")
             return nil
         }
         
+        Logger.tangramPlacement.info("[CoordinateSystem] Single-point alignment successful")
         return transform
     }
     
@@ -349,13 +318,33 @@ class TangramEditorCoordinateSystem {
             )
         }
         
-        // Get local positions for piece connection points, accounting for flip
-        let local1: CGPoint
-        let local2: CGPoint
+        // Special handling for vertex+edge dual connection
+        // This provides exact alignment without sliding
+        if connections.count == 2 {
+            let hasVertex = connections.contains { $0.piece.type.isVertex }
+            let hasEdge = connections.contains { $0.piece.type.isEdge }
+            
+            if hasVertex && hasEdge {
+                // Find which connection is vertex and which is edge
+                let vertexConnection = connections.first { $0.piece.type.isVertex }!
+                let edgeConnection = connections.first { $0.piece.type.isEdge }!
+                
+                return calculateVertexEdgeAlignment(
+                    pieceType: pieceType,
+                    isFlipped: isFlipped,
+                    vertexConnection: vertexConnection,
+                    edgeConnection: edgeConnection,
+                    existingPieces: existingPieces
+                )
+            }
+        }
+        
+        // Get local positions for piece connection points
+        // For flipped parallelogram, remap the connection points
+        let remapped1: PiecePlacementService.ConnectionPoint.PointType
+        let remapped2: PiecePlacementService.ConnectionPoint.PointType
         
         if isFlipped && pieceType == .parallelogram {
-            // Remap connection points for flipped parallelogram
-            let remapped1: PiecePlacementService.ConnectionPoint.PointType
             switch connections[0].piece.type {
             case .vertex(let index):
                 remapped1 = .vertex(index: remapParallelogramVertexIndex(index))
@@ -363,20 +352,19 @@ class TangramEditorCoordinateSystem {
                 remapped1 = .edge(index: remapParallelogramEdgeIndex(index))
             }
             
-            let remapped2: PiecePlacementService.ConnectionPoint.PointType
             switch connections[1].piece.type {
             case .vertex(let index):
                 remapped2 = .vertex(index: remapParallelogramVertexIndex(index))
             case .edge(let index):
                 remapped2 = .edge(index: remapParallelogramEdgeIndex(index))
             }
-            
-            local1 = getLocalConnectionPoint(for: pieceType, connectionType: remapped1)
-            local2 = getLocalConnectionPoint(for: pieceType, connectionType: remapped2)
         } else {
-            local1 = getLocalConnectionPoint(for: pieceType, connectionType: connections[0].piece.type)
-            local2 = getLocalConnectionPoint(for: pieceType, connectionType: connections[1].piece.type)
+            remapped1 = connections[0].piece.type
+            remapped2 = connections[1].piece.type
         }
+        
+        let local1 = getLocalConnectionPoint(for: pieceType, connectionType: remapped1)
+        let local2 = getLocalConnectionPoint(for: pieceType, connectionType: remapped2)
         
         
         // Get canvas positions
@@ -420,6 +408,8 @@ class TangramEditorCoordinateSystem {
         let rotatedLocal2 = local2.applying(transform)
         let secondaryError = distance(from: rotatedLocal2, to: canvas2)
         
+        Logger.tangramPlacement.debug("[CoordinateSystem] Multi-point alignment check: error=\(String(format: "%.2f", secondaryError))")
+        
         
         // Define tolerance based on connection types
         let tolerance: CGFloat = determineAlignmentTolerance(
@@ -429,6 +419,7 @@ class TangramEditorCoordinateSystem {
         
         // Check if both connections can be satisfied
         if secondaryError > tolerance {
+            Logger.tangramPlacement.warning("[CoordinateSystem] Multi-point alignment error: \(String(format: "%.2f", secondaryError)) > tolerance: \(String(format: "%.2f", tolerance))")
             
             // Check connection types
             if connections.count == 2 {
@@ -440,6 +431,7 @@ class TangramEditorCoordinateSystem {
                 let hasEdgeConnection = conn1Type.piece.isEdge || conn2Type.piece.isEdge
                 
                 if hasEdgeConnection {
+                    Logger.tangramPlacement.info("[CoordinateSystem] Has edge connection - allowing sliding tolerance")
                     // With an edge connection, different lengths are expected and valid
                     // The piece can slide along the edge after placement
                     return transform
@@ -449,14 +441,19 @@ class TangramEditorCoordinateSystem {
             // For pure vertex-to-vertex connections, we need tight tolerance
             let bothVertices = connections[0].piece.type.isVertex && connections[1].piece.type.isVertex
             if bothVertices && secondaryError > tolerance {
+                Logger.tangramPlacement.error("[CoordinateSystem] Multi-point alignment failed: both vertices, error too large")
                 return nil
             }
             
+            Logger.tangramPlacement.error("[CoordinateSystem] Multi-point alignment failed: secondary point doesn't align")
             return nil
         }
         
+        Logger.tangramPlacement.info("[CoordinateSystem] Multi-point alignment successful")
+        
         // Validate transform
         if !isValidTransform(transform) {
+            Logger.tangramPlacement.error("[CoordinateSystem] Multi-point alignment produced invalid transform")
             return nil
         }
         
@@ -473,25 +470,23 @@ class TangramEditorCoordinateSystem {
         let hasVertex = (connection1.piece.type.isVertex || connection2.piece.type.isVertex)
         let hasEdge = (connection1.piece.type.isEdge || connection2.piece.type.isEdge)
         
-        
-        // For vertex+edge combination, we need more tolerance
-        // The edge might not be exactly the same length
+        // For vertex+edge combination, use mixed tolerance
         if hasVertex && hasEdge {
-            return TangramConstants.mixedConnectionTolerance
+            return TangramConstants.mixedConnectionTolerance  // 2.0
         }
         
         // Both vertices - need tight alignment
         if connection1.piece.type.isVertex && connection2.piece.type.isVertex {
-            return TangramConstants.vertexToVertexTolerance
+            return TangramConstants.vertexToVertexTolerance  // 1.5
         }
         
-        // Both edges - can have more tolerance (for sliding)
+        // Both edges - use consistent edge tolerance
         if connection1.piece.type.isEdge && connection2.piece.type.isEdge {
-            return TangramConstants.edgeToEdgeTolerance
+            return TangramConstants.edgeToEdgeTolerance  // 2.0
         }
         
-        // Default
-        return TangramConstants.defaultConnectionTolerance
+        // Default to mixed tolerance for consistency
+        return TangramConstants.mixedConnectionTolerance  // 2.0
     }
     
     /// Check if connection configuration allows sliding
@@ -522,6 +517,344 @@ class TangramEditorCoordinateSystem {
         let dx = point2.x - point1.x
         let dy = point2.y - point1.y
         return sqrt(dx * dx + dy * dy)
+    }
+    
+    /// Calculate transform for vertex+edge dual connection
+    /// This uses true edge directions and pivots around the vertex for exact alignment
+    private static func calculateVertexEdgeAlignment(
+        pieceType: PieceType,
+        isFlipped: Bool,
+        vertexConnection: (canvas: PiecePlacementService.ConnectionPoint, piece: PiecePlacementService.ConnectionPoint),
+        edgeConnection: (canvas: PiecePlacementService.ConnectionPoint, piece: PiecePlacementService.ConnectionPoint),
+        existingPieces: [TangramPiece]
+    ) -> CGAffineTransform? {
+        
+        // Get the canvas edge owner piece and edge definition
+        // Note: Canvas vertex and edge can be from DIFFERENT pieces (cross-piece constraint)
+        guard case .edge(let canvasEdgeIndex) = edgeConnection.canvas.type,
+              let canvasEdgePiece = existingPieces.first(where: { $0.id == edgeConnection.canvas.pieceId }) else {
+            return nil
+        }
+        
+        let canvasEdges = TangramGeometry.edges(for: canvasEdgePiece.type)
+        guard canvasEdgeIndex < canvasEdges.count else { return nil }
+        let canvasEdgeDef = canvasEdges[canvasEdgeIndex]
+        
+        // Get canvas edge endpoints in world coordinates
+        let canvasEdgeVertices = getWorldVertices(for: canvasEdgePiece)
+        let canvasEdgeStart = canvasEdgeVertices[canvasEdgeDef.startVertex]
+        let canvasEdgeEnd = canvasEdgeVertices[canvasEdgeDef.endVertex]
+        
+        // Get canvas vertex position (can be from a different piece)
+        let canvasVertexPos = vertexConnection.canvas.position
+        
+        // Log canvas edge for debugging
+        Logger.tangramPlacement.debug("[CoordinateSystem] Canvas edge: start=(\(String(format: "%.1f", canvasEdgeStart.x)), \(String(format: "%.1f", canvasEdgeStart.y))) end=(\(String(format: "%.1f", canvasEdgeEnd.x)), \(String(format: "%.1f", canvasEdgeEnd.y)))")
+        
+        // Get canvas edge direction vector
+        let canvasEdgeVector = CGVector(
+            dx: canvasEdgeEnd.x - canvasEdgeStart.x,
+            dy: canvasEdgeEnd.y - canvasEdgeStart.y
+        )
+        let canvasEdgeAngle = atan2(canvasEdgeVector.dy, canvasEdgeVector.dx)
+        
+        // Get local piece edge and vertex positions
+        var localVertexIndex: Int
+        var localEdgeIndex: Int
+        
+        if case .vertex(let vIdx) = vertexConnection.piece.type {
+            localVertexIndex = vIdx
+        } else { return nil }
+        
+        if case .edge(let eIdx) = edgeConnection.piece.type {
+            localEdgeIndex = eIdx
+        } else { return nil }
+        
+        // Apply remapping for flipped parallelogram
+        if isFlipped && pieceType == .parallelogram {
+            localVertexIndex = remapParallelogramVertexIndex(localVertexIndex)
+            localEdgeIndex = remapParallelogramEdgeIndex(localEdgeIndex)
+        }
+        
+        // Get local piece geometry
+        let visualVertices = getVisualVertices(for: pieceType)
+        let pieceEdges = TangramGeometry.edges(for: pieceType)
+        guard localVertexIndex < visualVertices.count,
+              localEdgeIndex < pieceEdges.count else { return nil }
+        
+        // Validate that piece vertex is incident to piece edge (keep this check - it's geometrically necessary)
+        let pieceEdgeDef = pieceEdges[localEdgeIndex]
+        let pieceVertexOnEdge = (localVertexIndex == pieceEdgeDef.startVertex || 
+                                localVertexIndex == pieceEdgeDef.endVertex)
+        if !pieceVertexOnEdge {
+            Logger.tangramPlacement.warning("[CoordinateSystem] Piece vertex \(localVertexIndex) is not incident to piece edge \(localEdgeIndex) - geometrically impossible")
+            return nil
+        }
+        
+        let localVertex = visualVertices[localVertexIndex]
+        let localEdgeStart = visualVertices[pieceEdgeDef.startVertex]
+        let localEdgeEnd = visualVertices[pieceEdgeDef.endVertex]
+        
+        // Calculate local edge direction from true edge endpoints
+        let localEdgeVector = CGVector(
+            dx: localEdgeEnd.x - localEdgeStart.x,
+            dy: localEdgeEnd.y - localEdgeStart.y
+        )
+        let localEdgeAngle = atan2(localEdgeVector.dy, localEdgeVector.dx)
+        
+        // Log edge angles for debugging
+        Logger.tangramPlacement.debug("[CoordinateSystem] Local edge angle: \(String(format: "%.1f", localEdgeAngle * 180 / .pi))°, Canvas edge angle: \(String(format: "%.1f", canvasEdgeAngle * 180 / .pi))°")
+        
+        // Calculate rotation needed to align edge directions (NO baseRotation for dual-connection - pose is fully determined)
+        var rotationNeeded = canvasEdgeAngle - localEdgeAngle
+        
+        // Apply flip transform first if needed
+        var transform = CGAffineTransform.identity
+        if isFlipped && pieceType == .parallelogram {
+            transform = transform.scaledBy(x: -1, y: 1)
+            // Adjust rotation for flip
+            rotationNeeded = canvasEdgeAngle - (-localEdgeAngle)
+        }
+        
+        // Log rotation before snapping
+        let degrees = rotationNeeded * 180 / .pi
+        Logger.tangramPlacement.debug("[CoordinateSystem] Rotation needed before snap: \(String(format: "%.1f", degrees))°")
+        
+        // Snap rotation to nearest 45° ONLY if within small epsilon
+        let snappedDegrees = round(degrees / 45) * 45
+        if abs(degrees - snappedDegrees) <= 1.0 {  // Within 1° of a 45° multiple
+            rotationNeeded = snappedDegrees * .pi / 180
+            Logger.tangramPlacement.debug("[CoordinateSystem] Snapped rotation to \(String(format: "%.0f", snappedDegrees))°")
+        }
+        
+        // Apply rotation around the vertex (pivot point)
+        transform = transform.rotated(by: rotationNeeded)
+        
+        // Transform the local vertex position
+        let rotatedVertex = localVertex.applying(transform)
+        
+        // Translate so the vertex aligns exactly with canvas vertex
+        transform.tx = canvasVertexPos.x - rotatedVertex.x
+        transform.ty = canvasVertexPos.y - rotatedVertex.y
+        
+        Logger.tangramPlacement.debug("[CoordinateSystem] Vertex pivot at (\(String(format: "%.1f", canvasVertexPos.x)), \(String(format: "%.1f", canvasVertexPos.y)))")
+        
+        // Verify edge collinearity (NOT midpoint equality)
+        // Both endpoints of the piece edge should be close to the canvas edge LINE (infinite line, not segment)
+        let transformedEdgeStart = localEdgeStart.applying(transform)
+        let transformedEdgeEnd = localEdgeEnd.applying(transform)
+        
+        // Calculate perpendicular distances from both endpoints to the canvas edge line
+        let startDistance = perpendicularDistanceToLine(
+            point: transformedEdgeStart,
+            lineStart: canvasEdgeStart,
+            lineEnd: canvasEdgeEnd
+        )
+        let endDistance = perpendicularDistanceToLine(
+            point: transformedEdgeEnd,
+            lineStart: canvasEdgeStart,
+            lineEnd: canvasEdgeEnd
+        )
+        
+        // Log the perpendicular distances for debugging
+        Logger.tangramPlacement.debug("[CoordinateSystem] Edge endpoint distances to canvas line: start=\(String(format: "%.2f", startDistance)), end=\(String(format: "%.2f", endDistance))")
+        
+        // Both endpoints should be within tolerance of the canvas edge line for collinearity
+        let maxDistance = max(startDistance, endDistance)
+        if maxDistance > TangramConstants.mixedConnectionTolerance {
+            Logger.tangramPlacement.warning("[CoordinateSystem] Vertex+edge alignment failed: collinearity error \(String(format: "%.2f", maxDistance)) exceeds tolerance \(TangramConstants.mixedConnectionTolerance)")
+            return nil
+        }
+        
+        // CRITICAL: Ensure piece is on the correct side of the canvas edge to prevent SAT overlaps
+        // Compute centroids to determine which half-plane each piece occupies
+        
+        // Get canvas edge owner's centroid
+        let canvasOwnerCentroid = calculatePieceCentroid(canvasEdgePiece)
+        
+        // Get pending piece centroid after transform
+        let pendingPieceCentroid = calculateTransformedPieceCentroid(
+            pieceType: pieceType,
+            transform: transform
+        )
+        
+        // Calculate the normal to the canvas edge (perpendicular vector)
+        let edgeNormal = CGVector(
+            dx: -(canvasEdgeEnd.y - canvasEdgeStart.y),
+            dy: canvasEdgeEnd.x - canvasEdgeStart.x
+        )
+        
+        // Normalize the normal vector
+        let normalLength = sqrt(edgeNormal.dx * edgeNormal.dx + edgeNormal.dy * edgeNormal.dy)
+        let unitNormal = CGVector(
+            dx: edgeNormal.dx / normalLength,
+            dy: edgeNormal.dy / normalLength
+        )
+        
+        // Calculate signed distances from edge line to determine which side each piece is on
+        let canvasOwnerSide = signedDistanceToLine(
+            point: canvasOwnerCentroid,
+            lineStart: canvasEdgeStart,
+            lineEnd: canvasEdgeEnd,
+            normal: unitNormal
+        )
+        
+        let pendingPieceSide = signedDistanceToLine(
+            point: pendingPieceCentroid,
+            lineStart: canvasEdgeStart,
+            lineEnd: canvasEdgeEnd,
+            normal: unitNormal
+        )
+        
+        Logger.tangramPlacement.debug("[CoordinateSystem] Half-plane check: canvas owner side=\(String(format: "%.1f", canvasOwnerSide)), pending piece side=\(String(format: "%.1f", pendingPieceSide))")
+        
+        // If both pieces are on the same side of the edge, flip the orientation
+        if canvasOwnerSide * pendingPieceSide > 0 {  // Same sign means same side
+            Logger.tangramPlacement.info("[CoordinateSystem] Pieces on same side of edge - flipping orientation by π")
+            
+            // Add π to rotation to place piece on opposite side
+            rotationNeeded += .pi
+            
+            // Re-apply the transform with flipped orientation
+            transform = CGAffineTransform.identity
+            if isFlipped && pieceType == .parallelogram {
+                transform = transform.scaledBy(x: -1, y: 1)
+            }
+            transform = transform.rotated(by: rotationNeeded)
+            
+            // Re-apply translation to keep vertex at canvas vertex
+            let rotatedVertex = localVertex.applying(transform)
+            transform.tx = canvasVertexPos.x - rotatedVertex.x
+            transform.ty = canvasVertexPos.y - rotatedVertex.y
+            
+            // Re-check collinearity after flip
+            let flippedEdgeStart = localEdgeStart.applying(transform)
+            let flippedEdgeEnd = localEdgeEnd.applying(transform)
+            
+            let flippedStartDistance = perpendicularDistanceToLine(
+                point: flippedEdgeStart,
+                lineStart: canvasEdgeStart,
+                lineEnd: canvasEdgeEnd
+            )
+            let flippedEndDistance = perpendicularDistanceToLine(
+                point: flippedEdgeEnd,
+                lineStart: canvasEdgeStart,
+                lineEnd: canvasEdgeEnd
+            )
+            
+            let flippedMaxDistance = max(flippedStartDistance, flippedEndDistance)
+            if flippedMaxDistance > TangramConstants.mixedConnectionTolerance {
+                Logger.tangramPlacement.warning("[CoordinateSystem] After flip, collinearity error \(String(format: "%.2f", flippedMaxDistance)) exceeds tolerance")
+                return nil
+            }
+            
+            Logger.tangramPlacement.debug("[CoordinateSystem] After flip, edge distances: start=\(String(format: "%.2f", flippedStartDistance)), end=\(String(format: "%.2f", flippedEndDistance))")
+        }
+        
+        Logger.tangramPlacement.info("[CoordinateSystem] Vertex+edge alignment successful with final rotation \(String(format: "%.1f", rotationNeeded * 180 / .pi))°")
+        
+        return transform
+    }
+    
+    /// Project a point onto a line segment
+    private static func projectPointOntoLineSegment(
+        point: CGPoint,
+        lineStart: CGPoint,
+        lineEnd: CGPoint
+    ) -> CGPoint {
+        let lineVector = CGVector(dx: lineEnd.x - lineStart.x, dy: lineEnd.y - lineStart.y)
+        let lineLength = sqrt(lineVector.dx * lineVector.dx + lineVector.dy * lineVector.dy)
+        
+        if lineLength < 0.001 {
+            return lineStart
+        }
+        
+        let toPoint = CGVector(dx: point.x - lineStart.x, dy: point.y - lineStart.y)
+        let t = max(0, min(1, (toPoint.dx * lineVector.dx + toPoint.dy * lineVector.dy) / (lineLength * lineLength)))
+        
+        return CGPoint(
+            x: lineStart.x + t * lineVector.dx,
+            y: lineStart.y + t * lineVector.dy
+        )
+    }
+    
+    /// Calculate perpendicular distance from a point to an infinite line
+    private static func perpendicularDistanceToLine(
+        point: CGPoint,
+        lineStart: CGPoint,
+        lineEnd: CGPoint
+    ) -> CGFloat {
+        let lineVector = CGVector(dx: lineEnd.x - lineStart.x, dy: lineEnd.y - lineStart.y)
+        let lineLength = sqrt(lineVector.dx * lineVector.dx + lineVector.dy * lineVector.dy)
+        
+        if lineLength < 0.001 {
+            // Degenerate line - return distance to point
+            return distance(from: point, to: lineStart)
+        }
+        
+        // Calculate perpendicular distance using cross product formula
+        // Distance = |ax + by + c| / sqrt(a^2 + b^2)
+        // Where line equation is: a(x - x1) + b(y - y1) = 0
+        // And a = -(y2 - y1), b = (x2 - x1)
+        
+        let a = -(lineEnd.y - lineStart.y)
+        let b = lineEnd.x - lineStart.x
+        let c = -(a * lineStart.x + b * lineStart.y)
+        
+        let distance = abs(a * point.x + b * point.y + c) / sqrt(a * a + b * b)
+        return distance
+    }
+    
+    /// Calculate signed distance from a point to a line (positive on one side, negative on the other)
+    private static func signedDistanceToLine(
+        point: CGPoint,
+        lineStart: CGPoint,
+        lineEnd: CGPoint,
+        normal: CGVector
+    ) -> CGFloat {
+        // Vector from line start to point
+        let toPoint = CGVector(dx: point.x - lineStart.x, dy: point.y - lineStart.y)
+        
+        // Dot product with normal gives signed distance
+        return toPoint.dx * normal.dx + toPoint.dy * normal.dy
+    }
+    
+    /// Calculate centroid of a placed piece in world coordinates
+    private static func calculatePieceCentroid(_ piece: TangramPiece) -> CGPoint {
+        let vertices = getWorldVertices(for: piece)
+        var centerX: CGFloat = 0
+        var centerY: CGFloat = 0
+        
+        for vertex in vertices {
+            centerX += vertex.x
+            centerY += vertex.y
+        }
+        
+        centerX /= CGFloat(vertices.count)
+        centerY /= CGFloat(vertices.count)
+        
+        return CGPoint(x: centerX, y: centerY)
+    }
+    
+    /// Calculate centroid of a piece type after applying a transform
+    private static func calculateTransformedPieceCentroid(
+        pieceType: PieceType,
+        transform: CGAffineTransform
+    ) -> CGPoint {
+        let visualVertices = getVisualVertices(for: pieceType)
+        var centerX: CGFloat = 0
+        var centerY: CGFloat = 0
+        
+        for vertex in visualVertices {
+            let transformed = vertex.applying(transform)
+            centerX += transformed.x
+            centerY += transformed.y
+        }
+        
+        centerX /= CGFloat(visualVertices.count)
+        centerY /= CGFloat(visualVertices.count)
+        
+        return CGPoint(x: centerX, y: centerY)
     }
     
     // MARK: - Bounding Box Operations

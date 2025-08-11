@@ -55,11 +55,12 @@ class TangramEffectsRenderer {
     func showOrientationNudge(for piece: SKNode, flipNeeded: Bool, rotationNeeded: Bool) {
         guard let effectsLayer = effectsLayer else { return }
         
-        // Create feedback indicator
+        // Create feedback indicator with distinct visual style (automatic nudge)
         let indicator = SKLabelNode()
         indicator.position = CGPoint(x: piece.position.x, y: piece.position.y + 50)
-        indicator.fontSize = 20
-        indicator.fontColor = .systemOrange
+        indicator.fontSize = 18  // Slightly smaller than hints
+        indicator.fontColor = .systemBlue  // Blue for automatic nudges (vs yellow for hints)
+        indicator.fontName = "System"  // Regular font (hints use bold)
         
         if flipNeeded && rotationNeeded {
             indicator.text = "↻ Flip & Rotate"
@@ -71,7 +72,7 @@ class TangramEffectsRenderer {
         
         effectsLayer.addChild(indicator)
         
-        // Animate feedback
+        // Animate feedback with shorter duration (automatic feedback)
         let moveUp = SKAction.moveBy(x: 0, y: 20, duration: 1.0)
         let fadeOut = SKAction.fadeOut(withDuration: 1.0)
         let group = SKAction.group([moveUp, fadeOut])
@@ -133,40 +134,148 @@ class TangramEffectsRenderer {
         }
     }
     
-    /// Shows puzzle completion celebration
+    /// Shows puzzle completion celebration with confetti and animations
     func showPuzzleCompletionCelebration(availablePieces: [String: SKNode]) {
-        guard let scene = scene else { return }
+        guard let scene = scene, let effectsLayer = effectsLayer else { return }
         
-        // Create celebration text
-        let congratsLabel = SKLabelNode(text: "🎉 Puzzle Complete! 🎉")
-        congratsLabel.fontSize = 48
+        // Haptic feedback for completion
+        let notificationFeedback = UINotificationFeedbackGenerator()
+        notificationFeedback.notificationOccurred(.success)
+        
+        // Create confetti effect
+        createConfettiEffect(in: effectsLayer)
+        
+        // Create celebration text with better animation
+        let congratsLabel = SKLabelNode(text: "✨ Perfect! ✨")
+        congratsLabel.fontSize = 56
         congratsLabel.fontColor = .systemYellow
-        congratsLabel.position = CGPoint(x: scene.size.width / 2, y: scene.size.height / 2)
+        congratsLabel.fontName = "System-Bold"
+        congratsLabel.position = CGPoint(x: scene.size.width / 2, y: scene.size.height * 0.7)
         congratsLabel.zPosition = 1000
         congratsLabel.alpha = 0
+        congratsLabel.setScale(0.5)
         
-        scene.addChild(congratsLabel)
+        effectsLayer.addChild(congratsLabel)
         
-        // Animate celebration
+        // Animate celebration text
         let fadeIn = SKAction.fadeIn(withDuration: 0.3)
-        let scale = SKAction.scale(to: 1.2, duration: 0.3)
-        let wait = SKAction.wait(forDuration: 2.0)
-        let fadeOut = SKAction.fadeOut(withDuration: 0.3)
+        let scaleUp = SKAction.scale(to: 1.2, duration: 0.3)
+        let pulse = SKAction.sequence([
+            SKAction.scale(to: 1.3, duration: 0.2),
+            SKAction.scale(to: 1.2, duration: 0.2)
+        ])
+        let repeatPulse = SKAction.repeat(pulse, count: 3)
+        let wait = SKAction.wait(forDuration: 0.5)
+        let fadeOut = SKAction.fadeOut(withDuration: 0.5)
         let remove = SKAction.removeFromParent()
         
         congratsLabel.run(SKAction.sequence([
-            SKAction.group([fadeIn, scale]),
+            SKAction.group([fadeIn, scaleUp]),
+            repeatPulse,
             wait,
             fadeOut,
             remove
         ]))
         
-        // Animate pieces
+        // Animate puzzle pieces with staggered celebration
+        var delay: TimeInterval = 0
         for piece in availablePieces.values {
-            let jump = SKAction.moveBy(x: 0, y: 20, duration: 0.2)
-            let fall = SKAction.moveBy(x: 0, y: -20, duration: 0.2)
-            let sequence = SKAction.sequence([jump, fall])
-            piece.run(SKAction.repeat(sequence, count: 2))
+            // Stagger the animations
+            let waitAction = SKAction.wait(forDuration: delay)
+            
+            // Create celebration animation for each piece
+            let scaleUp = SKAction.scale(to: 1.1, duration: 0.15)
+            let rotate = SKAction.rotate(byAngle: .pi / 12, duration: 0.15)
+            let scaleDown = SKAction.scale(to: 1.0, duration: 0.15)
+            let rotateBack = SKAction.rotate(byAngle: -.pi / 12, duration: 0.15)
+            
+            let celebration = SKAction.sequence([
+                waitAction,
+                SKAction.group([scaleUp, rotate]),
+                SKAction.group([scaleDown, rotateBack])
+            ])
+            
+            piece.run(SKAction.repeat(celebration, count: 2))
+            delay += 0.05  // Stagger by 50ms
+        }
+        
+        // Create sparkle effects around the puzzle
+        createSparkleEffect(in: effectsLayer)
+    }
+    
+    /// Creates confetti falling effect
+    private func createConfettiEffect(in layer: SKNode) {
+        guard let scene = scene else { return }
+        
+        let colors: [UIColor] = [.systemRed, .systemBlue, .systemGreen, .systemYellow, .systemPurple, .systemOrange, .systemPink]
+        
+        // Create 50 confetti pieces
+        for _ in 0..<50 {
+            let confetti = SKShapeNode(rectOf: CGSize(width: 8, height: 12))
+            confetti.fillColor = colors.randomElement()!
+            confetti.strokeColor = .clear
+            
+            // Start from top of screen with random X position
+            confetti.position = CGPoint(
+                x: CGFloat.random(in: 0...scene.size.width),
+                y: scene.size.height + 20
+            )
+            confetti.zPosition = 900
+            confetti.zRotation = CGFloat.random(in: 0...(2 * .pi))
+            
+            layer.addChild(confetti)
+            
+            // Animate falling with rotation
+            let fallDuration = TimeInterval.random(in: 2.0...4.0)
+            let fall = SKAction.moveBy(x: CGFloat.random(in: -50...50), 
+                                      y: -(scene.size.height + 40), 
+                                      duration: fallDuration)
+            let rotate = SKAction.rotate(byAngle: CGFloat.random(in: 2...6) * .pi, duration: fallDuration)
+            let fadeOut = SKAction.fadeOut(withDuration: 0.3)
+            let remove = SKAction.removeFromParent()
+            
+            confetti.run(SKAction.sequence([
+                SKAction.group([fall, rotate]),
+                fadeOut,
+                remove
+            ]))
+        }
+    }
+    
+    /// Creates sparkle effects around the completed puzzle
+    private func createSparkleEffect(in layer: SKNode) {
+        guard let scene = scene else { return }
+        
+        // Create sparkles at random positions
+        for _ in 0..<20 {
+            let sparkle = SKShapeNode(circleOfRadius: 3)
+            sparkle.fillColor = .white
+            sparkle.strokeColor = .clear
+            sparkle.glowWidth = 5
+            sparkle.alpha = 0
+            
+            // Random position around center area
+            sparkle.position = CGPoint(
+                x: scene.size.width / 2 + CGFloat.random(in: -150...150),
+                y: scene.size.height / 2 + CGFloat.random(in: -100...100)
+            )
+            sparkle.zPosition = 950
+            
+            layer.addChild(sparkle)
+            
+            // Animate sparkle
+            let wait = SKAction.wait(forDuration: TimeInterval.random(in: 0...1.0))
+            let fadeIn = SKAction.fadeIn(withDuration: 0.2)
+            let scale = SKAction.scale(to: 1.5, duration: 0.2)
+            let fadeOut = SKAction.fadeOut(withDuration: 0.3)
+            let remove = SKAction.removeFromParent()
+            
+            sparkle.run(SKAction.sequence([
+                wait,
+                SKAction.group([fadeIn, scale]),
+                fadeOut,
+                remove
+            ]))
         }
     }
     

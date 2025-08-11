@@ -122,11 +122,15 @@ struct PieceView: View {
                     }
                     
                     // Snap angle indicators (only show valid ones)
-                    let validSnapAngles = manipulationConstraints?.rotationLimits != nil ?
-                        snapAngles.filter { angle in
-                            let limits = manipulationConstraints!.rotationLimits!
-                            return angle >= limits.min && angle <= limits.max
-                        } : snapAngles
+                    let validSnapAngles: [Double] = {
+                        if let limits = manipulationConstraints?.rotationLimits {
+                            return snapAngles.filter { angle in
+                                angle >= limits.min && angle <= limits.max
+                            }
+                        } else {
+                            return snapAngles
+                        }
+                    }()
                     
                     ForEach(validSnapAngles, id: \.self) { angle in
                         Circle()

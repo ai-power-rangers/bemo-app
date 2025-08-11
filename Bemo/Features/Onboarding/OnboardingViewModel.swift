@@ -107,7 +107,6 @@ class OnboardingViewModel {
     private func handleAppleIDCredential(_ credential: ASAuthorizationAppleIDCredential) {
         // This should not be called anymore - the AuthenticationService
         // handles the credential directly via its delegate methods
-        print("Warning: OnboardingViewModel.handleAppleIDCredential should not be called")
         isLoading = false
     }
     

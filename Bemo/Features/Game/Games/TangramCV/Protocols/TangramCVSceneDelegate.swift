@@ -42,6 +42,9 @@ protocol TangramCVSceneDelegate: AnyObject {
     /// Called when CV output should be generated
     func sceneRequestsCVGeneration(state: TangramCVPuzzleState)
     
+    /// Called when scene updates from CV detection data
+    func sceneDidUpdateFromCV(state: TangramCVPuzzleState)
+    
     // MARK: - Validation
     
     /// Called when a piece position should be validated

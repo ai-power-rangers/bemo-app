@@ -271,32 +271,37 @@ struct TangramGameView: View {
             }
             
             ToolbarItem(placement: .principal) {
-                // Timer centered in toolbar
+                // Timer centered in toolbar (auto-started)
                 HStack(spacing: 6) {
                     Image(systemName: "timer")
                         .font(.system(size: 16))
-                    if viewModel.timerStarted {
-                        Text(viewModel.formattedTime)
-                            .font(.system(size: 16, weight: .medium, design: .monospaced))
-                    } else {
-                        Button("Start") {
-                            viewModel.startTimer()
-                        }
-                        .font(.system(size: 16, weight: .medium))
-                    }
+                    Text(viewModel.formattedTime)
+                        .font(.system(size: 16, weight: .medium, design: .monospaced))
                 }
                 .foregroundColor(.primary)
             }
             
             ToolbarItem(placement: .navigationBarTrailing) {
-                // Hints button
+                // Hints button - shows active state when hint is showing
                 Button(action: {
                     viewModel.toggleHints()
                 }) {
-                    Image(systemName: "lightbulb")
-                        .font(.system(size: 18))
-                        .foregroundColor(.primary)
+                    HStack(spacing: 4) {
+                        Image(systemName: viewModel.currentHint != nil ? "lightbulb.fill" : "lightbulb")
+                            .font(.system(size: 18))
+                        if viewModel.currentHint != nil {
+                            // Show a small indicator when hint is active
+                            Image(systemName: "sparkle")
+                                .font(.system(size: 12))
+                                .foregroundColor(.yellow)
+                        }
+                    }
+                    .foregroundColor(viewModel.currentHint != nil ? .yellow : .primary)
+                    .scaleEffect(viewModel.currentHint != nil ? 1.1 : 1.0)
+                    .animation(.easeInOut(duration: 0.2), value: viewModel.currentHint != nil)
                 }
+                .disabled(viewModel.currentHint != nil)  // Disable while hint is active
+                .opacity(viewModel.currentHint != nil ? 0.8 : 1.0)
             }
         }
     }
@@ -330,6 +335,21 @@ struct TangramGameView: View {
         }
     }
     
+    private var starRating: Int {
+        // Calculate star rating based on time and hints
+        let baseTime: TimeInterval = 120  // 2 minutes for 3 stars
+        let currentTime = viewModel.elapsedTime
+        let hintsUsed = viewModel.hintHistory.count
+        
+        if currentTime <= baseTime && hintsUsed == 0 {
+            return 3  // Perfect: Fast and no hints
+        } else if currentTime <= baseTime * 1.5 || hintsUsed <= 1 {
+            return 2  // Good: Reasonably fast or minimal hints
+        } else {
+            return 1  // Complete: Took time or used multiple hints
+        }
+    }
+    
     private var categoryIcon: String {
         guard let category = viewModel.selectedPuzzle?.category else { return "questionmark" }
         switch category.lowercased() {
@@ -355,7 +375,7 @@ struct TangramGameView: View {
     }
     
     private var completionView: some View {
-        VStack(spacing: 30) {
+        VStack(spacing: 25) {
             // Celebration emoji and title
             Text("🎉")
                 .font(.system(size: 80))
@@ -368,22 +388,70 @@ struct TangramGameView: View {
                 .foregroundColor(.green)
             
             Text("Amazing work! You solved \"\(viewModel.selectedPuzzle?.name ?? "the puzzle")\"!")
-                .font(.title2)
+                .font(.title3)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
+            // Stats display
+            VStack(spacing: 15) {
+                // Time completed
+                HStack {
+                    Image(systemName: "clock.fill")
+                        .foregroundColor(.blue)
+                    Text("Time:")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(viewModel.formattedTime)
+                        .font(.system(size: 18, weight: .semibold, design: .monospaced))
+                }
+                .padding(.horizontal, 30)
+                
+                // Hints used
+                if viewModel.hintHistory.count > 0 {
+                    HStack {
+                        Image(systemName: "lightbulb.fill")
+                            .foregroundColor(.yellow)
+                        Text("Hints Used:")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(viewModel.hintHistory.count)")
+                            .font(.system(size: 18, weight: .semibold))
+                    }
+                    .padding(.horizontal, 30)
+                }
+                
+                // Difficulty
+                HStack {
+                    Image(systemName: "star.fill")
+                        .foregroundColor(difficultyColor)
+                    Text("Difficulty:")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(difficultyName)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(difficultyColor)
+                }
+                .padding(.horizontal, 30)
+            }
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(UIColor.secondarySystemBackground))
+            )
+            .padding(.horizontal, 20)
+            
             // Star rating display
             HStack(spacing: 10) {
-                ForEach(0..<3) { index in
-                    Image(systemName: "star.fill")
+                ForEach(0..<3, id: \.self) { index in
+                    Image(systemName: index < starRating ? "star.fill" : "star")
                         .font(.title)
-                        .foregroundColor(.yellow)
+                        .foregroundColor(index < starRating ? .yellow : .gray.opacity(0.3))
                         .scaleEffect(1.2)
                         .animation(.spring(response: 0.3, dampingFraction: 0.6).delay(Double(index) * 0.1), value: viewModel.currentPhase)
                 }
             }
-            .padding()
+            .padding(.top, 5)
             
             // Navigation buttons
             HStack(spacing: 20) {

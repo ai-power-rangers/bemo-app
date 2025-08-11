@@ -36,8 +36,15 @@ class TangramEditorTool: DevTool {
     // Use editor configuration with custom bars
     var devToolUIConfig: DevToolUIConfig {
         // Simple configuration - let the views handle their own visibility
-        let topBar = viewModel != nil ? AnyView(TangramEditorTopBar(viewModel: viewModel!, delegate: delegate)) : nil
-        let bottomBar = viewModel != nil ? AnyView(TangramEditorBottomBar(viewModel: viewModel!)) : nil
+        let topBar: AnyView? = {
+            guard let vm = viewModel else { return nil }
+            return AnyView(TangramEditorTopBar(viewModel: vm, delegate: delegate))
+        }()
+        
+        let bottomBar: AnyView? = {
+            guard let vm = viewModel else { return nil }
+            return AnyView(TangramEditorBottomBar(viewModel: vm))
+        }()
         
         return DevToolUIConfig(
             respectsSafeAreas: true,

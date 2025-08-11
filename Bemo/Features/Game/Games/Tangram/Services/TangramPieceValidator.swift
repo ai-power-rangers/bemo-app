@@ -7,7 +7,7 @@
 
 // WHAT: Single source of truth for validating if a placed piece matches a target position
 // ARCHITECTURE: Service in MVVM-S, used by all components that need placement validation
-// USAGE: Inject as service, call validate() to check if a piece is correctly placed
+// USAGE: Call validatePiece() to check if a piece is correctly placed
 
 import Foundation
 import CoreGraphics
@@ -28,66 +28,63 @@ class TangramPieceValidator {
         self.rotationTolerance = rotationTolerance
     }
     
-    // MARK: - Main Validation Method
-    
-    /// Validates if a placed piece matches a target position within tolerances
-    /// - Parameters:
-    ///   - placed: The piece placed by the player
-    ///   - target: The target position from the puzzle solution
-    /// - Returns: True if the piece matches within position and rotation tolerances
-    func validate(placed: PlacedPiece, target: GamePuzzleData.TargetPiece) -> Bool {
-        // 1. Piece type must match
-        guard placed.pieceType == target.pieceType else { 
-            return false 
-        }
-        
-        // 2. Extract target position and rotation from transform
-        let targetPosition = CGPoint(x: target.transform.tx, y: target.transform.ty)
-        let targetRotation = CGFloat(TangramGeometryUtilities.extractRotation(from: target.transform))
-        
-        // 3. Check if position is within tolerance
-        let distance = hypot(
-            placed.position.x - targetPosition.x,
-            placed.position.y - targetPosition.y
-        )
-        
-        guard distance < positionTolerance else {
-            return false
-        }
-        
-        // 4. Check if flip state matches (for parallelogram)
-        let targetIsFlipped = detectFlip(from: target.transform)
-        
-        // For parallelogram, flip state must match
-        if placed.pieceType == .parallelogram && placed.isFlipped != targetIsFlipped {
-            return false
-        }
-        
-        // 5. Check if rotation matches (accounting for symmetry and flip state)
-        let rotationValid = TangramRotationValidator.isRotationValid(
-            currentRotation: placed.rotation * .pi / 180, // Convert to radians
-            targetRotation: targetRotation,
-            pieceType: placed.pieceType,
-            isFlipped: placed.isFlipped,  // Use actual flip state from placed piece
-            toleranceDegrees: rotationTolerance
-        )
-        
-        return rotationValid
-    }
-    
-    // MARK: - SpriteKit Validation
+    // MARK: - Validation Result Type
     
     typealias ValidationResult = (positionValid: Bool, rotationValid: Bool, flipValid: Bool)
     
-    /// Validates placement for SpriteKit scene (uses radians for rotation)
+    // MARK: - Main Validation Method
+    
+    /// Validates placement using feature angles for consistent comparison
     /// - Parameters:
-    ///   - piecePosition: Current position of the piece
-    ///   - pieceRotation: Current rotation in radians
+    ///   - piecePosition: Current position of the piece (in scene space)
+    ///   - pieceFeatureAngle: Current feature angle of the piece (zRotation + localFeature)
+    ///   - targetFeatureAngle: Target feature angle from the puzzle
     ///   - pieceType: Type of the piece
     ///   - isFlipped: Whether the piece is flipped
-    ///   - targetTransform: ORIGINAL transform from puzzle data (not adjusted)
-    ///   - targetWorldPos: World position for the target (already adjusted for SpriteKit)
+    ///   - targetTransform: Transform from puzzle data (for flip detection)
+    ///   - targetWorldPos: World position for the target (in scene space)
     /// - Returns: Tuple of (positionValid, rotationValid, flipValid)
+    func validateForSpriteKitWithFeatures(
+        piecePosition: CGPoint,
+        pieceFeatureAngle: CGFloat,
+        targetFeatureAngle: CGFloat,
+        pieceType: TangramPieceType,
+        isFlipped: Bool,
+        targetTransform: CGAffineTransform,
+        targetWorldPos: CGPoint
+    ) -> ValidationResult {
+        
+        // Validate position
+        let distance = hypot(piecePosition.x - targetWorldPos.x, piecePosition.y - targetWorldPos.y)
+        let positionValid = distance < positionTolerance
+        
+        // Validate rotation - feature angle comparison with symmetry
+        let rotationValid = TangramRotationValidator.isRotationValid(
+            currentRotation: pieceFeatureAngle,
+            targetRotation: targetFeatureAngle,
+            pieceType: pieceType,
+            isFlipped: isFlipped,
+            toleranceDegrees: rotationTolerance
+        )
+        
+        // Validate flip state (for parallelogram only)
+        let flipValid: Bool
+        if pieceType == .parallelogram {
+            let targetIsFlipped = detectFlip(from: targetTransform)
+            // Inverted logic for parallelograms due to coordinate system handedness
+            flipValid = (isFlipped != targetIsFlipped)
+        } else {
+            flipValid = true
+        }
+        
+        return (positionValid, rotationValid, flipValid)
+    }
+    
+    // MARK: - Legacy Support (Deprecated)
+    
+    /// Legacy validation method - DEPRECATED, use validateForSpriteKitWithFeatures instead
+    /// This method mixes raw angles with feature angles and causes validation issues
+    @available(*, deprecated, message: "Use validateForSpriteKitWithFeatures for consistent feature-based validation")
     func validateForSpriteKit(
         piecePosition: CGPoint,
         pieceRotation: CGFloat,
@@ -96,77 +93,60 @@ class TangramPieceValidator {
         targetTransform: CGAffineTransform,
         targetWorldPos: CGPoint
     ) -> ValidationResult {
+        // This legacy path should not be used
+        // Return false for all validations to force migration to feature-based validation
+        return (false, false, false)
+    }
+    
+    // MARK: - PlacedPiece Support
+    
+    /// Validates if a placed piece matches a target position within tolerances
+    func validate(placed: PlacedPiece, target: GamePuzzleData.TargetPiece) -> Bool {
+        // Piece type must match
+        guard placed.pieceType == target.pieceType else {
+            return false
+        }
         
-        // Extract rotation from the ORIGINAL transform (not the sprite's)
-        let targetRotation = TangramGeometryUtilities.extractRotation(from: targetTransform)
+        // Extract target position and TRUE expected SK rotation (no baseline adjustment)
+        let rawPosition = TangramPoseMapper.rawPosition(from: target.transform)
+        let targetPosition = TangramPoseMapper.spriteKitPosition(fromRawPosition: rawPosition)
         
-        // Validate position
-        let distance = hypot(piecePosition.x - targetWorldPos.x, piecePosition.y - targetWorldPos.y)
-        let positionValid = distance < positionTolerance
+        let rawAngle = TangramPoseMapper.rawAngle(from: target.transform)
+        let expectedZRotationSK = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
         
-        // Validate rotation (accounting for symmetry)
+        // Check position
+        let distance = hypot(placed.position.x - targetPosition.x, placed.position.y - targetPosition.y)
+        guard distance < positionTolerance else {
+            return false
+        }
+        
+        // Check flip state for parallelogram
+        if placed.pieceType == .parallelogram {
+            let targetIsFlipped = detectFlip(from: target.transform)
+            // Inverted logic for parallelograms
+            guard placed.isFlipped != targetIsFlipped else {
+                return false
+            }
+        }
+        
+        // Check rotation with symmetry
+        let placedRotationRad = placed.rotation * .pi / 180
         let rotationValid = TangramRotationValidator.isRotationValid(
-            currentRotation: pieceRotation,
-            targetRotation: targetRotation,
-            pieceType: pieceType,
-            isFlipped: isFlipped,
+            currentRotation: placedRotationRad,
+            targetRotation: expectedZRotationSK,
+            pieceType: placed.pieceType,
+            isFlipped: placed.isFlipped,
             toleranceDegrees: rotationTolerance
         )
         
-        // Validate flip state (for parallelogram)
-        var flipValid = true
-        if pieceType == .parallelogram {
-            let targetIsFlipped = detectFlip(from: targetTransform)
-            // IMPORTANT: The piece's isFlipped state is INVERTED from what the transform indicates
-            // When piece isFlipped = true, it shows the normal parallelogram
-            // When transform determinant > 0 (not flipped), we need piece isFlipped = true
-            // So we need to invert the comparison
-            flipValid = (isFlipped != targetIsFlipped)  // INVERTED!
-        } else {
-            flipValid = true  // Other pieces don't need flip validation
-        }
-        
-        return (positionValid, rotationValid, flipValid)
+        return rotationValid
     }
     
     // MARK: - Helper Methods
     
-    
     /// Detects if a transform represents a flipped piece
-    /// A negative determinant indicates a flip transformation
     private func detectFlip(from transform: CGAffineTransform) -> Bool {
-        return TangramGeometryUtilities.isTransformFlipped(transform)
-    }
-}
-
-// MARK: - Static Compatibility Layer (for migration)
-
-extension TangramPieceValidator {
-    /// Static validation method for backward compatibility
-    /// @deprecated: Use instance method instead
-    static func validate(placed: PlacedPiece, target: GamePuzzleData.TargetPiece) -> Bool {
-        let validator = TangramPieceValidator()
-        return validator.validate(placed: placed, target: target)
-    }
-    
-    /// Static SpriteKit validation for backward compatibility
-    /// @deprecated: Use instance method instead
-    static func validateForSpriteKit(
-        piecePosition: CGPoint,
-        pieceRotation: CGFloat,
-        pieceType: TangramPieceType,
-        isFlipped: Bool,
-        targetTransform: CGAffineTransform,
-        targetWorldPos: CGPoint
-    ) -> ValidationResult {
-        let validator = TangramPieceValidator()
-        return validator.validateForSpriteKit(
-            piecePosition: piecePosition,
-            pieceRotation: pieceRotation,
-            pieceType: pieceType,
-            isFlipped: isFlipped,
-            targetTransform: targetTransform,
-            targetWorldPos: targetWorldPos
-        )
+        let determinant = transform.a * transform.d - transform.b * transform.c
+        return determinant < 0
     }
 }

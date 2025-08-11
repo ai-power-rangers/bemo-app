@@ -84,9 +84,7 @@ class TangramGameViewModel {
                     let puzzles = try await self.container.databaseLoader.loadOfficialPuzzles()
                     self.availablePuzzles = puzzles
                 } catch {
-                    #if DEBUG
-                    print("Failed to load puzzles: \(error)")
-                    #endif
+                    // Handle error silently
                 }
             }
         }
@@ -124,7 +122,6 @@ class TangramGameViewModel {
         }
         
         guard let puzzle = gamePuzzleData else {
-            print("Error: Failed to convert puzzle data")
             return
         }
         
@@ -133,9 +130,6 @@ class TangramGameViewModel {
         currentPhase = .playingPuzzle
         progress = 0.0
         showHints = false
-        // Reset timer
-        timerStarted = false
-        elapsedTime = 0
         
         // Initialize GameProgress for automatic time tracking
         gameProgress = GameProgress(
@@ -146,6 +140,9 @@ class TangramGameViewModel {
             startTime: Date(),
             lastProgressTime: Date()
         )
+        
+        // Auto-start timer when puzzle is selected
+        startTimer()
         
         // Start game session if we have supabase service
         startGameSession(puzzleId: puzzle.id, puzzleName: puzzle.name, difficulty: puzzle.difficulty)
@@ -182,22 +179,22 @@ class TangramGameViewModel {
     }
     
     func toggleHints() {
-        print("DEBUG: toggleHints called")
-        // Just request a hint, don't toggle state
-        requestStructuredHint()
+        // Only request a hint if one isn't already showing
+        // This prevents the toggle behavior from rapid clicking
+        if currentHint == nil {
+            requestStructuredHint()
+        }
+        // If a hint is already showing, do nothing (let it complete its duration)
     }
     
     func requestStructuredHint() {
-        print("DEBUG: requestStructuredHint called")
         guard let puzzle = selectedPuzzle else { 
-            print("DEBUG: No selected puzzle")
             return 
         }
         
         let timeSinceProgress = Date().timeIntervalSince(lastProgressTime)
         
         // Get intelligent hint
-        print("DEBUG: Calling hintEngine.determineNextHint")
         let hint = container.hintEngine.determineNextHint(
             puzzle: puzzle,
             placedPieces: placedPieces,
@@ -206,13 +203,8 @@ class TangramGameViewModel {
             previousHints: hintHistory
         )
         
-        print("DEBUG: Got hint: \(hint != nil)")
         if let hint = hint {
-            print("DEBUG: Hint type: \(hint.hintType)")
-            print("DEBUG: Hint target piece: \(hint.targetPiece.rawValue)")
-            
             // Set the hint directly - no need for nil pattern
-            print("DEBUG: Setting currentHint directly")
             currentHint = hint
             
             // Track hint
@@ -232,9 +224,9 @@ class TangramGameViewModel {
             // Cancel any existing dismiss task
             hintDismissTask?.cancel()
             
-            // Auto-dismiss hint after 3 seconds
+            // Auto-dismiss hint after 4 seconds
             hintDismissTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
+                try? await Task.sleep(nanoseconds: 4_000_000_000) // 4 seconds
                 guard !Task.isCancelled else { return }
                 self?.clearHint()
             }
@@ -318,7 +310,8 @@ class TangramGameViewModel {
             // Create a perfectly placed piece
             // Extract position from transform (tx, ty) and rotation from transform matrix
             let position = CGPoint(x: targetPiece.transform.tx, y: targetPiece.transform.ty)
-            let rotation = TangramGeometryUtilities.extractRotation(from: targetPiece.transform) * 180.0 / .pi
+            // Use sceneRotation for consistency with rendering
+            let rotation = TangramGeometryUtilities.sceneRotation(from: targetPiece.transform) * 180.0 / .pi
             
             let mockPiece = RecognizedPiece(
                 id: "touch_\(pieceType)_\(UUID().uuidString.prefix(8))",
@@ -399,13 +392,20 @@ class TangramGameViewModel {
     func handlePuzzleCompletion() {
         // Puzzle completed via SpriteKit
         stopTimer()
-        currentPhase = .puzzleComplete
         
-        // Track completion metrics
+        // Track completion metrics before showing modal
         trackPuzzleCompletion()
         
         let xpAwarded = calculateXP()
         delegate?.gameDidCompleteLevel(xpAwarded: xpAwarded)
+        
+        // Delay showing the completion modal to allow celebration animation
+        Task { @MainActor [weak self] in
+            // Wait for celebration animation (3 seconds)
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.currentPhase = .puzzleComplete
+        }
     }
     
     // MARK: - CV Processing
@@ -730,7 +730,6 @@ class TangramGameViewModel {
                     sessionId: currentSessionId
                 )
             } catch {
-                print("Failed to track hint usage: \(error)")
                 // Don't let tracking errors interrupt gameplay
             }
         }
@@ -770,7 +769,7 @@ class TangramGameViewModel {
                 endGameSession(completed: true)
                 
             } catch {
-                print("Failed to track puzzle completion: \(error)")
+                // Handle error silently
             }
         }
     }
