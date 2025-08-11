@@ -28,25 +28,6 @@ class TangramGameplayService {
     
     // MARK: - Validation Logic
     
-    /// Validates piece placement against target
-    func validatePiecePlacement(
-        piecePosition: CGPoint,
-        pieceRotation: CGFloat,
-        pieceType: TangramPieceType,
-        isFlipped: Bool,
-        targetTransform: CGAffineTransform,
-        targetWorldPos: CGPoint
-    ) -> TangramPieceValidator.ValidationResult {
-        return pieceValidator.validateForSpriteKit(
-            piecePosition: piecePosition,
-            pieceRotation: pieceRotation,
-            pieceType: pieceType,
-            isFlipped: isFlipped,
-            targetTransform: targetTransform,
-            targetWorldPos: targetWorldPos
-        )
-    }
-    
     /// Checks if a piece is close enough to snap to target
     func shouldShowSnapPreview(piecePosition: CGPoint, targetPosition: CGPoint) -> Bool {
         let distance = hypot(piecePosition.x - targetPosition.x, piecePosition.y - targetPosition.y)

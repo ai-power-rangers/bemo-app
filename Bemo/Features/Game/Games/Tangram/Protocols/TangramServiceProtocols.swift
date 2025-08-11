@@ -32,16 +32,6 @@ protocol PieceValidating {
 // MARK: - Gameplay Service
 
 protocol TangramGameplayProviding {
-    /// Validates piece placement against target
-    func validatePiecePlacement(
-        piecePosition: CGPoint,
-        pieceRotation: CGFloat,
-        pieceType: TangramPieceType,
-        isFlipped: Bool,
-        targetTransform: CGAffineTransform,
-        targetWorldPos: CGPoint
-    ) -> TangramPieceValidator.ValidationResult
-    
     /// Checks if a piece is close enough to snap to target
     func shouldShowSnapPreview(piecePosition: CGPoint, targetPosition: CGPoint) -> Bool
     

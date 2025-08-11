@@ -130,9 +130,6 @@ class TangramGameViewModel {
         currentPhase = .playingPuzzle
         progress = 0.0
         showHints = false
-        // Reset timer
-        timerStarted = false
-        elapsedTime = 0
         
         // Initialize GameProgress for automatic time tracking
         gameProgress = GameProgress(
@@ -143,6 +140,9 @@ class TangramGameViewModel {
             startTime: Date(),
             lastProgressTime: Date()
         )
+        
+        // Auto-start timer when puzzle is selected
+        startTimer()
         
         // Start game session if we have supabase service
         startGameSession(puzzleId: puzzle.id, puzzleName: puzzle.name, difficulty: puzzle.difficulty)
@@ -179,8 +179,12 @@ class TangramGameViewModel {
     }
     
     func toggleHints() {
-        // Just request a hint, don't toggle state
-        requestStructuredHint()
+        // Only request a hint if one isn't already showing
+        // This prevents the toggle behavior from rapid clicking
+        if currentHint == nil {
+            requestStructuredHint()
+        }
+        // If a hint is already showing, do nothing (let it complete its duration)
     }
     
     func requestStructuredHint() {
@@ -220,9 +224,9 @@ class TangramGameViewModel {
             // Cancel any existing dismiss task
             hintDismissTask?.cancel()
             
-            // Auto-dismiss hint after 7 seconds (increased for better user comprehension)
+            // Auto-dismiss hint after 4 seconds
             hintDismissTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 7_000_000_000) // 7 seconds
+                try? await Task.sleep(nanoseconds: 4_000_000_000) // 4 seconds
                 guard !Task.isCancelled else { return }
                 self?.clearHint()
             }
@@ -388,13 +392,20 @@ class TangramGameViewModel {
     func handlePuzzleCompletion() {
         // Puzzle completed via SpriteKit
         stopTimer()
-        currentPhase = .puzzleComplete
         
-        // Track completion metrics
+        // Track completion metrics before showing modal
         trackPuzzleCompletion()
         
         let xpAwarded = calculateXP()
         delegate?.gameDidCompleteLevel(xpAwarded: xpAwarded)
+        
+        // Delay showing the completion modal to allow celebration animation
+        Task { @MainActor [weak self] in
+            // Wait for celebration animation (3 seconds)
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.currentPhase = .puzzleComplete
+        }
     }
     
     // MARK: - CV Processing

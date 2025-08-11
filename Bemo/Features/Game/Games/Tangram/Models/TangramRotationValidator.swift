@@ -32,8 +32,9 @@ struct TangramRotationValidator {
             
         case .parallelogram:
             // Parallelogram has 2-fold symmetry (180° rotation)
-            // But only when not flipped (flipping breaks the symmetry)
-            return isFlipped ? 1 : 2
+            // This is true regardless of flip state - a flipped parallelogram
+            // still looks the same when rotated 180°
+            return 2
         }
     }
     

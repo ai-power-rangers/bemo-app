@@ -65,16 +65,12 @@ struct TangramSpriteView: View {
             }
             
             if let tangramScene = scene as? TangramPuzzleScene {
-                print("DEBUG: Scene cast successful")
                 if let hint = newValue {
-                    print("DEBUG: Calling showStructuredHint on scene")
                     tangramScene.showStructuredHint(hint)
                 } else {
-                    print("DEBUG: Hint is nil, clearing any existing hints")
-                    // Could add a clearHints method if needed
+                    // Clear any existing hints when hint becomes nil
+                    tangramScene.clearStructuredHint()
                 }
-            } else {
-                print("DEBUG: Failed to cast scene to TangramPuzzleScene")
             }
         }
     }
