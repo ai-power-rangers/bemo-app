@@ -19,6 +19,10 @@ class PuzzlePieceNode: SKNode {
     var isFlipped: Bool = false  // Track if piece is flipped
     private var shapeNode: SKShapeNode?
     
+    // State tracking
+    var pieceState: PieceState?
+    private var stateIndicator: SKNode?
+    
     init(pieceType: TangramPieceType) {
         super.init()
         
@@ -31,10 +35,16 @@ class PuzzlePieceNode: SKNode {
             "pieceType": pieceType.rawValue
         ]
         
+        // Initialize piece state
+        self.pieceState = PieceState(pieceId: "piece_\(pieceType.rawValue)", pieceType: pieceType)
+        
         // Create shape node with proper geometry
         let shapeNode = createShape(for: pieceType)
         self.shapeNode = shapeNode
         addChild(shapeNode)
+        
+        // Create state indicator (initially hidden)
+        createStateIndicator()
         
         // Compute and store local feature angle
         computeAndStoreLocalFeatureAngle()
@@ -143,6 +153,101 @@ class PuzzlePieceNode: SKNode {
         computeAndStoreLocalFeatureAngle()
     }
     
+    /// Create visual indicator for state
+    private func createStateIndicator() {
+        let indicator = SKNode()
+        
+        // State icon background
+        let background = SKShapeNode(circleOfRadius: 15)
+        background.fillColor = .clear
+        background.strokeColor = .clear
+        background.position = CGPoint(x: 30, y: 30)
+        background.zPosition = 100
+        background.name = "stateBackground"
+        indicator.addChild(background)
+        
+        // State icon (checkmark, X, etc.)
+        let icon = SKLabelNode(text: "")
+        icon.fontSize = 20
+        icon.fontName = "System"
+        icon.position = CGPoint(x: 30, y: 25)
+        icon.zPosition = 101
+        icon.name = "stateIcon"
+        indicator.addChild(icon)
+        
+        self.stateIndicator = indicator
+        addChild(indicator)
+        indicator.isHidden = true
+    }
+    
+    /// Update visual state indicator
+    func updateStateIndicator() {
+        guard let state = pieceState,
+              let indicator = stateIndicator,
+              let background = indicator.childNode(withName: "stateBackground") as? SKShapeNode,
+              let icon = indicator.childNode(withName: "stateIcon") as? SKLabelNode else { return }
+        
+        // Update visibility and appearance based on state
+        switch state.state {
+        case .unobserved, .detected:
+            indicator.isHidden = true
+            self.alpha = state.displayOpacity
+            
+        case .moved:
+            indicator.isHidden = true
+            self.alpha = state.displayOpacity
+            // Add glow effect
+            shapeNode?.glowWidth = 2.0
+            
+        case .placed:
+            indicator.isHidden = true
+            self.alpha = state.displayOpacity
+            // Add pulse animation
+            if state.shouldPulse {
+                addPulseAnimation()
+            }
+            
+        case .validating:
+            indicator.isHidden = false
+            background.fillColor = SKColor(red: 0.5, green: 0.0, blue: 1.0, alpha: 0.3)
+            icon.text = "⏳"
+            if state.shouldPulse {
+                addPulseAnimation()
+            }
+            
+        case .validated:
+            indicator.isHidden = false
+            background.fillColor = SKColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 0.5)
+            icon.text = "✓"
+            self.alpha = 1.0
+            shapeNode?.glowWidth = 0
+            
+        case .invalid(let reason):
+            indicator.isHidden = false
+            background.fillColor = SKColor(red: 1.0, green: 0.0, blue: 0.0, alpha: 0.5)
+            icon.text = "✗"
+            self.alpha = state.displayOpacity
+            // Show nudge based on reason
+            showNudge(for: reason)
+        }
+    }
+    
+    private func addPulseAnimation() {
+        let pulse = SKAction.sequence([
+            SKAction.scale(to: 1.05, duration: 0.5),
+            SKAction.scale(to: 1.0, duration: 0.5)
+        ])
+        shapeNode?.run(SKAction.repeatForever(pulse), withKey: "pulse")
+    }
+    
+    private func showNudge(for reason: ValidationFailure) {
+        // This will be implemented to show visual nudges
+        // For now, just log the nudge message
+        #if DEBUG
+        print("Nudge for \(pieceType?.rawValue ?? "unknown"): \(reason.nudgeMessage)")
+        #endif
+    }
+    
     /// Compute and store the local feature angle for this piece
     private func computeAndStoreLocalFeatureAngle() {
         guard let pieceType = pieceType else { return }
@@ -171,5 +276,61 @@ class PuzzlePieceNode: SKNode {
             userData = [:]
         }
         userData!["localFeatureAngleSK"] = localFeatureAngle
+    }
+    
+    // MARK: - State Management
+    
+    /// Mark piece as detected with baseline position
+    func markAsDetected(at position: CGPoint, rotation: CGFloat) {
+        pieceState?.state = .detected(baseline: position, rotation: rotation, detectedAt: Date())
+        pieceState?.currentPosition = position
+        pieceState?.currentRotation = rotation
+        updateStateIndicator()
+    }
+    
+    /// Mark piece as moved
+    func markAsMoved() {
+        guard var state = pieceState else { return }
+        
+        switch state.state {
+        case .detected(let baseline, let rotation, _):
+            state.state = .moved(from: baseline, rotation: rotation)
+            state.interactionCount += 1
+            state.lastMovedTime = Date()
+            pieceState = state
+            
+        case .placed, .validated, .invalid:
+            // Reset to moved state
+            if let baseline = getBaseline() {
+                state.state = .moved(from: baseline.position, rotation: baseline.rotation)
+                state.lastMovedTime = Date()
+                pieceState = state
+            }
+            
+        default:
+            break
+        }
+        
+        updateStateIndicator()
+    }
+    
+    /// Mark piece as placed
+    func markAsPlaced() {
+        pieceState?.markAsPlaced()
+        updateStateIndicator()
+    }
+    
+    /// Helper to get baseline from current state
+    private func getBaseline() -> (position: CGPoint, rotation: CGFloat)? {
+        guard let state = pieceState else { return nil }
+        
+        switch state.state {
+        case .detected(let baseline, let rotation, _):
+            return (baseline, rotation)
+        case .moved(let from, let rotation):
+            return (from, rotation)
+        default:
+            return (state.currentPosition, state.currentRotation)
+        }
     }
 }

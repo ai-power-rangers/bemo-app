@@ -11,6 +11,7 @@
 
 import SpriteKit
 import SwiftUI
+import Foundation
 
 class TangramPuzzleScene: SKScene {
     
@@ -60,6 +61,12 @@ class TangramPuzzleScene: SKScene {
     private var isRotating = false
     private var lastEmittedPositions: [String: CGPoint] = [:]  // Track last emitted position per piece
     private var lastEmittedRotations: [String: CGFloat] = [:]  // Track last emitted rotation per piece
+    
+    // MARK: - State Tracking
+    
+    private var pieceStates: [String: PieceState] = [:]  // Track state for each piece
+    private var placementTimer: Timer?  // Timer for detecting placement
+    private var firstMovedPieceId: String?  // Track the anchor piece
     
     // MARK: - Rotation Dial
     
@@ -218,6 +225,30 @@ class TangramPuzzleScene: SKScene {
         // Find or create CV visualization
         let pieceId = pieceIdFromCVName(cvPiece.name)
         
+        // Only show pieces that have been moved or placed (not just detected)
+        guard let state = pieceStates[pieceId] else {
+            // Remove from CV render if it exists but we don't have state
+            if let existingNode = cvPieces[pieceId] {
+                existingNode.removeFromParent()
+                cvPieces.removeValue(forKey: pieceId)
+            }
+            return
+        }
+        
+        // Check if the state is not unobserved or detected
+        switch state.state {
+        case .unobserved, .detected:
+            // Remove from CV render if it exists but shouldn't be shown
+            if let existingNode = cvPieces[pieceId] {
+                existingNode.removeFromParent()
+                cvPieces.removeValue(forKey: pieceId)
+            }
+            return
+        case .moved, .placed, .validating, .validated, .invalid:
+            // Continue to show/update the piece in CV render
+            break
+        }
+        
         if cvPieces[pieceId] == nil {
             createCVVisualization(for: pieceId)
         }
@@ -233,7 +264,7 @@ class TangramPuzzleScene: SKScene {
         // Both sections should show pieces at the same relative scale
         
         // Simply map the position directly - pieces are already scaled consistently
-        let scale: CGFloat = 0.8  // Slight scale to keep pieces within bounds
+        let scale: CGFloat = 0.6  // Scale down slightly to fit CV render section
         
         let cvPos = CGPoint(
             x: physicalPiece.position.x * scale,
@@ -255,7 +286,7 @@ class TangramPuzzleScene: SKScene {
         // Create a visual copy for CV section
         let cvPiece = PuzzlePieceNode(pieceType: pieceType)
         cvPiece.name = "cv_\(pieceId)"
-        cvPiece.setScale(0.4)  // Match consistent scale across all sections
+        cvPiece.setScale(0.8)  // Match consistent scale across all sections
         cvPiece.alpha = 0.9
         cvPiece.isUserInteractionEnabled = false  // No interaction in CV section
         
@@ -333,7 +364,7 @@ class TangramPuzzleScene: SKScene {
         let boundsCenterSK = CGPoint(x: bounds.midX, y: bounds.midY)
         
         // Scale for fitting in the target section (matches physical pieces)
-        let displayScale: CGFloat = 0.4  // Consistent scale across all sections
+        let displayScale: CGFloat = 0.8  // Doubled from 0.4 for better visibility
         
         for target in puzzle.targetPieces {
             // Create properly transformed silhouette
@@ -395,12 +426,35 @@ class TangramPuzzleScene: SKScene {
     }
     
     private func createPhysicalPieces(_ puzzle: GamePuzzleData) {
-        // Scatter pieces on left side of physical world
-        let startX = -size.width * 0.35
-        let pieceSpacing: CGFloat = 60  // Adjusted spacing for scaled pieces
+        // Position pieces in the physical world section, ensuring all are visible
+        // Physical world section is centered at (halfWidth, bottomSectionY)
+        // and has width = size.width
         
-        // Scale pieces consistently across all sections
-        let pieceScale: CGFloat = 0.4
+        // Calculate safe bounds for piece placement (with padding from edges)
+        let sectionWidth = size.width - 60  // Leave padding on sides
+        let sectionHeight = physicalBounds.height - 40  // Leave padding top/bottom
+        
+        // Piece positioning parameters
+        let pieceSpacing: CGFloat = 90  // Space between pieces
+        let pieceScale: CGFloat = 0.8  // Scale for visibility
+        
+        // Calculate grid layout that fits all pieces on screen
+        let totalPieces = puzzle.targetPieces.count
+        let maxCols = 4  // Maximum columns to keep pieces on screen
+        let rows = (totalPieces + maxCols - 1) / maxCols  // Ceiling division
+        let cols = min(totalPieces, maxCols)
+        
+        // Calculate starting position to center the grid
+        let gridWidth = CGFloat(cols - 1) * pieceSpacing
+        let gridHeight = CGFloat(rows - 1) * pieceSpacing
+        let startX = -gridWidth / 2  // Center horizontally
+        let startY = gridHeight / 2   // Start from top of available space
+        
+        // Ensure pieces fit within bounds
+        let maxX = (sectionWidth / 2) - 50  // Right boundary with padding
+        let minX = -(sectionWidth / 2) + 50  // Left boundary with padding
+        let maxY = (sectionHeight / 2) - 20  // Top boundary
+        let minY = -(sectionHeight / 2) + 20  // Bottom boundary
         
         for (index, target) in puzzle.targetPieces.enumerated() {
             let piece = PuzzlePieceNode(pieceType: target.pieceType)
@@ -414,16 +468,31 @@ class TangramPuzzleScene: SKScene {
             // Scale piece to match display requirements
             piece.setScale(pieceScale)
             
-            // Position on left side
-            let row = index / 3
-            let col = index % 3
-            piece.position = CGPoint(
-                x: startX + CGFloat(col) * pieceSpacing,
-                y: CGFloat(row) * pieceSpacing - 50
-            )
+            // Position pieces in a grid, ensuring they stay within bounds
+            let row = index / maxCols
+            let col = index % maxCols
+            
+            var xPos = startX + CGFloat(col) * pieceSpacing
+            var yPos = startY - CGFloat(row) * pieceSpacing
+            
+            // Clamp positions to ensure pieces are on screen
+            xPos = max(minX, min(xPos, maxX))
+            yPos = max(minY, min(yPos, maxY))
+            
+            piece.position = CGPoint(x: xPos, y: yPos)
             
             // Random rotation
             piece.zRotation = CGFloat.random(in: 0...(2 * .pi))
+            
+            // Initialize piece state as DETECTED
+            let pieceId = piece.name ?? "unknown"
+            var initialState = PieceState(pieceId: pieceId, pieceType: target.pieceType)
+            initialState.state = .detected(baseline: piece.position, rotation: piece.zRotation, detectedAt: Date())
+            initialState.currentPosition = piece.position
+            initialState.currentRotation = piece.zRotation
+            pieceStates[pieceId] = initialState
+            piece.pieceState = initialState
+            piece.markAsDetected(at: piece.position, rotation: piece.zRotation)
             
             availablePieces.append(piece)
             physicalWorldSection.addChild(piece)
@@ -457,8 +526,26 @@ class TangramPuzzleScene: SKScene {
                 piece.isSelected = true
                 piece.zPosition = 1000  // Bring to front
                 
-                // Emit lift event
+                // Update piece state to MOVED when picked up
                 if let pieceId = piece.name {
+                    if var state = pieceStates[pieceId] {
+                        if case .detected(let baseline, let baseRot, _) = state.state {
+                            state.state = .moved(from: baseline, rotation: baseRot)
+                            state.interactionCount += 1
+                            state.lastMovedTime = Date()
+                            
+                            // Mark first moved piece as anchor
+                            if firstMovedPieceId == nil {
+                                firstMovedPieceId = pieceId
+                                state.isAnchor = true
+                            }
+                            
+                            pieceStates[pieceId] = state
+                            piece.pieceState = state
+                            piece.updateStateIndicator()
+                        }
+                    }
+                    
                     eventBus.emit(.pieceLifted(id: pieceId))
                 }
                 break
@@ -528,8 +615,15 @@ class TangramPuzzleScene: SKScene {
         let physicalLocation = touch.location(in: physicalWorldSection)
         selected.position = physicalLocation
         
-        // Only emit move event if position changed significantly
+        // Update piece state position
         if let pieceId = selected.name {
+            if var state = pieceStates[pieceId] {
+                state.updatePosition(selected.position, rotation: selected.zRotation)
+                pieceStates[pieceId] = state
+                selected.pieceState = state
+                selected.updateStateIndicator()
+            }
+            
             let lastPos = lastEmittedPositions[pieceId] ?? CGPoint.zero
             let distance = hypot(selected.position.x - lastPos.x, selected.position.y - lastPos.y)
             
@@ -583,8 +677,20 @@ class TangramPuzzleScene: SKScene {
         // Check for snap
         checkAndSnap(piece: selected)
         
-        // Emit place event and final CV frame
+        // Update state to PLACED and start placement timer
         if let pieceId = selected.name {
+            if var state = pieceStates[pieceId] {
+                state.markAsPlaced()
+                pieceStates[pieceId] = state
+                selected.pieceState = state
+                selected.updateStateIndicator()
+                
+                // Start timer to validate after placement delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + PieceState.placementDelay) { [weak self] in
+                    self?.validatePlacedPiece(selected)
+                }
+            }
+            
             eventBus.emit(.piecePlaced(id: pieceId))
             
             // Emit final position in CV frame
@@ -592,9 +698,6 @@ class TangramPuzzleScene: SKScene {
             lastEmittedRotations[pieceId] = selected.zRotation
             emitCVFrameUpdate()
         }
-        
-        // Validate placement
-        validatePiece(selected)
         
         // Clear selection if not showing rotation dial
         if !isShowingRotationDial {
@@ -731,11 +834,41 @@ class TangramPuzzleScene: SKScene {
         }
     }
     
-    private func validatePiece(_ piece: PuzzlePieceNode) {
+    private func validatePlacedPiece(_ piece: PuzzlePieceNode) {
         guard let puzzle = puzzle,
               let pieceType = piece.pieceType,
               let pieceId = piece.name,
               let assignedTargetId = piece.userData?["assignedTargetId"] as? String else { return }
+        
+        // Only validate pieces in PLACED state or later
+        guard var state = pieceStates[pieceId],
+              state.state.canValidate else {
+            return
+        }
+        
+        // Begin validation
+        state.beginValidation()
+        pieceStates[pieceId] = state
+        piece.pieceState = state
+        piece.updateStateIndicator()
+        
+        // Skip validation if this is the anchor piece and no other pieces are validated
+        if state.isAnchor && pieceStates.values.filter({ $0.state.canValidate && !$0.isAnchor }).isEmpty {
+            // First piece is always "valid" as reference
+            var updatedState = state
+            updatedState.markAsValidated(connections: [])
+            pieceStates[pieceId] = updatedState
+            piece.pieceState = updatedState
+            piece.updateStateIndicator()
+            
+            // Mark as completed in target section
+            completedPieces.insert(assignedTargetId)
+            if let targetNode = targetSilhouettes[assignedTargetId] {
+                targetNode.fillColor = .systemGreen
+                targetNode.alpha = 0.7
+            }
+            return
+        }
         
         // Check if piece matches its assigned target
         guard let target = puzzle.targetPieces.first(where: { $0.id == assignedTargetId }) else { return }
@@ -756,6 +889,8 @@ class TangramPuzzleScene: SKScene {
             let targetRotation = TangramPoseMapper.spriteKitAngle(fromRawAngle: TangramPoseMapper.rawAngle(from: target.transform))
             let targetLocalFeature = pieceType.isTriangle ? (3 * CGFloat.pi / 4) : 0
             let targetFeatureAngle = targetRotation + targetLocalFeature
+            
+            let distance = hypot(pieceScenePos.x - targetScenePos.x, pieceScenePos.y - targetScenePos.y)
             
             let result = validator.validateForSpriteKitWithFeatures(
                 piecePosition: pieceScenePos,
@@ -793,11 +928,128 @@ class TangramPuzzleScene: SKScene {
                 onPieceCompleted?(pieceType.rawValue, piece.isFlipped)
                 
                 return
+            } else {
+                // Update piece state to invalid with reason
+                var updatedState = state
+                let reason = determineValidationFailure(result: result, distance: distance)
+                updatedState.markAsInvalid(reason: reason)
+                pieceStates[pieceId] = updatedState
+                piece.pieceState = updatedState
+                piece.updateStateIndicator()
+                
+                // Show nudge for invalid placement
+                showNudge(for: piece, reason: reason)
             }
         }
         
         // Not valid - emit event
         eventBus.emit(.validationChanged(pieceId: pieceId, isValid: false))
+    }
+    
+    // MARK: - Nudge System
+    
+    private func showNudge(for piece: PuzzlePieceNode, reason: ValidationFailure) {
+        // Remove any existing nudge
+        piece.childNode(withName: "nudge")?.removeFromParent()
+        
+        // Create nudge node
+        let nudgeNode = SKNode()
+        nudgeNode.name = "nudge"
+        nudgeNode.zPosition = 100
+        
+        // Add text label
+        let label = SKLabelNode(text: reason.nudgeMessage)
+        label.fontSize = 14
+        label.fontColor = .white
+        label.fontName = "System-Bold"
+        
+        // Add background
+        let background = SKShapeNode(rectOf: CGSize(width: label.frame.width + 20, height: 25), cornerRadius: 12)
+        background.fillColor = SKColor.systemOrange
+        background.strokeColor = .clear
+        background.position = CGPoint(x: 0, y: 40)
+        
+        label.position = CGPoint(x: 0, y: 35)
+        
+        nudgeNode.addChild(background)
+        nudgeNode.addChild(label)
+        
+        // Add directional arrow if position is wrong
+        if case .wrongPosition = reason {
+            // Calculate direction to target
+            if let targetId = piece.userData?["assignedTargetId"] as? String,
+               let targetNode = targetSilhouettes[targetId] {
+                let targetPos = targetSection.convert(targetNode.position, to: physicalWorldSection)
+                let direction = CGPoint(
+                    x: targetPos.x - piece.position.x,
+                    y: targetPos.y - piece.position.y
+                )
+                let angle = atan2(direction.y, direction.x)
+                
+                // Create arrow
+                let arrow = SKShapeNode()
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: 0, y: 0))
+                path.addLine(to: CGPoint(x: 20, y: 0))
+                path.addLine(to: CGPoint(x: 15, y: 5))
+                path.move(to: CGPoint(x: 20, y: 0))
+                path.addLine(to: CGPoint(x: 15, y: -5))
+                arrow.path = path
+                arrow.strokeColor = .systemOrange
+                arrow.lineWidth = 2
+                arrow.zRotation = angle
+                arrow.position = CGPoint(x: 0, y: 0)
+                
+                nudgeNode.addChild(arrow)
+            }
+        }
+        
+        piece.addChild(nudgeNode)
+        
+        // Auto-remove after 3 seconds
+        let fadeOut = SKAction.sequence([
+            SKAction.wait(forDuration: 2.5),
+            SKAction.fadeOut(withDuration: 0.5),
+            SKAction.removeFromParent()
+        ])
+        nudgeNode.run(fadeOut)
+    }
+    
+    // MARK: - Validation Helpers
+    
+    private func findConnectedValidatedPieces(for piece: PuzzlePieceNode) -> Set<String> {
+        var connected = Set<String>()
+        
+        // Find all validated pieces within connection distance
+        for otherPiece in availablePieces {
+            guard let otherId = otherPiece.name,
+                  otherId != piece.name,
+                  let otherState = pieceStates[otherId],
+                  case .validated = otherState.state else { continue }
+            
+            let distance = hypot(piece.position.x - otherPiece.position.x,
+                               piece.position.y - otherPiece.position.y)
+            
+            // Consider pieces within connection threshold as connected
+            if distance < 100 {
+                connected.insert(otherId)
+            }
+        }
+        
+        return connected
+    }
+    
+    private func determineValidationFailure(result: TangramPieceValidator.ValidationResult, distance: CGFloat) -> ValidationFailure {
+        if !result.positionValid {
+            return .wrongPosition(offset: distance)
+        } else if !result.rotationValid {
+            // Estimate degrees off (rough calculation)
+            return .wrongRotation(degreesOff: 45)
+        } else if !result.flipValid {
+            return .needsFlip
+        } else {
+            return .wrongPiece
+        }
     }
     
     private func updateTargetValidation(pieceId: String, isValid: Bool) {
@@ -840,7 +1092,17 @@ class TangramPuzzleScene: SKScene {
         
         for piece in availablePieces {
             guard let pieceType = piece.pieceType,
-                  let _ = piece.name else { continue }
+                  let pieceId = piece.name else { continue }
+            
+            // Include all pieces in CV frame (for testing)
+            // In production, we'd only include moved pieces
+            // guard let state = pieceStates[pieceId] else { continue }
+            // switch state.state {
+            // case .unobserved, .detected:
+            //     continue
+            // default:
+            //     break // Include in frame
+            // }
             
             // Map piece type to CV names
             let cvName = cvNameFromPieceType(pieceType)

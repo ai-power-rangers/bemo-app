@@ -26,10 +26,13 @@ class TangramRotationDialNode: SKNode {
         originalRotation = piece.zRotation  // Store original for cancel
         originalFlipState = piece.isFlipped  // Store original flip state
         
+        // Scale dial to match piece size (pieces are scaled to 0.4)
+        let dialRadius: CGFloat = 40  // Reduced from 80 to match piece scale
+        
         // Create dial circle
-        dial = SKShapeNode(circleOfRadius: 80)
+        dial = SKShapeNode(circleOfRadius: dialRadius)
         dial.strokeColor = .systemBlue
-        dial.lineWidth = 3
+        dial.lineWidth = 2
         dial.fillColor = .clear
         dial.alpha = 0.8
         addChild(dial)
@@ -37,79 +40,79 @@ class TangramRotationDialNode: SKNode {
         // Add angle markers every 45°
         for i in 0..<8 {
             let angle = CGFloat(i) * .pi / 4
-            let marker = SKShapeNode(circleOfRadius: 3)
+            let marker = SKShapeNode(circleOfRadius: 2)
             marker.fillColor = .white
             marker.strokeColor = .systemBlue
             marker.position = CGPoint(
-                x: cos(angle) * 80,
-                y: sin(angle) * 80
+                x: cos(angle) * dialRadius,
+                y: sin(angle) * dialRadius
             )
             dial.addChild(marker)
             
             // Add labels at 0°, 90°, 180°, 270°
             if i % 2 == 0 {
                 let label = SKLabelNode(text: "\(i * 45)°")
-                label.fontSize = 10
+                label.fontSize = 8  // Smaller font
                 label.fontColor = .systemBlue
                 label.position = CGPoint(
-                    x: cos(angle) * 95,
-                    y: sin(angle) * 95 - 5
+                    x: cos(angle) * (dialRadius + 15),
+                    y: sin(angle) * (dialRadius + 15) - 3
                 )
                 dial.addChild(label)
             }
         }
         
         // Create rotation handle
-        handle = SKShapeNode(circleOfRadius: 12)
+        handle = SKShapeNode(circleOfRadius: 8)  // Reduced from 12
         handle.fillColor = .systemBlue
         handle.strokeColor = .white
         handle.lineWidth = 2
         // Position handle to match current piece rotation
         // Note: negate angle because SpriteKit zRotation is clockwise
         handle.position = CGPoint(
-            x: cos(-initialRotation) * 80,
-            y: sin(-initialRotation) * 80
+            x: cos(-initialRotation) * dialRadius,
+            y: sin(-initialRotation) * dialRadius
         )
         handle.zPosition = 10
         addChild(handle)
         
         // Add current angle display
         angleLabel = SKLabelNode(text: "\(Int(initialRotation * 180 / .pi))°")
-        angleLabel.fontSize = 16
+        angleLabel.fontSize = 12  // Smaller font
         angleLabel.fontColor = .systemBlue
         angleLabel.fontName = "System-Bold"
-        angleLabel.position = CGPoint(x: 0, y: -110)
+        angleLabel.position = CGPoint(x: 0, y: -(dialRadius + 30))
         addChild(angleLabel)
         
         // Add close button (cancel)
-        let closeButton = SKShapeNode(circleOfRadius: 15)
+        let closeButton = SKShapeNode(circleOfRadius: 12)  // Smaller button
         closeButton.fillColor = .systemRed
         closeButton.strokeColor = .white
         closeButton.lineWidth = 2
-        closeButton.position = CGPoint(x: 60, y: 60)
+        closeButton.position = CGPoint(x: 35, y: 35)  // Closer to dial
         closeButton.name = "closeRotationDial"
         
         let xLabel = SKLabelNode(text: "✕")
-        xLabel.fontSize = 16
+        xLabel.fontSize = 12  // Smaller font
         xLabel.fontColor = .white
-        xLabel.position = CGPoint(x: 0, y: -5)
+        xLabel.position = CGPoint(x: 0, y: -4)
         xLabel.name = "closeRotationDial"
         closeButton.addChild(xLabel)
         
         addChild(closeButton)
         
         // Add save button (confirm)
-        let saveButton = SKShapeNode(circleOfRadius: 15)
+        let saveButton = SKShapeNode(circleOfRadius: 12)  // Smaller button
         saveButton.fillColor = .systemGreen
         saveButton.strokeColor = .white
         saveButton.lineWidth = 2
-        saveButton.position = CGPoint(x: -60, y: 60)
+        saveButton.position = CGPoint(x: -35, y: 35)  // Closer to dial
         saveButton.name = "saveRotationDial"
         
         let checkLabel = SKLabelNode(text: "✓")
-        checkLabel.fontSize = 16
+        checkLabel.fontSize = 12  // Smaller font
         checkLabel.fontColor = .white
-        checkLabel.position = CGPoint(x: 0, y: -5)
+        checkLabel.position = CGPoint(x: 0, y: -4)
         checkLabel.name = "saveRotationDial"
         saveButton.addChild(checkLabel)
         
@@ -162,6 +165,8 @@ class TangramRotationDialNode: SKNode {
     func updateRotation(to angle: CGFloat) {
         guard let piece = targetPiece else { return }
         
+        let dialRadius: CGFloat = 60  // Match the radius used in showForPiece
+        
         // Normalize angle to [-π, π] range for consistent behavior
         let normalizedAngle = normalizeAngle(angle)
         
@@ -172,8 +177,8 @@ class TangramRotationDialNode: SKNode {
         // Note: In SpriteKit, 0° is right, positive is counter-clockwise visually
         // But zRotation is clockwise, so we negate for visual
         handle.position = CGPoint(
-            x: cos(-normalizedAngle) * 80,
-            y: sin(-normalizedAngle) * 80
+            x: cos(-normalizedAngle) * dialRadius,
+            y: sin(-normalizedAngle) * dialRadius
         )
         
         // Add visual feedback - make handle bigger when dragging

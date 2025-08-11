@@ -1,62 +1,173 @@
 # CV Mock Game - Remaining Implementation Steps
 
-## 🔴 IMMEDIATE NEXT STEPS - Movement-Based Validation
+## 🔴 CRITICAL: Smart Validation System Implementation
 
-### Step 1: Create PieceState Model
-**File**: `Models/PieceState.swift` (NEW)
+### Phase 1: Construction Group System
+**Priority: IMMEDIATE - This fundamentally changes how validation works**
+
+#### Step 1.1: Create Construction Group Model
+**File**: `Models/ConstructionGroup.swift` (NEW)
 ```swift
-enum DetectionState {
-    case unobserved
-    case detected(baseline: CGPoint, rotation: CGFloat)
-    case moved
-    case placed(at: Date)
-    case validating
-    case validated
-    case invalid(reason: ValidationFailure)
+struct ConstructionGroup {
+    let id: UUID = UUID()
+    var pieces: Set<String>                    // Piece IDs in group
+    var anchorPiece: String                    // First piece (reference)
+    var confidence: Float = 0                  // Construction intent (0-1)
+    var lastActivity: Date = Date()            // For timeout/decay
+    var validatedConnections: Set<(String, String)> = []
+    var validationState: ValidationState = .exploring
+    var attemptHistory: [String: Int] = [:]    // Attempts per piece
+    var nudgeHistory: NudgeHistory = NudgeHistory()
 }
 
-struct PieceState {
-    let pieceId: String
-    var state: DetectionState = .unobserved
-    var currentPosition: CGPoint
-    var currentRotation: CGFloat
-    var lastMovedTime: Date?
-    var interactionCount: Int = 0
-    var isAnchor: Bool = false
-    var validatedConnections: Set<String> = []
+enum ValidationState {
+    case scattered      // Pieces spread out
+    case exploring      // 2 pieces, no validation
+    case constructing   // 3+ pieces, soft validation
+    case building       // 4+ pieces, active validation
+    case completing     // >60% done, aggressive help
+}
+
+struct NudgeHistory {
+    var lastNudgeTime: Date?
+    var nudgeCount: Int = 0
+    var attemptsSinceNudge: Int = 0
+    var cooldownMultiplier: Int = 1
 }
 ```
 
-### Step 2: Update PuzzlePieceNode
-**File**: `PuzzlePieceNode.swift`
-- Add `pieceState: PieceState` property
-- Update state on drag start (MOVED)
-- Update state on drag end (PLACED)
-- Track interaction count
+#### Step 1.2: Implement Proximity Detection
+**File**: `Services/ConstructionGroupManager.swift` (NEW)
+```swift
+class ConstructionGroupManager {
+    private var groups: [UUID: ConstructionGroup] = [:]
+    private let proximityThreshold: CGFloat = 100
+    private let angleThreshold: CGFloat = 0.26  // ~15 degrees
+    
+    func updateGroups(with pieces: [PuzzlePieceNode]) -> [ConstructionGroup]
+    func calculateConfidence(for group: ConstructionGroup) -> Float
+    func mergeGroups(_ group1: UUID, _ group2: UUID)
+    func shouldValidate(group: ConstructionGroup) -> Bool
+    func determineNudgeLevel(for group: ConstructionGroup) -> NudgeLevel
+}
+```
 
-### Step 3: Implement Movement Detection
-**File**: `TangramPuzzleScene.swift`
-- Track all piece states in dictionary
-- On first detection: establish baseline
-- On touch/drag: check movement threshold
-- On release: start placement timer
-- After 1 second: transition to VALIDATING
+#### Step 1.3: Zone-Based Validation
+**File**: `TangramPuzzleScene+Zones.swift` (NEW)
+```swift
+extension TangramPuzzleScene {
+    enum Zone {
+        case organization   // Left 1/3 - never validate
+        case working       // Middle 1/3 - soft validate
+        case construction  // Right 1/3 - full validate
+    }
+    
+    func determineZone(for position: CGPoint) -> Zone
+    func validationIntensity(for zone: Zone) -> Float
+    func shouldValidateInZone(_ zone: Zone, confidence: Float) -> Bool
+}
+```
 
-### Step 4: Update Validation Logic
-**File**: `TangramPieceValidator.swift`
-- Only validate PLACED/VALIDATING pieces
-- Skip DETECTED pieces entirely
-- First MOVED piece = anchor
-- Build validation network incrementally
+### Phase 2: Intent Detection System
 
-### Step 5: Visual State Indicators
-**File**: `TangramPuzzleScene.swift`
-- DETECTED: 50% opacity
-- MOVED: 100% opacity + glow
-- PLACED: Stable display
-- VALIDATING: Pulse animation
-- VALIDATED: Green checkmark overlay
-- INVALID: Red X + nudge arrow
+#### Step 2.1: Spatial Signal Detection
+**File**: `Services/IntentDetector.swift` (NEW)
+```swift
+struct SpatialSignals {
+    var edgeProximity: Float      // 0-1, how close edges are
+    var angleAlignment: Float      // 0-1, how aligned to valid angles
+    var clusterDensity: Float      // 0-1, pieces per area
+    var centerOfMass: CGPoint      // Group center
+}
+
+struct TemporalSignals {
+    var placementSpeed: Float      // Time between placements
+    var stabilityDuration: Float   // How long stationary
+    var focusTime: Float          // Time in same area
+    var activityRecency: Float     // Time since last action
+}
+
+struct BehavioralSignals {
+    var fineAdjustments: Int       // Small rotation count
+    var repeatAttempts: Int        // Times piece moved back
+    var validConnections: Int      // Successful connections
+    var progressionRate: Float     // Valid/total ratio
+}
+```
+
+#### Step 2.2: Confidence Calculator
+**File**: `Services/ConfidenceCalculator.swift` (NEW)
+```swift
+class ConfidenceCalculator {
+    func calculate(spatial: SpatialSignals,
+                  temporal: TemporalSignals,
+                  behavioral: BehavioralSignals) -> Float {
+        
+        let spatialScore = spatial.edgeProximity * 0.4 +
+                          spatial.angleAlignment * 0.4 +
+                          spatial.clusterDensity * 0.2
+        
+        let temporalScore = temporal.stabilityDuration * 0.5 +
+                           temporal.focusTime * 0.3 +
+                           temporal.activityRecency * 0.2
+        
+        let behavioralScore = Float(behavioral.validConnections) * 0.5 +
+                             behavioral.progressionRate * 0.5
+        
+        return spatialScore * 0.3 +
+               temporalScore * 0.2 +
+               behavioralScore * 0.5
+    }
+}
+```
+
+### Phase 3: Progressive Nudge System
+
+#### Step 3.1: Smart Nudge Manager
+**File**: `Services/SmartNudgeManager.swift` (NEW)
+```swift
+class SmartNudgeManager {
+    private var nudgeHistories: [String: NudgeHistory] = [:]
+    
+    func shouldShowNudge(for piece: PuzzlePieceNode,
+                         in group: ConstructionGroup,
+                         zone: Zone) -> Bool
+    
+    func determineNudgeLevel(confidence: Float,
+                            attempts: Int,
+                            state: ValidationState) -> NudgeLevel
+    
+    func generateNudge(level: NudgeLevel,
+                      failure: ValidationFailure) -> NudgeContent
+    
+    func applyProgressiveCooldown(history: NudgeHistory) -> TimeInterval
+}
+```
+
+#### Step 3.2: Visual Nudge Improvements
+**File**: `TangramPuzzleScene+Nudges.swift` (UPDATE)
+```swift
+extension TangramPuzzleScene {
+    func showSmartNudge(for piece: PuzzlePieceNode,
+                       level: NudgeLevel,
+                       content: NudgeContent) {
+        switch level {
+        case .none:
+            return
+        case .visual:
+            // Subtle color/opacity change only
+        case .gentle:
+            // Generic text hint
+        case .specific:
+            // Specific action needed
+        case .directed:
+            // Arrow showing direction
+        case .solution:
+            // Ghost piece showing exact placement
+        }
+    }
+}
+```
 
 ## Priority 1: Core CV Mock Infrastructure ✅ MOSTLY COMPLETE
 
@@ -298,47 +409,58 @@ struct PieceState {
 - [ ] Optimize coordinate transforms
 - [ ] Cache validation results
 
-## Implementation Order
+## Implementation Order (REVISED)
 
-### Phase 1: Foundation (Week 1) ✅ MOSTLY COMPLETE
-1. Fix 4-section layout (1.1) ✅
-2. Implement CV event generation (1.2) ✅
-3. CV render section (2.1) ✅
-4. Movement-based state system (1.3) - 🔴 NEXT PRIORITY
-5. Movement-based validation (3.1) - AFTER STATES
+### Phase 1: Smart Validation Foundation (IMMEDIATE - 2-3 days)
+1. ✅ Fix piece spawning in organization zone (left side)
+2. 🔴 Implement Construction Group system (Phase 1.1-1.3)
+3. 🔴 Add zone-based validation logic
+4. 🔴 Calculate confidence scores for groups
+5. 🔴 Prevent validation of scattered pieces
 
-### Phase 2: Core Gameplay (Week 2)
-1. State-based CV rendering (2.5) - NEW
-2. Movement-based validation (3.1)
-3. Connection validation (3.2)
-4. Database integration (4.1, 4.2)
-5. Target section display (5.1)
-6. Automatic nudge system (6.1) - NEW
+### Phase 2: Intent Detection (Days 3-4)
+1. 🔴 Implement spatial signal detection
+2. 🔴 Add temporal signal tracking
+3. 🔴 Build confidence calculator
+4. 🔴 Create behavioral pattern recognition
+5. 🔴 Test with various play patterns
 
-### Phase 3: Polish (Week 3)
-1. Visual feedback (3.3)
-2. Hint system (6.1, 6.2)
-3. Progress visualization (5.2)
-4. UI/UX improvements (8.1, 8.2)
+### Phase 3: Progressive Nudges (Days 4-5)
+1. 🔴 Smart nudge manager implementation
+2. 🔴 Progressive nudge levels
+3. 🔴 Cooldown system
+4. 🔴 Zone-aware nudging
+5. 🔴 Visual nudge improvements
 
-### Phase 4: Analytics & Testing (Week 4)
-1. Metrics tracking (7.1, 7.2)
-2. Testing infrastructure (9.1, 9.2, 9.3)
-3. Performance optimization (10.1, 10.2)
-4. Bug fixes and refinement
+### Phase 4: Testing & Refinement (Days 5-7)
+1. Test with different puzzle difficulties
+2. Tune confidence thresholds
+3. Adjust zone boundaries
+4. Refine nudge timing
+5. Validate CV format compatibility
 
-## Critical Path Items
+## Critical Success Factors
 
-These must be completed for basic functionality:
+### Must Have (MVP)
+1. ✅ **Piece Organization Zone** - Left side spawn area
+2. 🔴 **Construction Groups** - Detect intent to build
+3. 🔴 **Zone-Based Validation** - Don't validate organization area
+4. 🔴 **Confidence Scoring** - Know when to validate
+5. 🔴 **Progressive Nudging** - Help without annoying
 
-1. **4-Section Layout** ✅ - COMPLETED
-2. **CV Event Generation** ✅ - COMPLETED
-3. **Basic CV Render** ✅ - COMPLETED
-4. **Movement-Based State System** - 🔴 NEXT CRITICAL
-5. **Movement-Based Validation** - REQUIRED FOR GAMEPLAY
-6. **Physical World Interactions** - IN PROGRESS (drag works, need rotation/flip)
-7. **Database Puzzle Loading** - WORKING (puzzles load)
-8. **Automatic Nudge System** - IMPROVES UX SIGNIFICANTLY
+### Should Have (Good UX)
+1. **Intent Detection** - Understand user behavior
+2. **Smart Nudge Timing** - Right help at right time
+3. **Visual State Feedback** - Clear piece states
+4. **Hint System Integration** - Manual help button
+5. **Completion Celebration** - Reward success
+
+### Nice to Have (Polish)
+1. **Auto-snap** - For nearly correct pieces
+2. **Ghost pieces** - Show solution hints
+3. **Progress indicators** - % complete
+4. **Difficulty adaptation** - Adjust based on performance
+5. **Analytics tracking** - Learn from usage
 
 ## Known Issues to Address
 
@@ -421,13 +543,39 @@ The CV mock game is complete when:
 - [ ] Metrics properly tracked
 - [ ] Graceful error handling
 
-## Final Deliverables
+## Key Architecture Insights
 
-1. Working 4-section mock CV game
-2. Complete event pipeline
-3. Full validation system
-4. Integrated hint system
-5. Analytics tracking
-6. Test suite
-7. Documentation
-8. Migration plan to real CV
+### Why Construction Groups?
+- **Natural Play Pattern**: Kids naturally cluster pieces when building
+- **Intent Detection**: Groups show purposeful construction vs exploration
+- **Scalable Validation**: Validate relationships, not absolute positions
+- **CV Ready**: Real CV will detect same spatial patterns
+
+### Why Zone-Based Validation?
+- **Mimics Physical Table**: Left = pile, Middle = work, Right = build
+- **Progressive Engagement**: Gentle introduction to validation
+- **Reduces False Positives**: Organization isn't construction
+- **User Control**: Players choose when to engage validation
+
+### Why Confidence Scoring?
+- **Adaptive System**: Responds to user behavior
+- **Prevents Frustration**: Only helps when needed
+- **Learning Curve**: System gets smarter over time
+- **Data Driven**: Can tune based on analytics
+
+## Migration to Real CV
+
+### What Changes
+1. Remove bottom physical world section
+2. CV hardware sends real events
+3. Calibration for table dimensions
+4. Physical piece detection thresholds
+
+### What Stays Same
+1. Construction group detection
+2. Zone-based validation logic  
+3. Confidence scoring system
+4. Progressive nudge strategy
+5. All validation algorithms
+
+The smart validation system is **hardware agnostic** - it works with mock or real CV events equally well!

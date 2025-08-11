@@ -231,7 +231,7 @@ class CVEventBus: ObservableObject {
         case .validationChanged(let id, let valid):
             description = "Validation \(id): \(valid ? "✓" : "✗")"
         }
-        print("🔵 CV Event: \(description)")
+        // Removed CV event logging for cleaner console
     }
     #endif
     

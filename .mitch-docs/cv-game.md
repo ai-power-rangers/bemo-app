@@ -70,67 +70,157 @@ The Tangram CV Mock Game is a transitional implementation that simulates the fut
 4. CV Render Section updates visualization
 5. Target Section validates against puzzle solution
 
-### 3. Validation System
+### 3. Smart Validation System
 
-#### Movement-Based Validation Strategy
-**Core Principle**: We don't validate until intent is demonstrated through movement.
+#### Construction-Based Validation Strategy
+**Core Principle**: Validate based on construction intent, not just movement. Users need space to organize, explore, and build progressively.
 
-##### Piece State Machine
+##### Natural Workflow Zones
 ```
-UNOBSERVED → DETECTED → MOVED → PLACED → VALIDATING → VALIDATED/INVALID
-     ↑          ↓         ↓        ↓          ↓            ↓
-     └──────────┴─────────┴────────┴──────────┴────────────┘
-                    (can return to earlier states)
+[Organization Zone] → [Working Space] → [Construction Area]
+   (Left 1/3)          (Middle 1/3)       (Right 1/3)
+   - Dump pieces       - Try fits         - Active building
+   - Sort by type      - Test angles      - Final placement
+   - Never validate     - Soft validate    - Full validate
 ```
 
-##### State Definitions
-- **UNOBSERVED**: Not yet seen by CV (initial frame)
-- **DETECTED**: CV sees piece but no movement (baseline established)
-- **MOVED**: Significant position/rotation change detected (>20mm or >10°)
-- **PLACED**: Movement stopped for >1 second (intentional placement)
-- **VALIDATING**: Checking against other validated pieces
-- **VALIDATED/INVALID**: Final determination with feedback
-
-##### Movement Detection
+##### Construction Group Detection
 ```swift
-struct PieceState {
-    var detectionState: DetectionState
-    var baselinePosition: CGPoint?  // Initial position when detected
-    var baselineRotation: CGFloat?  // Initial rotation when detected
-    var lastMovedTime: Date?
-    var placedTime: Date?
-    var validationResult: ValidationResult?
-    var isAnchor: Bool
-    var interactionCount: Int
+struct ConstructionGroup {
+    var pieces: Set<String>           // Piece IDs in group
+    var anchorPiece: String          // First piece (reference frame)
+    var confidence: Float            // Construction intent (0-1)
+    var lastActivity: Date           // For timeout/decay
+    var validatedConnections: Set<(String, String)>
 }
 
-// Movement thresholds
-let MOVEMENT_THRESHOLD: CGFloat = 20  // pixels/mm
-let ROTATION_THRESHOLD: CGFloat = 0.174  // ~10 degrees
-let PLACEMENT_TIME: TimeInterval = 1.0  // seconds
+// Group Formation Criteria
+let PROXIMITY_THRESHOLD: CGFloat = 100  // pixels between edges
+let GROUP_TIMEOUT: TimeInterval = 30    // seconds of inactivity
 ```
 
-#### Validation Sequencing
-1. **No validation on initial detection** - Pieces can be anywhere when dumped out
-2. **First moved piece** - Becomes reference (anchor), always "valid" 
-3. **Subsequent pieces** - Validate only against already-validated pieces
-4. **Growing validation network** - Each validated piece expands reference frame
+##### Progressive Validation States
+```
+SCATTERED (Initial, pieces spread out)
+    ↓ (2 pieces within proximity)
+EXPLORING (Track patterns, no validation)
+    ↓ (3rd piece OR valid connection)
+CONSTRUCTING (Soft hints, validate after attempts)
+    ↓ (4+ pieces OR 2+ valid connections)
+BUILDING (Active validation with nudges)
+    ↓ (>60% correctly placed)
+COMPLETING (Aggressive help, auto-snap available)
+```
 
-#### Anchor-Based Relative Positioning
-- First MOVED piece becomes anchor (not first detected)
-- All validations relative to anchor and validated pieces
-- Handles arbitrary puzzle positioning on tabletop
-- If anchor removed, next validated piece promoted
-- Supports multiple "puzzle islands" being built
+##### Intent Detection Signals
 
-#### Validation Process
+**Spatial Signals**
+- Edge proximity: < 100px between piece edges
+- Angle alignment: Edges within 15° of valid angles
+- Cluster density: 3+ pieces in 200px radius
+
+**Temporal Signals**
+- Rapid placement: < 5 seconds between pieces
+- Stability duration: Stationary for 2+ seconds
+- Focus time: 30+ seconds in same area
+
+**Behavioral Signals**
+- Fine adjustments: Small rotations < 5°
+- Repeated attempts: Moving piece back after displacement
+- Progressive construction: Valid connections increasing
+
+##### Confidence Scoring
 ```swift
-1. Detect movement from baseline position
-2. Wait for placement (movement stopped)
-3. Calculate relative transforms to validated pieces
-4. Compare against database solution connections
-5. Account for rotation/flip variations
-6. Provide real-time feedback (nudges)
+func calculateConfidence(group: ConstructionGroup) -> Float {
+    let proximityScore = calculateProximity(group.pieces)    // 0-1
+    let angleScore = calculateAngleAlignment(group.pieces)    // 0-1
+    let temporalScore = calculateTemporalCohesion(group)      // 0-1
+    let clusterScore = Float(group.pieces.count) / 7.0        // 0-1
+    
+    return proximityScore * 0.3 +
+           angleScore * 0.2 +
+           temporalScore * 0.2 +
+           clusterScore * 0.3
+}
+
+// Validation Thresholds
+if confidence > 0.7: validate immediately
+if confidence > 0.5: validate after 2 seconds
+if confidence < 0.5: observe only
+```
+
+#### Validation Principles
+
+1. **First Piece is Always Right**
+   - Defines coordinate system
+   - Never validated alone
+   - Becomes group anchor
+
+2. **Proximity-Triggered Validation**
+   - Scattered pieces ignored
+   - Only validate construction groups
+   - Organization zones never validated
+
+3. **Progressive Strictness**
+   ```
+   2 pieces:  No feedback, establish baseline
+   3 pieces:  Visual hints only (colors/opacity)
+   4+ pieces: Nudges after failed attempts
+   Majority:  Immediate feedback
+   ```
+
+4. **Zone-Based Behavior**
+   - Left zone: Organization only
+   - Middle zone: Exploration with soft validation
+   - Right zone: Active construction with full validation
+
+#### Smart Nudge System
+
+##### Nudge Timing Strategy
+**Never Nudge On:**
+- First piece placement (it's the anchor!)
+- Pieces in organization zone (left 1/3)
+- First 5 seconds after any placement
+- When confidence < 0.5 (just exploring)
+- Pieces > 150px from any other piece
+
+**Smart Nudge When:**
+- 3+ attempts at same connection
+- Piece placed in construction group (confidence > 0.7)
+- After stability timeout (2 seconds stationary)
+- User explicitly requests hint (button press)
+
+##### Progressive Nudge Types
+```swift
+enum NudgeLevel {
+    case none           // Silent observation
+    case visual         // Color/opacity change only
+    case gentle         // "Try rotating" (generic)
+    case specific       // "Flip this piece" (specific)
+    case directed       // Arrow showing direction
+    case solution       // Show exact placement
+}
+
+// Nudge progression by validation state
+EXPLORING:     .none
+CONSTRUCTING:  .visual → .gentle (after 3 attempts)
+BUILDING:      .gentle → .specific → .directed
+COMPLETING:    .specific → .directed → .solution
+```
+
+##### Nudge Cooldown System
+```swift
+struct NudgeHistory {
+    var lastNudgeTime: Date?
+    var nudgeCount: Int = 0
+    var attemptsSinceNudge: Int = 0
+    
+    func shouldNudge() -> Bool {
+        guard let last = lastNudgeTime else { return true }
+        let cooldown = TimeInterval(5 * nudgeCount)  // Progressive cooldown
+        return Date().timeIntervalSince(last) > cooldown
+    }
+}
 ```
 
 ### 4. Data Models
