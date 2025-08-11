@@ -11,6 +11,7 @@
 
 import Foundation
 import CoreGraphics
+import SpriteKit
 
 class TangramHintEngine {
     
@@ -285,19 +286,21 @@ class TangramHintEngine {
             current.position.y - targetPositionSK.y
         )
         
-        // Check rotation using proper validator with PoseMapper
-        let rawAngle = TangramPoseMapper.rawAngle(from: target.transform)
-        let targetRotationRad = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
-        let currentRotationRad = current.rotation * .pi / 180
+        // Compute feature angles for proper comparison
+        // Get canonical feature angle for the piece type (accounting for flip)
+        let canonicalFeature = TangramGameConstants.CanonicalFeatures.canonicalFeatureAngle(for: current.pieceType)
+        let adjustedLocalBaseline = current.isFlipped ? -canonicalFeature : canonicalFeature
+        let currentFeatureAngle = TangramRotationValidator.normalizeAngle(current.rotation * .pi / 180 + adjustedLocalBaseline)
         
-        // Get flip state from placed piece
-        let isFlipped = current.isFlipped
+        // Compute target feature angle from the baked vertices
+        let targetFeatureAngle = computeTargetFeatureAngle(from: target)
         
+        // Check if rotation is correct using feature angles
         let rotationCorrect = TangramRotationValidator.isRotationValid(
-            currentRotation: currentRotationRad,
-            targetRotation: targetRotationRad,
+            currentRotation: currentFeatureAngle,
+            targetRotation: targetFeatureAngle,
             pieceType: current.pieceType,
-            isFlipped: isFlipped,
+            isFlipped: current.isFlipped,
             toleranceDegrees: rotationTolerance
         )
         
@@ -308,14 +311,16 @@ class TangramHintEngine {
         if needsFlip {
             return .flip
         } else if !rotationCorrect && positionDiff < positionTolerance {
-            // Find the nearest valid rotation for the hint
-            let nearestRotation = TangramRotationValidator.nearestValidRotation(
-                currentRotation: currentRotationRad,
-                targetRotation: targetRotationRad,
+            // Find the nearest valid rotation in feature space
+            let nearestFeatureAngle = TangramRotationValidator.nearestValidRotation(
+                currentRotation: currentFeatureAngle,
+                targetRotation: targetFeatureAngle,
                 pieceType: current.pieceType,
-                isFlipped: isFlipped
+                isFlipped: current.isFlipped
             )
-            return .rotation(degrees: nearestRotation * 180 / .pi)
+            // Convert back to node zRotation for display
+            let nearestNodeZ = nearestFeatureAngle - adjustedLocalBaseline
+            return .rotation(degrees: nearestNodeZ * 180 / .pi)
         } else if positionDiff >= positionTolerance {
             return .position(from: current.position, to: targetPositionSK)
         } else {
@@ -331,7 +336,8 @@ class TangramHintEngine {
         let targetDeterminant = target.transform.a * target.transform.d - target.transform.b * target.transform.c
         let targetIsFlipped = targetDeterminant < 0
         
-        // Compare placed piece flip state with target
+        // Flip is needed when current state doesn't match target state
+        // This aligns with validator logic: flipValid = (isFlipped == targetIsFlipped)
         return placed.isFlipped != targetIsFlipped
     }
     
@@ -355,16 +361,15 @@ class TangramHintEngine {
             ))
             
         case .rotation(let degrees):
-            // Show rotation animation in SK space
+            // Show rotation animation
             if let current = currentTransform {
-                // Convert to SK angle for display
-                let skAngle = -CGFloat(degrees * .pi / 180)  // Negate for SK space
+                let targetAngleRad = CGFloat(degrees * .pi / 180)
                 let rawPos = TangramPoseMapper.rawPosition(from: current)
                 let skPos = TangramPoseMapper.spriteKitPosition(fromRawPosition: rawPos)
                 
-                // Create transform for SK display
+                // Create transform for display
                 var skTransform = CGAffineTransform.identity
-                skTransform = skTransform.rotated(by: skAngle)
+                skTransform = skTransform.rotated(by: targetAngleRad)
                 skTransform = skTransform.translatedBy(x: skPos.x, y: skPos.y)
                 
                 steps.append(AnimationStep(
@@ -388,15 +393,15 @@ class TangramHintEngine {
                 ))
             }
             
-        case .position(let fromPos, let toPos):
-            // Show movement from current to target in SK space
-            // Note: fromPos and toPos are already in SK space from determineHintType
+        case .position(_, let toPos):
+            // Show movement from current to target
+            // Get TRUE expected SK rotation (no baseline adjustment)
             let rawAngle = TangramPoseMapper.rawAngle(from: targetTransform)
-            let targetRotationSK = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
+            let targetZRotation = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
             
-            // Create SK transform for target position
+            // Create transform for target position
             var skTransform = CGAffineTransform.identity
-            skTransform = skTransform.rotated(by: targetRotationSK)
+            skTransform = skTransform.rotated(by: targetZRotation)
             skTransform = skTransform.translatedBy(x: toPos.x, y: toPos.y)
             
             steps.append(AnimationStep(
@@ -408,9 +413,10 @@ class TangramHintEngine {
             
         case .fullSolution:
             // Complete sequence: show rotation, flip if needed, then position
-            // All transforms need to be in SK space for rendering
+            // Get TRUE expected SK rotation (no baseline adjustment)
             let rawAngle = TangramPoseMapper.rawAngle(from: targetTransform)
-            let targetRotationSK = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
+            let targetZRotation = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
+            
             let rawPos = TangramPoseMapper.rawPosition(from: targetTransform)
             let targetPosSK = TangramPoseMapper.spriteKitPosition(fromRawPosition: rawPos)
             
@@ -425,10 +431,10 @@ class TangramHintEngine {
                 highlightType: .glow
             ))
             
-            // Step 2: Rotate if needed (in SK space)
-            if abs(targetRotationSK) > 0.1 {
+            // Step 2: Rotate if needed
+            if abs(targetZRotation) > 0.1 {
                 var rotateTransform = CGAffineTransform.identity
-                rotateTransform = rotateTransform.rotated(by: targetRotationSK)
+                rotateTransform = rotateTransform.rotated(by: targetZRotation)
                 rotateTransform = rotateTransform.translatedBy(x: startPos.x, y: startPos.y)
                 steps.append(AnimationStep(
                     duration: 1.0,
@@ -438,9 +444,9 @@ class TangramHintEngine {
                 ))
             }
             
-            // Step 3: Move to final position (in SK space)
+            // Step 3: Move to final position
             var finalTransform = CGAffineTransform.identity
-            finalTransform = finalTransform.rotated(by: targetRotationSK)
+            finalTransform = finalTransform.rotated(by: targetZRotation)
             finalTransform = finalTransform.translatedBy(x: targetPosSK.x, y: targetPosSK.y)
             steps.append(AnimationStep(
                 duration: 1.5,
@@ -514,10 +520,23 @@ class TangramHintEngine {
         return transform
     }
     
+    private func computeTargetFeatureAngle(from target: GamePuzzleData.TargetPiece) -> CGFloat {
+        // Compute target feature angle consistently with TangramPuzzleScene
+        // Get the canonical feature angle for this piece type
+        let canonicalFeatureSK = TangramGameConstants.CanonicalFeatures.canonicalFeatureAngle(for: target.pieceType)
+        
+        // Get the rotation from the transform
+        let rawAngle = TangramPoseMapper.rawAngle(from: target.transform)
+        let expectedZRotationSK = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
+        
+        // Add the rotation to the canonical to get the target feature angle
+        return TangramRotationValidator.normalizeAngle(canonicalFeatureSK + expectedZRotationSK)
+    }
+    
     private func getDefaultStartPosition(for pieceType: TangramPieceType) -> CGPoint {
         // Default positions matching the actual piece layout in TangramPuzzleScene
+        // These are approximations when we can't access the actual scene
         // Return positions in SpriteKit space (Y-up) to match scene layout
-        // Using typical screen dimensions for consistent hints
         let screenWidth: CGFloat = 390  // iPhone standard width
         let screenHeight: CGFloat = 844  // iPhone standard height
         
@@ -557,6 +576,25 @@ class TangramHintEngine {
         
         // Return in SpriteKit coordinates (Y-up) to match scene
         return CGPoint(x: x, y: y)  // Already in SK space
+    }
+    
+    /// Gets the actual position of a piece from the scene if available
+    /// Falls back to default position if scene is not accessible
+    func getActualPiecePosition(for pieceType: TangramPieceType, 
+                               availablePieces: [String: PuzzlePieceNode]?,
+                               piecesLayer: SKNode?,
+                               scene: SKScene?) -> CGPoint {
+        // Try to get actual position from scene
+        if let pieces = availablePieces,
+           let piece = pieces[pieceType.rawValue],
+           let layer = piecesLayer,
+           let scene = scene {
+            // Convert piece position from piecesLayer to scene space
+            return layer.convert(piece.position, to: scene)
+        }
+        
+        // Fallback to default approximation
+        return getDefaultStartPosition(for: pieceType)
     }
     
     /// Extracts rotation angle from CGAffineTransform with robust floating-point handling

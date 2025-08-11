@@ -9,6 +9,35 @@
 // ARCHITECTURE: SKScene integrated into SwiftUI, uses transform-based positioning
 // USAGE: Handles puzzle rendering with accurate piece shapes and transforms
 
+// COORDINATE SPACE ARCHITECTURE:
+// This scene uses multiple coordinate spaces that must be carefully managed:
+//
+// 1. SCENE SPACE (root coordinate system, Y-up)
+//    - Used for: Effects, rotation dial, validation comparisons
+//    - Children: backgroundLayer, puzzleLayer, piecesLayer, effectsLayer, uiLayer
+//
+// 2. PUZZLE LAYER SPACE (child of scene)
+//    - Used for: Target pieces (grey silhouettes)
+//    - Position: Centered at desired screen location
+//    - Children: Target shape nodes
+//
+// 3. PIECES LAYER SPACE (child of scene)
+//    - Used for: Movable pieces
+//    - Position: Origin at scene origin
+//    - Children: PuzzlePieceNode instances
+//
+// CRITICAL CONVERSION RULES:
+// - Validation: Both piece and target positions must be in SAME space (scene)
+// - Snapping: Target position must be converted to piece's parent space (piecesLayer)
+// - Effects: All positions must be in scene space (effectsLayer is scene child)
+// - Distance calculations: Both positions must be in same space
+//
+// COMMON CONVERSIONS:
+// - Piece to scene: piecesLayer.convert(piece.position, to: self)
+// - Target to scene: puzzleLayer.convert(target.position, to: self)
+// - Scene to piecesLayer: self.convert(scenePos, to: piecesLayer)
+// - Scene to puzzleLayer: self.convert(scenePos, to: puzzleLayer)
+
 import SpriteKit
 import SwiftUI
 import UIKit
@@ -29,6 +58,7 @@ class TangramPuzzleScene: SKScene {
     // MARK: - Services
     
     private let gameplayService = TangramGameplayService()
+    private let validator = TangramPieceValidator()
     private let positioningService = TangramPiecePositioningService()
     
     // Node layers
@@ -38,10 +68,13 @@ class TangramPuzzleScene: SKScene {
     private var effectsLayer = SKNode()
     private var uiLayer = SKNode()  // Layer for UI elements
     
+    // Instance-based target tracking
+    private var targetNodesById: [String: SKShapeNode] = [:]  // Target ID -> shape node
+    private var targetMetaById: [String: (pieceType: TangramPieceType, targetFeatureAngle: CGFloat, centerScene: CGPoint)] = [:]  // Target ID -> metadata with feature angle
+    private var completedTargetIds: Set<String> = []  // Track completed target instances
+    
     // Piece tracking
-    private var targetPieces: [String: SKShapeNode] = [:]
-    private var availablePieces: [String: PuzzlePieceNode] = [:]
-    private var completedPieces: Set<String> = []
+    private var availablePieces: [PuzzlePieceNode] = []  // List of available pieces
     private var selectedPiece: PuzzlePieceNode?
     
     // Layout properties
@@ -60,14 +93,6 @@ class TangramPuzzleScene: SKScene {
     private var initialPieceRotation: CGFloat = 0
     private var isRotating: Bool = false
     
-    // UI Elements
-    private var backButton: SKNode?
-    private var nextButton: SKNode?
-    private var timerLabel: SKLabelNode?
-    private var startTimerButton: SKNode?
-    private var progressBar: SKShapeNode?
-    private var progressFill: SKShapeNode?
-    private var hintsButton: SKNode?
     
     // Rotation dial
     private var rotationDial: TangramRotationDialNode?
@@ -128,9 +153,10 @@ class TangramPuzzleScene: SKScene {
         self.puzzle = puzzle
         
         // Clear existing pieces
-        targetPieces.removeAll()
+        targetNodesById.removeAll()
+        targetMetaById.removeAll()
+        completedTargetIds.removeAll()
         availablePieces.removeAll()
-        completedPieces.removeAll()
         puzzleLayer.removeAllChildren()
         piecesLayer.removeAllChildren()
         
@@ -158,103 +184,16 @@ class TangramPuzzleScene: SKScene {
             createTargetPiece(target, boundsCenterSK: currentMid)
         }
         
-        // Comprehensive vertex-level verification for ALL pieces
-        print("=== Puzzle Assembly Verification ===")
-        print("SK Bounds: \(TangramBounds.debugString(for: boundsSK))")
-        print("Bounds Center SK: (\(String(format: "%.1f", currentMid.x)), \(String(format: "%.1f", currentMid.y)))")
-        print("Desired Screen Position: (\(String(format: "%.1f", desiredMid.x)), \(String(format: "%.1f", desiredMid.y)))")
-        print("Puzzle Layer Position: (\(String(format: "%.1f", puzzleLayer.position.x)), \(String(format: "%.1f", puzzleLayer.position.y)))")
-        
-        // Verify EVERY piece with vertex-level precision
-        var totalMaxError: CGFloat = 0
-        print("\n=== Per-Piece Vertex Verification ===")
-        
-        for target in puzzle.targetPieces {
-            guard let shape = targetPieces[target.pieceType.rawValue] else { continue }
-            
-            // Get the expected vertices stored in userData
-            guard let expectedVerticesSK = shape.userData?["expectedVerticesSK"] as? [CGPoint] else { 
-                print("Warning: No expected vertices for \(target.pieceType.rawValue)")
-                continue 
-            }
-            
-            // Get the actual vertices by transforming the shape's path
-            let pathBounds = shape.path?.boundingBox ?? .zero
-            let pathCenter = CGPoint(x: pathBounds.midX, y: pathBounds.midY)
-            
-            // The path is centered, so we need to transform it by the shape's position
-            // Since zRotation is 0 (baked approach), we only need to translate
-            
-            // Calculate the centroid of expected vertices (simpler calculation)
-            var expectedCentroid = CGPoint.zero
-            for vertex in expectedVerticesSK {
-                expectedCentroid.x += vertex.x
-                expectedCentroid.y += vertex.y
-            }
-            let vertexCount = CGFloat(expectedVerticesSK.count)
-            expectedCentroid.x /= vertexCount
-            expectedCentroid.y /= vertexCount
-            
-            let actualVerticesSK = expectedVerticesSK.map { expectedVertex in
-                // The path vertices are centered, so reconstruct scene position
-                let localVertex = CGPoint(
-                    x: expectedVertex.x - expectedCentroid.x,
-                    y: expectedVertex.y - expectedCentroid.y
-                )
-                
-                // Transform to scene coordinates
-                let sceneVertex = CGPoint(
-                    x: localVertex.x + shape.position.x + puzzleLayer.position.x,
-                    y: localVertex.y + shape.position.y + puzzleLayer.position.y
-                )
-                return sceneVertex
-            }
-            
-            // Calculate per-vertex error
-            var maxVertexError: CGFloat = 0
-            for (expected, actual) in zip(expectedVerticesSK, actualVerticesSK) {
-                // Expected scene position = expected SK vertex offset by bounds center and parent position
-                let expectedScene = CGPoint(
-                    x: expected.x - currentMid.x + desiredMid.x,
-                    y: expected.y - currentMid.y + desiredMid.y
-                )
-                let error = hypot(actual.x - expectedScene.x, actual.y - expectedScene.y)
-                maxVertexError = max(maxVertexError, error)
-            }
-            
-            totalMaxError = max(totalMaxError, maxVertexError)
-            
-            // Also verify centroid position
-            let centroidSK = shape.userData?["centerX"] as? CGFloat ?? 0
-            let centroidSKY = shape.userData?["centerY"] as? CGFloat ?? 0
-            let expectedCentroidSK = CGPoint(x: centroidSK, y: centroidSKY)
-            let actualCentroidScene = puzzleLayer.convert(shape.position, to: self)
-            let expectedCentroidScene = CGPoint(
-                x: expectedCentroidSK.x - currentMid.x + desiredMid.x,
-                y: expectedCentroidSK.y - currentMid.y + desiredMid.y
-            )
-            let centroidError = hypot(actualCentroidScene.x - expectedCentroidScene.x, actualCentroidScene.y - expectedCentroidScene.y)
-            
-            print("\(target.pieceType.rawValue):")
-            print("  Max vertex error: \(String(format: "%.2f", maxVertexError)) px")
-            print("  Centroid error: \(String(format: "%.2f", centroidError)) px")
-            print("  Shape zRotation: \(String(format: "%.2f", shape.zRotation * 180 / .pi))° (should be 0)")
-        }
-        
-        print("\nTotal max vertex error across all pieces: \(String(format: "%.2f", totalMaxError)) px")
-        if totalMaxError < 1.0 {
-            print("✅ SUCCESS: Puzzle assembled with sub-pixel accuracy!")
-        } else {
-            print("⚠️ WARNING: Puzzle assembly has errors > 1px")
-        }
-        print("=====================================")
-        
         // Create movable pieces at the bottom
         createAvailablePieces(from: puzzle.targetPieces)
     }
     
     private func createTargetPiece(_ target: GamePuzzleData.TargetPiece, boundsCenterSK: CGPoint) {
-        // BAKED-VERTICES APPROACH: Apply transform directly to vertices for bulletproof rendering
+        // Extract TRUE expected SK rotation (no baseline adjustment)
+        let rawAngle = TangramPoseMapper.rawAngle(from: target.transform)
+        let expectedZRotationSK = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
+        
+        // BAKED-VERTICES APPROACH: Apply transform directly to vertices
         
         // 1. Get normalized vertices and scale them
         let normalizedVertices = TangramGameGeometry.normalizedVertices(for: target.pieceType)
@@ -309,21 +248,34 @@ class TangramPuzzleScene: SKScene {
         // 8. No rotation needed - transform is baked into the vertices
         shape.zRotation = 0
         
-        // 9. Store metadata for validation
+        // 9. Compute target feature angle using canonical values
+        // Get the canonical feature angle for this piece type
+        let canonicalFeatureSK = TangramGameConstants.CanonicalFeatures.canonicalFeatureAngle(for: target.pieceType)
+        
+        // Add the rotation from the transform to get the target feature angle
+        // expectedZRotationSK = -rawAngle (Y-flip for SpriteKit)
+        let targetFeatureAngleSK = TangramRotationValidator.normalizeAngle(canonicalFeatureSK + expectedZRotationSK)
+        
+        // 10. Store metadata for validation
         shape.userData = [
-            "centerX": centroidSK.x,  // Store the absolute SK position for validation
-            "centerY": centroidSK.y,
-            "pieceID": target.pieceType.rawValue,
-            "expectedVerticesSK": transformedVerticesSK  // Store for verification
+            "targetId": target.id,
+            "pieceType": target.pieceType.rawValue,
+            "targetFeatureAngleSK": targetFeatureAngleSK,
+            "expectedZRotationSK": expectedZRotationSK  // Keep for debugging only
         ]
         
-        targetPieces[target.pieceType.rawValue] = shape
+        // Store in instance-based tracking
+        targetNodesById[target.id] = shape
+        targetMetaById[target.id] = (
+            pieceType: target.pieceType,
+            targetFeatureAngle: targetFeatureAngleSK,  // Store feature angle for validation
+            centerScene: CGPoint(x: centroidSK.x, y: centroidSK.y)
+        )
+        
         puzzleLayer.addChild(shape)
     }
     
     private func createAvailablePieces(from targets: [GamePuzzleData.TargetPiece]) {
-        let pieceTypes = targets.map { $0.pieceType }
-        
         // Define safe bounds for piece placement
         let pieceSize: CGFloat = 80  // Max size of largest piece (with rotation)
         let margin: CGFloat = 40  // Extra margin from edges
@@ -332,9 +284,13 @@ class TangramPuzzleScene: SKScene {
         let minY = pieceSize + margin  // Bottom safe area
         let maxY = size.height * 0.35  // Keep pieces in bottom 35% of screen
         
-        // Create a scattered layout that keeps pieces on screen
-        for (index, pieceType) in pieceTypes.enumerated() {
-            let piece = PuzzlePieceNode(pieceType: pieceType)
+        // Create 1:1 mapping - each piece is bound to a specific target ID
+        for (index, target) in targets.enumerated() {
+            let piece = PuzzlePieceNode(pieceType: target.pieceType)
+            
+            // CRITICAL: Bind this piece to its specific target ID
+            piece.userData = piece.userData ?? [:]
+            piece.userData!["assignedTargetId"] = target.id
             
             // Distribute pieces in a grid-like pattern with randomization
             let cols = 3  // 3 columns for better distribution
@@ -358,12 +314,12 @@ class TangramPuzzleScene: SKScene {
                 y: min(maxY, max(minY, baseY + randomOffsetY))
             )
             
-            // Random initial rotation - like pieces dumped on a table
+            // Random initial rotation
             piece.zRotation = CGFloat.random(in: 0...(2 * .pi))
-            piece.name = "piece_\(pieceType.rawValue)"
+            piece.name = "piece_\(target.id)"  // Use target ID in name
             piece.zPosition = CGFloat(index)
             
-            availablePieces[pieceType.rawValue] = piece
+            availablePieces.append(piece)
             piecesLayer.addChild(piece)
         }
     }
@@ -470,10 +426,10 @@ class TangramPuzzleScene: SKScene {
         
         // Check if we're rotating with the dial
         if isShowingRotationDial, let dial = rotationDial {
-            // Calculate angle from dial center to touch point
+            // Calculate angle from dial center to touch point (CW convention)
             let dialPos = dial.position
-            let angle = atan2(location.y - dialPos.y, location.x - dialPos.x)
-            dial.updateRotation(to: angle)
+            let angleCW = -atan2(location.y - dialPos.y, location.x - dialPos.x)
+            dial.updateRotation(to: angleCW)
             return
         }
         
@@ -524,47 +480,131 @@ class TangramPuzzleScene: SKScene {
         
         selected.isSelected = false
         
-        // Check if close enough to snap
-        if let pieceType = selected.pieceType,
-           let target = targetPieces[pieceType.rawValue],
-           let targetData = puzzle?.targetPieces.first(where: { $0.pieceType == pieceType }) {
-            
-            // Get target position in scene coordinates
-            let targetWorldPos = puzzleLayer.convert(target.position, to: self)
-            
-            // Use the validator with scene coordinates
-            let validation = TangramPieceValidator.validateForSpriteKit(
-                piecePosition: selected.position,
-                pieceRotation: selected.zRotation,
-                pieceType: pieceType,
-                isFlipped: selected.isFlipped,
-                targetTransform: targetData.transform,
-                targetWorldPos: targetWorldPos
-            )
+        // Get the assigned target ID for this piece (1:1 mapping)
+        guard let assignedTargetId = selected.userData?["assignedTargetId"] as? String else { return }
+        
+        // Check if this target is already completed
+        if completedTargetIds.contains(assignedTargetId) {
+            return  // This piece's target is already filled
+        }
+        
+        // Get target metadata
+        guard let targetNode = targetNodesById[assignedTargetId],
+              let targetMeta = targetMetaById[assignedTargetId],
+              let targetData = puzzle?.targetPieces.first(where: { $0.id == assignedTargetId }) else { return }
+        
+        // Get positions in scene space for validation
+        let piecePosScene = piecesLayer.convert(selected.position, to: self)
+        let targetPosScene = puzzleLayer.convert(targetNode.position, to: self)
+        
+        // Get feature angles for validation
+        let localFeatureAngle = (selected.userData?["localFeatureAngleSK"] as? CGFloat) ?? 0
+        let pieceFeatureAngle = TangramRotationValidator.normalizeAngle(selected.zRotation + localFeatureAngle)
+        let targetFeatureAngle = targetMeta.targetFeatureAngle  // Use the correct feature angle
+        let pieceType = targetMeta.pieceType
+        
+        // Calculate distance for validation
+        let distance = hypot(piecePosScene.x - targetPosScene.x, piecePosScene.y - targetPosScene.y)
+        
+        // Validate using feature angles
+        let positionValid = distance < snapDistance
+        let rotationValid = TangramRotationValidator.isRotationValid(
+            currentRotation: pieceFeatureAngle,
+            targetRotation: targetFeatureAngle,
+            pieceType: pieceType,
+            isFlipped: selected.isFlipped,
+            toleranceDegrees: rotationSnapTolerance
+        )
+        
+        // Check flip validity (for parallelogram)
+        let flipValid: Bool
+        if pieceType == .parallelogram {
+            let targetDeterminant = targetData.transform.a * targetData.transform.d - targetData.transform.b * targetData.transform.c
+            let targetIsFlipped = targetDeterminant < 0
+            flipValid = (selected.isFlipped == targetIsFlipped)
+        } else {
+            flipValid = true
+        }
+        
+        let validation = (positionValid: positionValid, rotationValid: rotationValid, flipValid: flipValid)
+        
+        #if DEBUG
+        // Clean logging showing feature angles
+        print("🧩 [\(pieceType.rawValue)] targetId=\(assignedTargetId)")
+        print("   pieceZ=\(Int(selected.zRotation * 180 / .pi))°, localFeature=\(Int(localFeatureAngle * 180 / .pi))°, pieceFeature=\(Int(pieceFeatureAngle * 180 / .pi))°")
+        print("   targetFeature=\(Int(targetFeatureAngle * 180 / .pi))°, dist=\(Int(distance))px")
+        print("   posOK=\(validation.positionValid), rotOK=\(validation.rotationValid), flipOK=\(validation.flipValid)")
+        #endif
             
             if validation.positionValid {
                 if validation.rotationValid && validation.flipValid {
                     
-                    snapToPosition(piece: selected, targetPosition: targetWorldPos)
+                    // Convert target position to piece's parent space before snapping
+                    let targetPosInPiecesLayer = self.convert(targetPosScene, to: piecesLayer)
+                    snapToPosition(piece: selected, targetPosition: targetPosInPiecesLayer)
                     
-                    // Snap rotation to exact SK angle for perfect alignment using PoseMapper
-                    // Even though validation passed (within tolerance), we want exact placement
-                    let rawAngle = TangramPoseMapper.rawAngle(from: targetData.transform)
-                    let targetRotationSK = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
-                    selected.zRotation = targetRotationSK
+                    // Convert target feature angle back to node zRotation for snapping
+                    let desiredNodeZ = TangramRotationValidator.normalizeAngle(targetFeatureAngle - localFeatureAngle)
+                    selected.zRotation = desiredNodeZ
                     
+                    // Mark this specific target as completed
+                    completedTargetIds.insert(assignedTargetId)
                     markPieceComplete(selected)
-                    
-                    // Show success effect
-                    effectsRenderer.showSuccessNudge(at: selected.position)
+                    effectsRenderer.showSuccessNudge(at: targetPosScene)
                 } else {
+                    // Auto-rotate if close but wrong rotation
+                    if !validation.rotationValid && validation.flipValid {
+                        // Find nearest valid rotation in feature space
+                        let nearestFeatureAngle = TangramRotationValidator.nearestValidRotation(
+                            currentRotation: pieceFeatureAngle,
+                            targetRotation: targetFeatureAngle,
+                            pieceType: pieceType,
+                            isFlipped: selected.isFlipped
+                        )
+                        
+                        // Convert back to node zRotation
+                        let nearestNodeZ = TangramRotationValidator.normalizeAngle(nearestFeatureAngle - localFeatureAngle)
+                        let rotationDiff = abs(TangramRotationValidator.normalizeAngle(selected.zRotation - nearestNodeZ))
+                        
+                        // Auto-snap if within 60 degrees (more forgiving for triangles)
+                        let autoSnapThreshold = pieceType.rawValue.contains("Triangle") ? (60.0 * .pi / 180) : (45.0 * .pi / 180)
+                        if rotationDiff < autoSnapThreshold {
+                            selected.zRotation = nearestNodeZ
+                            
+                            // Re-validate with corrected rotation
+                            let newPieceFeature = TangramRotationValidator.normalizeAngle(selected.zRotation + localFeatureAngle)
+                            let revalidation = TangramRotationValidator.isRotationValid(
+                                currentRotation: newPieceFeature,
+                                targetRotation: targetFeatureAngle,
+                                pieceType: pieceType,
+                                isFlipped: selected.isFlipped,
+                                toleranceDegrees: rotationSnapTolerance
+                            )
+                            
+                            if revalidation && validation.flipValid {
+                                // Snap to position
+                                let targetPosInPiecesLayer = self.convert(targetPosScene, to: piecesLayer)
+                                snapToPosition(piece: selected, targetPosition: targetPosInPiecesLayer)
+                                selected.zRotation = nearestNodeZ
+                                completedTargetIds.insert(assignedTargetId)
+                                markPieceComplete(selected)
+                                effectsRenderer.showSuccessNudge(at: targetPosScene)
+                                return
+                            }
+                        }
+                    }
                     
                     // Update available pieces for hint system
-                    effectsRenderer.updateAvailablePieces(availablePieces)
+                    var availablePiecesDict: [String: PuzzlePieceNode] = [:]
+                    for piece in availablePieces {
+                        if let type = piece.pieceType {
+                            availablePiecesDict[type.rawValue] = piece
+                        }
+                    }
+                    effectsRenderer.updateAvailablePieces(availablePiecesDict)
                     effectsRenderer.showOrientationNudge(for: selected, flipNeeded: !validation.flipValid, rotationNeeded: !validation.rotationValid)
                 }
             }
-        }
         
         // Only clear selectedPiece if rotation dial is not showing
         // This ensures the flip button can still access the piece
@@ -577,19 +617,24 @@ class TangramPuzzleScene: SKScene {
     
     private func checkSnapPreview(for piece: PuzzlePieceNode) {
         // Visual preview when dragging near target
-        guard let pieceType = piece.pieceType,
-              let target = targetPieces[pieceType.rawValue] else { return }
+        guard let assignedTargetId = piece.userData?["assignedTargetId"] as? String else { return }
         
-        let targetWorldPos = puzzleLayer.convert(target.position, to: self)
-        let distance = hypot(piece.position.x - targetWorldPos.x, piece.position.y - targetWorldPos.y)
+        // Only check the assigned target (1:1 mapping)
+        guard !completedTargetIds.contains(assignedTargetId),
+              let targetNode = targetNodesById[assignedTargetId],
+              let targetMeta = targetMetaById[assignedTargetId] else { return }
+        
+        let piecePosScene = piecesLayer.convert(piece.position, to: self)
+        let targetPosScene = puzzleLayer.convert(targetNode.position, to: self)
+        let distance = hypot(piecePosScene.x - targetPosScene.x, piecePosScene.y - targetPosScene.y)
         
         // Show preview effect when close
         if distance < snapDistance * 2 {
-            target.alpha = 0.5
-            target.strokeColor = SKColor.systemBlue
+            targetNode.alpha = 0.5
+            targetNode.strokeColor = SKColor.systemBlue
         } else {
-            target.alpha = targetAlpha
-            target.strokeColor = SKColor.darkGray
+            targetNode.alpha = targetAlpha
+            targetNode.strokeColor = SKColor.darkGray
         }
     }
     
@@ -602,7 +647,6 @@ class TangramPuzzleScene: SKScene {
     private func markPieceComplete(_ piece: PuzzlePieceNode) {
         guard let pieceType = piece.pieceType else { return }
         
-        completedPieces.insert(pieceType.rawValue)
         piece.isUserInteractionEnabled = false  // Disable interaction for completed pieces
         
         // Lower z-position so new pieces are on top
@@ -611,23 +655,34 @@ class TangramPuzzleScene: SKScene {
         // Trigger completion callback with piece type and flip state
         onPieceCompleted?(pieceType.rawValue, piece.isFlipped)
         
-        // Show completion effects
+        // Convert piece position to scene space for effects
+        let piecePosScene = piecesLayer.convert(piece.position, to: self)
+        
+        // Show completion effects at scene position
         effectsRenderer.showCorrectPlacementFeedback(for: piece)
         
         if piece.pieceType == .parallelogram {
-            effectsRenderer.showCompletionEffect(at: piece.position)
+            effectsRenderer.showCompletionEffect(at: piecePosScene)
         }
         
-        // Check if puzzle is complete
-        if completedPieces.count == availablePieces.count {
+        // Check if puzzle is complete (all targets filled)
+        if completedTargetIds.count == targetNodesById.count {
             onPuzzleCompleted?()
             
-            // Trigger celebration effect
-            effectsRenderer.updateAvailablePieces(availablePieces)
+            // Convert availablePieces to dictionary for compatibility
+            var availablePiecesDict: [String: PuzzlePieceNode] = [:]
+            for piece in availablePieces {
+                if let type = piece.pieceType {
+                    availablePiecesDict[type.rawValue] = piece
+                }
+            }
             
-            // Convert availablePieces to [String: SKNode] for the celebration effect
+            // Trigger celebration effect
+            effectsRenderer.updateAvailablePieces(availablePiecesDict)
+            
+            // Convert to SKNode dictionary for effect
             var piecesAsNodes: [String: SKNode] = [:]
-            for (key, value) in availablePieces {
+            for (key, value) in availablePiecesDict {
                 piecesAsNodes[key] = value
             }
             effectsRenderer.showPuzzleCompletionCelebration(availablePieces: piecesAsNodes)
@@ -640,7 +695,11 @@ class TangramPuzzleScene: SKScene {
         // Create and show rotation dial for the piece
         let dial = TangramRotationDialNode()
         dial.showForPiece(piece)
-        dial.position = piece.position
+        
+        // CRITICAL: Convert piece position from piecesLayer to scene space for dial
+        // The dial is added to the scene, not piecesLayer
+        let piecePosScene = piecesLayer.convert(piece.position, to: self)
+        dial.position = piecePosScene
         dial.zPosition = 2000  // Above everything
         
         addChild(dial)
@@ -654,51 +713,17 @@ class TangramPuzzleScene: SKScene {
         impactFeedback.impactOccurred()
     }
     
-    private func REMOVED_showPuzzleCompletionCelebration() {
-        // Moved to TangramEffectsRenderer
-    }
-    
-    // MARK: - UI Elements (Deprecated - UI now in SwiftUI toolbar)
-    
-    func setupUIElements(timerText: String, timerStarted: Bool, progress: Double, showHints: Bool) {
-        // UI elements are now handled by SwiftUI toolbar
-        // This method is kept for compatibility but does nothing
-    }
-    
-    // UI creation methods removed - now handled by SwiftUI
-    
-    // Timer display removed - now in SwiftUI toolbar
-    
-    private func createTimerDisplay(text: String, started: Bool) {
-        // Deprecated - timer is now in SwiftUI toolbar
-        // Method kept for compatibility but does nothing
-    }
-    
-    private func createProgressBar(progress: Double) {
-        // Deprecated - progress bar is now in SwiftUI overlay
-        // Method kept for compatibility but does nothing
-    }
-    
-    private func createHintsButton(isActive: Bool) {
-        // Deprecated - hints button is now in SwiftUI toolbar
-        // Method kept for compatibility but does nothing
-    }
-    
-    func updateTimer(_ text: String, started: Bool) {
-        // Timer is displayed in SwiftUI toolbar - no action needed here
-    }
-    
-    func updateProgress(_ progress: Double) {
-        // Progress is displayed in SwiftUI overlay - no action needed here
-    }
-    
     // MARK: - Structured Hint System
     
     func showStructuredHint(_ hint: TangramHintEngine.HintData) {
         // Show hint based on type
-        let targetPosition = CGPoint(x: hint.targetTransform.tx, y: hint.targetTransform.ty)
-        // CRITICAL: Use scene-space rotation to match validation
-        let targetRotation = CGFloat(TangramGeometryUtilities.sceneRotation(from: hint.targetTransform))
+        // CRITICAL: Convert target position from raw to SK space for scene rendering
+        let rawPosition = TangramPoseMapper.rawPosition(from: hint.targetTransform)
+        let targetPosition = TangramPoseMapper.spriteKitPosition(fromRawPosition: rawPosition)
+        
+        // CRITICAL: Convert rotation from raw to SK space to match validation
+        let rawAngle = TangramPoseMapper.rawAngle(from: hint.targetTransform)
+        let targetRotation = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
         
         switch hint.hintType {
         case .nudge:
@@ -721,45 +746,7 @@ class TangramPuzzleScene: SKScene {
     // Implementation has been moved to TangramHintRenderer
     
     func updateCompletionState(_ isComplete: Bool) {
-        if isComplete {
-            // Replace back button with next button
-            backButton?.removeFromParent()
-            createNextButton()
-        }
-    }
-    
-    private func createNextButton() {
-        let buttonContainer = SKNode()
-        
-        // Create button background
-        let buttonBg = SKShapeNode(rectOf: CGSize(width: 100, height: 40), cornerRadius: 8)
-        buttonBg.fillColor = SKColor.systemGreen
-        buttonBg.strokeColor = SKColor.clear
-        buttonContainer.addChild(buttonBg)
-        
-        // Create text
-        let buttonText = SKLabelNode(text: "Next")
-        buttonText.fontName = "HelveticaNeue-Medium"
-        buttonText.fontSize = 18
-        buttonText.fontColor = SKColor.white
-        buttonText.verticalAlignmentMode = .center
-        buttonText.position = CGPoint(x: -10, y: 0)
-        buttonContainer.addChild(buttonText)
-        
-        // Add arrow
-        let arrow = SKLabelNode(text: "→")
-        arrow.fontSize = 20
-        arrow.fontColor = SKColor.white
-        arrow.verticalAlignmentMode = .center
-        arrow.position = CGPoint(x: 25, y: -7)
-        buttonContainer.addChild(arrow)
-        
-        buttonContainer.name = "nextButton"
-        // Position below safe area with extra padding for status bar
-        buttonContainer.position = CGPoint(x: 70, y: size.height - safeAreaTop - 60)
-        
-        self.nextButton = buttonContainer
-        uiLayer.addChild(buttonContainer)
+        // UI is now handled by SwiftUI
     }
     
     // MARK: - Helper Methods

@@ -43,6 +43,7 @@ struct PipelineTransformAdapter {
             )
             
             return GamePuzzleData.TargetPiece(
+                id: piece.id,
                 pieceType: piece.pieceType,
                 transform: adjustedTransform
             )

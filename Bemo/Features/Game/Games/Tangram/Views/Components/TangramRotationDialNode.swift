@@ -160,25 +160,42 @@ class TangramRotationDialNode: SKNode {
     func updateRotation(to angle: CGFloat) {
         guard let piece = targetPiece else { return }
         
-        // Update piece rotation
-        piece.zRotation = angle
+        // Normalize angle to [-π, π] range for consistent behavior
+        let normalizedAngle = normalizeAngle(angle)
         
-        // Update handle position
+        // Update piece rotation (angle is already in CW convention)
+        piece.zRotation = normalizedAngle
+        
+        // Update handle position (use original angle for smooth visual)
         handle.position = CGPoint(
             x: cos(angle) * 80,
             y: sin(angle) * 80
         )
         
         // Update angle label
-        var degrees = Int(round(angle * 180 / .pi))
+        var degrees = Int(round(normalizedAngle * 180 / .pi))
         while degrees < 0 { degrees += 360 }
         while degrees >= 360 { degrees -= 360 }
         angleLabel.text = "\(degrees)°"
     }
     
+    private func normalizeAngle(_ angle: CGFloat) -> CGFloat {
+        var normalized = angle
+        while normalized > CGFloat.pi {
+            normalized -= 2 * CGFloat.pi
+        }
+        while normalized < -CGFloat.pi {
+            normalized += 2 * CGFloat.pi
+        }
+        return normalized
+    }
+    
     func restoreOriginalRotation() {
         // Restore the piece to its original rotation and flip state if canceling
         if let piece = targetPiece {
+            print("\n=== RESTORING ORIGINAL STATE for \(piece.pieceType?.rawValue ?? "unknown") ===")
+            print("Restoring rotation to: \(String(format: "%.2f", originalRotation)) rad = \(String(format: "%.1f", originalRotation * 180 / .pi))°")
+            print("Restoring flip state to: \(originalFlipState)")
             piece.zRotation = originalRotation
             // Restore original flip state
             if piece.isFlipped != originalFlipState {

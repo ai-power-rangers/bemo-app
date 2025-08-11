@@ -35,6 +35,9 @@ class PuzzlePieceNode: SKNode {
         let shapeNode = createShape(for: pieceType)
         self.shapeNode = shapeNode
         addChild(shapeNode)
+        
+        // Compute and store local feature angle
+        computeAndStoreLocalFeatureAngle()
     }
     
     required init?(coder aDecoder: NSCoder) {
@@ -88,9 +91,6 @@ class PuzzlePieceNode: SKNode {
     }
     
     func flip() {
-        print("DEBUG flip() called on piece: \(pieceType?.rawValue ?? "unknown")")
-        print("  Before: isFlipped = \(isFlipped), xScale = \(xScale)")
-        
         // Flip the piece horizontally
         isFlipped = !isFlipped
         
@@ -139,6 +139,37 @@ class PuzzlePieceNode: SKNode {
         self.shapeNode = newShape
         addChild(newShape)
         
-        print("  After: isFlipped = \(isFlipped), shape recreated with flipped geometry")
+        // Recompute local feature angle after flip
+        computeAndStoreLocalFeatureAngle()
+    }
+    
+    /// Compute and store the local feature angle for this piece
+    private func computeAndStoreLocalFeatureAngle() {
+        guard let pieceType = pieceType else { return }
+        
+        // The actual angle the hypotenuse points at when the piece is at zRotation=0
+        // For triangles with vertices [(0,0), (2,0), (0,2)], the hypotenuse from (2,0) to (0,2)
+        // points at atan2(2, -2) = 135° (3π/4 radians)
+        var localFeatureAngle: CGFloat
+        switch pieceType {
+        case .smallTriangle1, .smallTriangle2, .mediumTriangle, .largeTriangle1, .largeTriangle2:
+            localFeatureAngle = 3 * .pi / 4  // 135° - actual hypotenuse direction
+        case .square:
+            localFeatureAngle = 0
+        case .parallelogram:
+            localFeatureAngle = 0
+        }
+        
+        // For flipped pieces, negate the feature angle
+        // This accounts for the horizontal flip changing the reference direction
+        if isFlipped {
+            localFeatureAngle = -localFeatureAngle
+        }
+        
+        // Store in userData
+        if userData == nil {
+            userData = [:]
+        }
+        userData!["localFeatureAngleSK"] = localFeatureAngle
     }
 }

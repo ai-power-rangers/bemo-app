@@ -37,7 +37,7 @@ class TangramGameplayService {
         targetTransform: CGAffineTransform,
         targetWorldPos: CGPoint
     ) -> TangramPieceValidator.ValidationResult {
-        return TangramPieceValidator.validateForSpriteKit(
+        return pieceValidator.validateForSpriteKit(
             piecePosition: piecePosition,
             pieceRotation: pieceRotation,
             pieceType: pieceType,

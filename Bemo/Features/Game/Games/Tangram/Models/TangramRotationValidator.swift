@@ -58,25 +58,37 @@ struct TangramRotationValidator {
         let toleranceRadians = toleranceDegrees * .pi / 180
         let symmetryFold = rotationalSymmetryFold(for: pieceType, isFlipped: isFlipped)
         
+        print("    Rotation Validator:")
+        print("      Piece: \(pieceType.rawValue), Symmetry fold: \(symmetryFold)")
+        print("      Current: \(String(format: "%.2f", currentRotation)) rad = \(String(format: "%.1f", currentRotation * 180 / .pi))°")
+        print("      Target: \(String(format: "%.2f", targetRotation)) rad = \(String(format: "%.1f", targetRotation * 180 / .pi))°")
+        print("      Tolerance: \(String(format: "%.1f", toleranceDegrees))° = \(String(format: "%.2f", toleranceRadians)) rad")
+        
         // If no symmetry (fold = 1), just check direct match
         if symmetryFold == 1 {
             let diff = normalizeAngle(currentRotation - targetRotation)
             let isValid = abs(diff) < toleranceRadians
+            print("      No symmetry: diff=\(String(format: "%.2f", diff)) rad = \(String(format: "%.1f", diff * 180 / .pi))°, valid=\(isValid)")
             return isValid
         }
         
         // For pieces with symmetry, check all equivalent rotations
         let symmetryAngle = (2 * .pi) / CGFloat(symmetryFold)
+        print("      Checking \(symmetryFold) equivalent rotations (every \(String(format: "%.1f", symmetryAngle * 180 / .pi))°):")
         
         for i in 0..<symmetryFold {
             let equivalentRotation = targetRotation + (CGFloat(i) * symmetryAngle)
             let diff = normalizeAngle(currentRotation - equivalentRotation)
+            let isValid = abs(diff) < toleranceRadians
+            print("        \(i): equiv=\(String(format: "%.2f", equivalentRotation)) rad = \(String(format: "%.1f", equivalentRotation * 180 / .pi))°, diff=\(String(format: "%.2f", diff)) rad = \(String(format: "%.1f", diff * 180 / .pi))°, valid=\(isValid)")
             
-            if abs(diff) < toleranceRadians {
+            if isValid {
+                print("      ✓ Found valid rotation at equivalent position \(i)")
                 return true
             }
         }
         
+        print("      ✗ No valid rotation found")
         return false
     }
     
@@ -146,7 +158,7 @@ struct TangramRotationValidator {
     // MARK: - Helpers
     
     /// Normalizes an angle to the range [-π, π]
-    private static func normalizeAngle(_ angle: CGFloat) -> CGFloat {
+    static func normalizeAngle(_ angle: CGFloat) -> CGFloat {
         var normalized = angle
         
         // Bring to range [-2π, 2π]

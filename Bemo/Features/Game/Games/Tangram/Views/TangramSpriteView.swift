@@ -53,16 +53,6 @@ struct TangramSpriteView: View {
                 tangramScene.loadPuzzle(newValue)
             }
         }
-        .onChange(of: formattedTime) { oldValue, newValue in
-            if let tangramScene = scene as? TangramPuzzleScene {
-                tangramScene.updateTimer(newValue, started: timerStarted)
-            }
-        }
-        .onChange(of: progress) { oldValue, newValue in
-            if let tangramScene = scene as? TangramPuzzleScene {
-                tangramScene.updateProgress(newValue)
-            }
-        }
         .onChange(of: isPuzzleComplete) { oldValue, newValue in
             if let tangramScene = scene as? TangramPuzzleScene {
                 tangramScene.updateCompletionState(newValue)

@@ -89,6 +89,9 @@ class AutomatedPipelineLoader {
                 return nil
             }
             
+            // Extract piece ID if present, otherwise generate one
+            let pieceId = pieceData["id"] as? String ?? UUID().uuidString
+            
             // Extract transform components
             let a = (transform["a"] as? NSNumber)?.doubleValue ?? 1.0
             let b = (transform["b"] as? NSNumber)?.doubleValue ?? 0.0
@@ -107,6 +110,7 @@ class AutomatedPipelineLoader {
             )
             
             return GamePuzzleData.TargetPiece(
+                id: pieceId,
                 pieceType: pieceType,
                 transform: affineTransform
             )
