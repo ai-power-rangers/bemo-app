@@ -158,9 +158,7 @@ class TangramRotationDialNode: SKNode {
         addChild(centerButton)
         
         // Add flip button at the bottom - only for parallelogram
-        print("DEBUG: Creating flip button check - piece type: \(piece.pieceType?.rawValue ?? "nil")")
         if piece.pieceType == .parallelogram {
-            print("DEBUG: Creating flip button for parallelogram")
             let flipButton = SKShapeNode(rectOf: CGSize(width: 60, height: 30), cornerRadius: 15)
             flipButton.fillColor = .systemPurple
             flipButton.strokeColor = .white
@@ -177,9 +175,7 @@ class TangramRotationDialNode: SKNode {
             flipButton.addChild(flipLabel)
             
             addChild(flipButton)
-            print("DEBUG: Flip button added to rotation dial")
         } else {
-            print("DEBUG: Not creating flip button - piece type is \(piece.pieceType?.rawValue ?? "nil")")
         }
     }
     
@@ -293,9 +289,6 @@ class TangramRotationDialNode: SKNode {
     func restoreOriginalRotation() {
         // Restore the piece to its original rotation and flip state if canceling
         if let piece = targetPiece {
-            print("\n=== RESTORING ORIGINAL STATE for \(piece.pieceType?.rawValue ?? "unknown") ===")
-            print("Restoring rotation to: \(String(format: "%.2f", originalRotation)) rad = \(String(format: "%.1f", originalRotation * 180 / .pi))°")
-            print("Restoring flip state to: \(originalFlipState)")
             piece.zRotation = originalRotation
             // Restore original flip state
             if piece.isFlipped != originalFlipState {

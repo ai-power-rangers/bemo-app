@@ -85,9 +85,9 @@ extension TangramPuzzleScene {
         case .organization:
             return false // Never validate
         case .working:
-            return confidence > 0.6 // Higher threshold for working space
+            return confidence > 0.4 // Moderated threshold for working space
         case .construction:
-            return confidence > 0.3 // Lower threshold for construction area
+            return confidence > 0.25 // More permissive in construction area
         }
     }
     

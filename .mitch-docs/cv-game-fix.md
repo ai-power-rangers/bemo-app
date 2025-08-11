@@ -145,3 +145,106 @@ If you want, I can implement:
   - Optional: store `expectedZRotationSK` in `createTargetSilhouette`.
 
 - Let me know and I’ll apply these edits now.
+
+--
+
+Status: I audited the hint path and the validation flow in your Tangram code. The current hint overlay ignores the target centroid and flip parity, and it doesn’t use the engine’s animation steps. The validation remains absolute-position based; there’s no anchor-to-target mapping yet, so building “correctly” at the bottom won’t validate. Group/zone gating is also strict, so validation rarely triggers.
+
+### Hints: why rotation looks wrong and how to fix
+- Root causes
+  - Wrong position reference: the hint uses `targetNode.position` (always zero) instead of the stored centroid. See:
+    ```1789:1816:Bemo/Features/Game/Games/Tangram/Views/TangramPuzzleScene.swift
+    // targetNode.position used for hint position
+    ```
+    The correct centroid was computed and saved here:
+    ```488:494:Bemo/Features/Game/Games/Tangram/Views/TangramPuzzleScene.swift
+    silhouette.userData!["centroidSK"] = ...
+    ```
+  - Missing flip: parallelogram hint never flips to match target; determinant not checked in `showHint`.
+  - Animation ignored: `TangramHintEngine` builds `AnimationStep`s (rotate/flip/move), but `showHint(for:)` doesn’t consume them.
+
+- Minimal fixes
+  - Use centroid for placement:
+    - Read `centroid = (targetNode.userData?["centroidSK"] as? NSValue)?.cgPointValue ?? .zero`
+    - Convert with `targetSection.convert(centroid, to: self)` (then to `physicalWorldSection` if rendering in bottom).
+  - Apply flip if needed:
+    - `targetIsFlipped = (a*d - b*c) < 0` on `target.transform`; call `hintPiece.flip()` when mismatch.
+  - Optionally, animate using engine steps:
+    - Translate `HintData.animationSteps` into SKActions (rotate then move), so the ghost visibly rotates/flips and moves into the silhouette.
+
+Relevant code sites:
+- Centroid creation:
+  ```438:496:Bemo/Features/Game/Games/Tangram/Views/TangramPuzzleScene.swift
+  ```
+- Current hint rendering (replace):
+  ```1789:1816:Bemo/Features/Game/Games/Tangram/Views/TangramPuzzleScene.swift
+  ```
+
+### Validation: why it doesn’t fire and what’s missing
+- Current behavior
+  - Comparisons are absolute: piece’s scene position is compared to silhouette’s scene position in the top panel. No anchor-relative mapping is applied:
+    ```972:1001:Bemo/Features/Game/Games/Tangram/Views/TangramPuzzleScene.swift
+    validator.validateForSpriteKitWithFeatures(... piecePosition: pieceScenePos, targetWorldPos: targetScenePos)
+    ```
+  - Strict gating: validation is skipped unless the piece is in a construction group and zone thresholds are met:
+    ```920:937;926:933:Bemo/Features/Game/Games/Tangram/Views/TangramPuzzleScene.swift
+    ```
+    With 2 pieces: exploring → no validation; with 3: constructing → confidence must exceed ~0.5.
+  - Anchor “first piece is always right” only runs after the above gating, so it rarely triggers early.
+
+- Missing piece (anchor-relative system)
+  - There’s no computed transform from the anchor piece to its target (translation/rotation/flip) to map all group pieces into the target frame for validation.
+  - Pieces are hard-bound to an `assignedTargetId`; correct placements for identical types can be rejected.
+
+- Consequences
+  - Building a correct cluster at the bottom won’t validate (different absolute positions).
+  - Confidence thresholds + zone rules often prevent validation from even attempting.
+
+### Recommended, debt-free plan
+1) Fix hint correctness
+- In `showHint(for:)`:
+  - Position: use stored centroid from `userData["centroidSK"]`, not `targetNode.position`.
+  - Rotation: continue using `spriteKitAngle(rawAngle(from: target.transform))` (correct), but…
+  - Flip: detect flip from `target.transform` and mirror the hint piece with `hintPiece.flip()` when necessary.
+  - Optional: execute `TangramHintEngine.HintData.animationSteps` as SKActions for rotate→flip→move.
+
+2) Implement anchor-relative validation
+- Define `AnchorMapping` (translation, rotation delta, flip parity) per construction group.
+- On first piece validated in a group:
+  - Choose best target of same type, compute mapping: delta position = `targetCentroidScene - anchorPieceScene`, rotation delta = `targetFeature - anchorFeature`, flip parity from determinant vs `isFlipped`.
+  - Store on the group (by group id).
+- For subsequent pieces:
+  - Transform their pose by the group’s `AnchorMapping` into target frame, then validate against the best remaining target of same type (min distance + rotation/flip pass).
+- Decouple from `assignedTargetId`; select the best target dynamically and mark it consumed.
+
+3) Tuning gates to actually validate
+- In `TangramPuzzleScene+Zones`:
+  - For working zone: drop confidence from 0.6 → ~0.4.
+  - For constructing state in `ConstructionGroupManager.shouldValidate`: lower to ~0.4.
+  - Ensure `piece.state.canValidate` after placement delay still runs; consider shortening placement delay for responsiveness during tests.
+
+4) Consistency fixes
+- Replace uses of `targetNode.position` with centroid in:
+  - `checkSnapPreview`, `checkAndSnap`, `showNudge` arrow direction, and nudge ghost placement.
+- Store `expectedZRotationSK` in `silhouette.userData` during creation to avoid recompute and ensure consistent hint/nudge rotation.
+
+5) Guardrails and tests
+- Add logs on group state, zone, confidence, and validation decisions to see why validation is skipped.
+- Unit tests for `AnchorMapping` application and flip parity.
+- Visual debug: draw ghost-target centroids in the target and the mapped piece positions when validating.
+
+Where to change
+- `Bemo/Features/Game/Games/Tangram/Views/TangramPuzzleScene.swift`: `showHint(for:)`, `validatePlacedPiece(_:)`, `checkSnapPreview`, `checkAndSnap`, `showNudge`.
+- `Bemo/Features/Game/Games/Tangram/Views/TangramPuzzleScene+Zones.swift`: thresholds.
+- `Bemo/Features/Game/Games/Tangram/Services/ConstructionGroupManager.swift`: store `AnchorMapping` per group (new).
+- Optional: `createTargetSilhouette` to store `expectedZRotationSK`.
+
+Why this will fix both issues
+- Hints will use the true centroid and flip parity, with rotation animation into the silhouette.
+- Validation will no longer rely on absolute top coordinates; instead, pieces built correctly in the bottom-right construction area will validate via the anchor-relative transform.
+
+- If you want, I can implement these edits now.
+
+- Summary
+  - Hints: use centroid + flip, optionally apply engine animation steps; current code ignores both.
+  - Validation: no anchor mapping exists yet; absolute compare + strict gating blocks validation. Add `AnchorMapping` and dynamic target matching, relax thresholds slightly.

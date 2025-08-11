@@ -54,7 +54,7 @@ class ConstructionGroupManager {
         static let activityTimeoutSec: TimeInterval = 30
         
         // Minimum pieces for validation
-        static let minPiecesForValidation: Int = 2
+        static let minPiecesForValidation: Int = 1
     }
     
     // MARK: - Properties
@@ -155,9 +155,11 @@ class ConstructionGroupManager {
             case .organization:
                 threshold = Config.organizationZoneThreshold
             case .working:
-                threshold = Config.workingZoneThreshold
+                // Slightly lower threshold to encourage early feedback in working zone
+                threshold = max(0.3, Config.workingZoneThreshold)
             case .construction:
-                threshold = Config.constructionZoneThreshold
+                // Lowest threshold in construction zone
+                threshold = min(Config.constructionZoneThreshold, 0.25)
             }
         } else {
             // Fall back to state-based thresholds
