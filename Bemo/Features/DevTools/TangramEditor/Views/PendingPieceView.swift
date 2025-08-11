@@ -30,6 +30,7 @@ struct PendingPieceView: View {
                         PieceShapeForPending(type: pieceType, scale: 50)
                             .stroke(pieceColor.opacity(0.7), lineWidth: 2)  // Lighter stroke
                     )
+                    .scaleEffect(x: viewModel.uiState.pendingPieceIsFlipped && pieceType == .parallelogram ? -1 : 1, y: 1)
                     .rotationEffect(Angle(degrees: rotation))
                 
                 // Show connection points when we're selecting them (after canvas points are selected)
@@ -43,7 +44,8 @@ struct PendingPieceView: View {
                             rotation: rotation,
                             isSelected: viewModel.uiState.selectedPendingPoints.contains { $0.id == point.id },
                             isCompatible: isPointCompatible(point),
-                            scale: 1
+                            scale: 1,
+                            isFlipped: viewModel.uiState.pendingPieceIsFlipped && pieceType == .parallelogram
                         )
                         .onTapGesture {
                             viewModel.togglePendingPoint(point)
@@ -191,17 +193,25 @@ struct PendingConnectionPoint: View {
     let isSelected: Bool
     let isCompatible: Bool
     let scale: CGFloat
+    let isFlipped: Bool  // Required parameter for flip state
     
     var body: some View {
         // The point.position is in local space (relative to piece origin)
-        // We need to rotate it, then translate to the center of the preview area
+        // We need to apply flip (if needed), then rotate, then translate to center
+        
+        // Apply flip transform first (horizontal flip)
+        let flippedPosition = isFlipped 
+            ? CGPoint(x: -point.position.x, y: point.position.y)
+            : point.position
+        
+        // Then apply rotation
         let rotationRadians = rotation * .pi / 180
         let cosAngle = cos(rotationRadians)
         let sinAngle = sin(rotationRadians)
         
         // Break down the rotation calculation into simpler parts
-        let rotatedX = point.position.x * cosAngle - point.position.y * sinAngle
-        let rotatedY = point.position.x * sinAngle + point.position.y * cosAngle
+        let rotatedX = flippedPosition.x * cosAngle - flippedPosition.y * sinAngle
+        let rotatedY = flippedPosition.x * sinAngle + flippedPosition.y * cosAngle
         let rotatedPosition = CGPoint(x: rotatedX, y: rotatedY)
         
         // Center at 125,125 to match where PieceShapeForPending draws the piece

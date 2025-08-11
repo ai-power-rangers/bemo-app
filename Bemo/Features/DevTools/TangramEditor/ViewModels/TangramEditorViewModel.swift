@@ -62,6 +62,7 @@ class TangramEditorViewModel {
     
     // MARK: - Services (Dependency Injection)
     
+    let validationService: TangramValidationService
     let transformEngine: PieceTransformEngine
     let coordinator: TangramEditorCoordinator
     let placementService: PiecePlacementService
@@ -84,6 +85,7 @@ class TangramEditorViewModel {
     // MARK: - Initialization
     
     init(puzzle: TangramPuzzle? = nil,
+         validationService: TangramValidationService,
          transformEngine: PieceTransformEngine,
          coordinator: TangramEditorCoordinator,
          placementService: PiecePlacementService,
@@ -95,6 +97,7 @@ class TangramEditorViewModel {
          puzzleManagementService: PuzzleManagementService? = nil) {
         
         // Initialize services
+        self.validationService = validationService
         self.transformEngine = transformEngine
         self.coordinator = coordinator
         self.placementService = placementService

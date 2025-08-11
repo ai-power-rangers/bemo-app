@@ -15,6 +15,33 @@ import CoreGraphics
 
 enum TangramGameConstants {
     
+    // MARK: - Canonical Feature Angles
+    
+    struct CanonicalFeatures {
+        /// Canonical feature angle for triangles in SpriteKit space
+        /// This aligns with the editor's reference frame where triangles
+        /// are considered "unrotated" when their hypotenuse points at 45°
+        static let triangleFeatureSK: CGFloat = .pi / 4  // 45° in radians
+        
+        /// Canonical feature angle for square in SpriteKit space
+        static let squareFeatureSK: CGFloat = 0
+        
+        /// Canonical feature angle for parallelogram in SpriteKit space
+        static let parallelogramFeatureSK: CGFloat = 0
+        
+        /// Get canonical feature angle for any piece type
+        static func canonicalFeatureAngle(for pieceType: TangramPieceType) -> CGFloat {
+            switch pieceType {
+            case .smallTriangle1, .smallTriangle2, .mediumTriangle, .largeTriangle1, .largeTriangle2:
+                return triangleFeatureSK
+            case .square:
+                return squareFeatureSK
+            case .parallelogram:
+                return parallelogramFeatureSK
+            }
+        }
+    }
+    
     // MARK: - Geometry
     
     /// Scale factor to convert from normalized space (0-2) to visual space (pixels)
@@ -27,13 +54,8 @@ enum TangramGameConstants {
         static let positionTolerance: CGFloat = 35.0  // Increased for better touch interaction with triangles
         
         /// Rotation tolerance for piece angle matching (in degrees)
-        static let rotationTolerance: CGFloat = 4.0  // Very tight tolerance for precise placement
-        
-        /// Legacy vertex matching tolerance (in pixels) - used for vertex-by-vertex comparison
-        static let vertexTolerance: CGFloat = 20.0  // Tightened from 30
+        static let rotationTolerance: CGFloat = 25.0  // More forgiving tolerance for touch interaction
     }
-    
-    
     
     // MARK: - Animation
     

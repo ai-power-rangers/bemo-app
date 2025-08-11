@@ -73,7 +73,8 @@ struct TangramEditorCanvasView: View {
                     
                     Spacer()
                 }
-            }
+            }  // End of Canvas point selection UI
+            }  // End of ZStack for Main Canvas
             
             // Pending piece overlay - show in multiple states
             if case .selectingPendingConnections(let type, _) = viewModel.editorState {
@@ -111,8 +112,7 @@ struct TangramEditorCanvasView: View {
                     canvasSize: canvasSize
                 )
             } else {
-            }
-            }
+                // Empty else block
             }
         }
         .alert("Placement Error", isPresented: $viewModel.uiState.showErrorAlert) {
@@ -122,7 +122,7 @@ struct TangramEditorCanvasView: View {
         } message: {
             Text(viewModel.uiState.errorMessage)
         }
-    }
+    }  // End of body
     
     // MARK: - Canvas View
     
@@ -186,8 +186,14 @@ struct TangramEditorCanvasView: View {
     private func pieceWithInteractions(_ piece: TangramPiece) -> some View {
         ZStack {
             PieceView(
-                piece: viewModel.uiState.manipulatingPieceId == piece.id && viewModel.uiState.ghostTransform != nil ? 
-                    TangramPiece(type: piece.type, transform: viewModel.uiState.ghostTransform!) : piece,
+                piece: {
+                    if viewModel.uiState.manipulatingPieceId == piece.id,
+                       let ghostTransform = viewModel.uiState.ghostTransform {
+                        return TangramPiece(type: piece.type, transform: ghostTransform)
+                    } else {
+                        return piece
+                    }
+                }(),
                 isSelected: viewModel.uiState.selectedPieceIds.contains(piece.id),
                 isGhost: viewModel.uiState.manipulatingPieceId == piece.id,
                 showConnectionPoints: false,

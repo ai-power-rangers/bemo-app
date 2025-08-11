@@ -100,7 +100,6 @@ class TangramCVGame: Game {
     
     func reset() {
         // Reset will be handled by the view model
-        print("TangramCV: Game reset requested")
     }
     
     func saveState() -> Data? {
@@ -110,6 +109,5 @@ class TangramCVGame: Game {
     
     func loadState(from data: Data) {
         // State loading will be implemented with the view model
-        print("TangramCV: Load state requested")
     }
 }

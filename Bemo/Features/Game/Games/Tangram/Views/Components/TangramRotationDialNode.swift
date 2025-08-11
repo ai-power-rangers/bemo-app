@@ -15,7 +15,7 @@ class TangramRotationDialNode: SKNode {
     private var dial: SKShapeNode!
     private var handle: SKShapeNode!
     private var angleLabel: SKLabelNode!
-    private var targetPiece: PuzzlePieceNode?
+    private(set) var targetPiece: PuzzlePieceNode?  // Allow read access for flip button
     private var initialRotation: CGFloat = 0
     private var originalRotation: CGFloat = 0
     private var originalFlipState: Bool = false
@@ -64,9 +64,11 @@ class TangramRotationDialNode: SKNode {
         handle.fillColor = .systemBlue
         handle.strokeColor = .white
         handle.lineWidth = 2
+        // Position handle to match current piece rotation
+        // Note: negate angle because SpriteKit zRotation is clockwise
         handle.position = CGPoint(
-            x: cos(initialRotation) * 80,
-            y: sin(initialRotation) * 80
+            x: cos(-initialRotation) * 80,
+            y: sin(-initialRotation) * 80
         )
         handle.zPosition = 10
         addChild(handle)
@@ -160,30 +162,67 @@ class TangramRotationDialNode: SKNode {
     func updateRotation(to angle: CGFloat) {
         guard let piece = targetPiece else { return }
         
-        // Update piece rotation
-        piece.zRotation = angle
+        // Normalize angle to [-π, π] range for consistent behavior
+        let normalizedAngle = normalizeAngle(angle)
         
-        // Update handle position
+        // Update piece rotation
+        piece.zRotation = normalizedAngle
+        
+        // Update handle position to match piece rotation
+        // Note: In SpriteKit, 0° is right, positive is counter-clockwise visually
+        // But zRotation is clockwise, so we negate for visual
         handle.position = CGPoint(
-            x: cos(angle) * 80,
-            y: sin(angle) * 80
+            x: cos(-normalizedAngle) * 80,
+            y: sin(-normalizedAngle) * 80
         )
         
-        // Update angle label
-        var degrees = Int(angle * 180 / .pi)
+        // Add visual feedback - make handle bigger when dragging
+        if handle.xScale != 1.2 {
+            handle.run(SKAction.scale(to: 1.2, duration: 0.1))
+        }
+        
+        // Update angle label with positive degrees
+        var degrees = Int(round(normalizedAngle * 180 / .pi))
         while degrees < 0 { degrees += 360 }
         while degrees >= 360 { degrees -= 360 }
         angleLabel.text = "\(degrees)°"
+        
+        // Make label bold during rotation
+        angleLabel.fontName = "System-Bold"
+        angleLabel.fontSize = 18
+    }
+    
+    private func normalizeAngle(_ angle: CGFloat) -> CGFloat {
+        var normalized = angle
+        while normalized > CGFloat.pi {
+            normalized -= 2 * CGFloat.pi
+        }
+        while normalized < -CGFloat.pi {
+            normalized += 2 * CGFloat.pi
+        }
+        return normalized
     }
     
     func restoreOriginalRotation() {
         // Restore the piece to its original rotation and flip state if canceling
         if let piece = targetPiece {
+            print("\n=== RESTORING ORIGINAL STATE for \(piece.pieceType?.rawValue ?? "unknown") ===")
+            print("Restoring rotation to: \(String(format: "%.2f", originalRotation)) rad = \(String(format: "%.1f", originalRotation * 180 / .pi))°")
+            print("Restoring flip state to: \(originalFlipState)")
             piece.zRotation = originalRotation
             // Restore original flip state
             if piece.isFlipped != originalFlipState {
                 piece.flip()  // This will toggle it back to original state
             }
         }
+        
+        // Reset handle size
+        handle?.run(SKAction.scale(to: 1.0, duration: 0.1))
+    }
+    
+    func finishRotation() {
+        // Reset handle size when done rotating
+        handle?.run(SKAction.scale(to: 1.0, duration: 0.1))
+        angleLabel?.fontSize = 16
     }
 }

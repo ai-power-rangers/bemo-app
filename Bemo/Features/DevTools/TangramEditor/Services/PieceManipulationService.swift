@@ -8,6 +8,18 @@
 // WHAT: Calculates and validates manipulation modes for tangram pieces based on their connections
 // ARCHITECTURE: Service layer in MVVM-S pattern, provides business logic for piece manipulation
 // USAGE: Injected into ViewModel via DependencyContainer, determines how pieces can be moved
+//
+// RESPONSIBILITIES:
+// - Determine manipulation mode (fixed, rotatable, slidable, free) based on connections
+// - Calculate rotation pivots and slide edges
+// - Define snap positions and angles for constraints
+// - Calculate valid rotation/slide limits
+//
+// NOT RESPONSIBLE FOR:
+// - Applying transforms (use PieceTransformEngine)
+// - Overlap detection (use PieceTransformEngine)
+// - UI interaction handling (handled by Views)
+// - State management (handled by ViewModel)
 
 import Foundation
 import CoreGraphics
@@ -61,10 +73,8 @@ class PieceManipulationService {
                 
                 // Use the vertex from the OTHER piece as the pivot point
                 let pivot = otherWorldVertices[otherVertexIndex]
-                // Snap at exact 45° intervals for clean rotations
-                let snapAngles: [Double] = [-180.0, -135.0, -90.0, -45.0, 0.0, 45.0, 90.0, 135.0, 180.0]
                 
-                return .rotatable(pivot: pivot, snapAngles: snapAngles)
+                return .rotatable(pivot: pivot, snapAngles: TangramConstants.rotationSnapAngles)
                 
             case .edgeToEdge(let pieceAId, let edgeA, let pieceBId, let edgeB):
                 // Determine which piece is sliding and which is stationary
@@ -126,9 +136,9 @@ class PieceManipulationService {
                 let maxSlide = Double(max(0, trackLength - slidingLength))
                 let slideRange = 0...maxSlide
                 
-                // Snap positions at exact 0%, 25%, 50%, 75%, 100% of the slide range
+                // Use snap positions from constants, scaled to actual slide range
                 let snapPositions: [Double] = maxSlide > 0 ? 
-                    [0.0, maxSlide * 0.25, maxSlide * 0.5, maxSlide * 0.75, maxSlide].filter { $0 >= 0 && $0 <= maxSlide } : [0.0]
+                    TangramConstants.slideSnapPercentages.map { $0 * maxSlide }.filter { $0 >= 0 && $0 <= maxSlide } : [0.0]
                 
                 return .slidable(
                     edge: ManipulationMode.Edge(
@@ -178,11 +188,10 @@ class PieceManipulationService {
                 
                 // For vertex-to-edge: Allow rotation with the vertex as pivot
                 // The vertex must stay on the edge during rotation
-                let snapAngles: [Double] = [-180.0, -135.0, -90.0, -45.0, 0.0, 45.0, 90.0, 135.0, 180.0]
                 
                 // Use the current vertex position as the rotation pivot
                 // This vertex is constrained to stay on the edge
-                return .rotatable(pivot: currentVertexPos, snapAngles: snapAngles)
+                return .rotatable(pivot: currentVertexPos, snapAngles: TangramConstants.rotationSnapAngles)
             }
         }
         

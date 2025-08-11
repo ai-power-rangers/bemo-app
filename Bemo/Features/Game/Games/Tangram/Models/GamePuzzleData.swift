@@ -22,6 +22,7 @@ struct GamePuzzleData: Codable, Equatable, Identifiable {
     
     /// A target piece with full transform data for accurate rendering
     struct TargetPiece: Equatable {
+        let id: String  // Unique identifier for this target instance
         let pieceType: TangramPieceType
         let transform: CGAffineTransform  // Full transform matrix for exact positioning
         
@@ -71,7 +72,8 @@ struct GamePuzzleData: Codable, Equatable, Identifiable {
         /// Check if a placed piece matches this target within tolerances
         func matches(_ placed: PlacedPiece) -> Bool {
             // Use centralized validation logic
-            return TangramPieceValidator.validate(placed: placed, target: self)
+            let validator = TangramPieceValidator()
+            return validator.validate(placed: placed, target: self)
         }
     }
     
@@ -91,12 +93,14 @@ struct GamePuzzleData: Codable, Equatable, Identifiable {
 
 extension GamePuzzleData.TargetPiece: Codable {
     enum CodingKeys: String, CodingKey {
+        case id
         case pieceType
         case transform
     }
     
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
         pieceType = try container.decode(TangramPieceType.self, forKey: .pieceType)
         
         // Decode CGAffineTransform components
@@ -113,6 +117,7 @@ extension GamePuzzleData.TargetPiece: Codable {
     
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
         try container.encode(pieceType, forKey: .pieceType)
         
         // Encode CGAffineTransform components

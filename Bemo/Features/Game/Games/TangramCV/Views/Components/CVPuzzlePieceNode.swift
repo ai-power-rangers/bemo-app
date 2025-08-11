@@ -84,8 +84,6 @@ class CVPuzzlePieceNode: SKNode {
     }
     
     func flip() {
-        print("DEBUG flip() called on piece: \(pieceType?.rawValue ?? "unknown")")
-        print("  Before: isFlipped = \(isFlipped), xScale = \(xScale)")
         
         // Flip the piece horizontally
         isFlipped = !isFlipped
@@ -129,6 +127,5 @@ class CVPuzzlePieceNode: SKNode {
         self.shapeNode = newShape
         addChild(newShape)
         
-        print("  After: isFlipped = \(isFlipped), shape recreated with flipped geometry")
     }
 }
