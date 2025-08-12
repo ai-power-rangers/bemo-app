@@ -750,28 +750,23 @@ class TangramPuzzleScene: SKScene {
         if isPieceTypeCompleted(hint.targetPiece) {
             return
         }
-        // Show hint based on type
-        // CRITICAL: Convert target position from raw to SK space for scene rendering
-        let rawPosition = TangramPoseMapper.rawPosition(from: hint.targetTransform)
-        let targetPositionSK = TangramPoseMapper.spriteKitPosition(fromRawPosition: rawPosition)
-        
-        // Convert the target position into the same scene-space used by effects/hints
-        // Our target shapes are positioned in puzzleLayer with local coordinates centered
-        // around the puzzle's bounds center. We have stored this local center in targetMetaById.
+        // Resolve the correct target instance and its centroid directly from scene metadata.
+        // The target silhouettes are created by baking the transform into vertices and then
+        // centering the node at the piece centroid. We stored that centroid in `targetMetaById`
+        // as coordinates local to `puzzleLayer`. Using that value avoids any mismatch between
+        // the transform's translation (which may not represent the centroid) and the outline.
         guard let puzzle = puzzle else { return }
-        let boundsSK = TangramBounds.calculatePuzzleBoundsSK(targets: puzzle.targetPieces)
-        let puzzleCenterSK = CGPoint(x: boundsSK.midX, y: boundsSK.midY)
-        // Position of the puzzle layer in scene space
-        let puzzleLayerOffset = CGPoint(x: size.width / 2, y: (size.height - safeAreaTop) * 0.75)
-        // Transform raw-SK target position into scene space by mirroring how target nodes are placed
-        let targetPosition = CGPoint(
-            x: targetPositionSK.x - puzzleCenterSK.x + puzzleLayerOffset.x,
-            y: targetPositionSK.y - puzzleCenterSK.y + puzzleLayerOffset.y
-        )
-        
-        // Compute the rotation the piece needs to be at
-        // This is NOT the raw target rotation, but the piece zRotation that would make it match
-        let targetFeatureAngle = computeTargetFeatureAngleForHint(hint.targetTransform, hint.targetPiece)
+        // Pick the first uncompleted target that matches this piece type
+        guard let targetForHint = puzzle.targetPieces.first(where: { $0.pieceType == hint.targetPiece && !completedTargetIds.contains($0.id) })
+        ?? puzzle.targetPieces.first(where: { $0.pieceType == hint.targetPiece }) else { return }
+        guard let meta = targetMetaById[targetForHint.id] else { return }
+
+        // Convert stored local centroid to scene space
+        let targetPosition = puzzleLayer.convert(meta.centerScene, to: self)
+
+        // Compute the rotation the piece node needs in scene space so that its feature angle
+        // aligns with the target's feature angle stored in metadata.
+        let targetFeatureAngle = meta.targetFeatureAngle
         let pieceCanonical = getPieceCanonicalAngle(hint.targetPiece)
         let targetPieceRotation = TangramRotationValidator.normalizeAngle(targetFeatureAngle - pieceCanonical)
         
@@ -785,15 +780,12 @@ class TangramPuzzleScene: SKScene {
             hintRenderer.showFlipHint(for: hint.targetPiece, at: targetPosition)
         case .position(let from, _):
             // Prefer the actual current position of the movable piece in scene space if available
-            var startPosScene: CGPoint
+            let startPosScene: CGPoint
             if let node = availablePieces.first(where: { $0.pieceType == hint.targetPiece }) {
                 startPosScene = piecesLayer.convert(node.position, to: self)
             } else {
-                // Fallback: Adjust the provided start position to scene space
-                startPosScene = CGPoint(
-                    x: from.x - puzzleCenterSK.x + puzzleLayerOffset.x,
-                    y: from.y - puzzleCenterSK.y + puzzleLayerOffset.y
-                )
+                // Fallback: `from` is already in SpriteKit space (scene convention)
+                startPosScene = from
             }
             hintRenderer.showMovementHint(for: hint.targetPiece, from: startPosScene, to: targetPosition)
         case .fullSolution:
