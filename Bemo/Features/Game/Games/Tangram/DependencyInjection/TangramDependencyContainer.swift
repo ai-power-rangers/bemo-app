@@ -46,6 +46,9 @@ class TangramDependencyContainer {
     
     let supabaseService: SupabaseService?
     let puzzleManagementService: PuzzleManagementService?
+
+    /// Relative mapping service for anchor-based validation shared by Scene and ViewModel
+    let mappingService: TangramRelativeMappingService
     
     // MARK: - Initialization
     
@@ -67,6 +70,7 @@ class TangramDependencyContainer {
         )
         self.positioningService = TangramPiecePositioningService()
         self.hintEngine = TangramHintEngine()
+        self.mappingService = TangramRelativeMappingService()
         
         // Initialize data services
         self.databaseLoader = TangramDatabaseLoader(supabaseService: supabaseService)

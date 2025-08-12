@@ -101,45 +101,15 @@ class TangramPieceValidator {
     // MARK: - PlacedPiece Support
     
     /// Validates if a placed piece matches a target position within tolerances
+    /// DEPRECATED: This method uses raw angles instead of feature angles and causes validation issues.
+    /// Use GamePuzzleData.TargetPiece.matches() instead, which internally uses validateForSpriteKitWithFeatures
+    @available(*, deprecated, message: "Use GamePuzzleData.TargetPiece.matches() which uses feature-based validation")
     func validate(placed: PlacedPiece, target: GamePuzzleData.TargetPiece) -> Bool {
-        // Piece type must match
-        guard placed.pieceType == target.pieceType else {
-            return false
-        }
-        
-        // Extract target position and TRUE expected SK rotation (no baseline adjustment)
-        let rawPosition = TangramPoseMapper.rawPosition(from: target.transform)
-        let targetPosition = TangramPoseMapper.spriteKitPosition(fromRawPosition: rawPosition)
-        
-        let rawAngle = TangramPoseMapper.rawAngle(from: target.transform)
-        let expectedZRotationSK = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
-        
-        // Check position
-        let distance = hypot(placed.position.x - targetPosition.x, placed.position.y - targetPosition.y)
-        guard distance < positionTolerance else {
-            return false
-        }
-        
-        // Check flip state for parallelogram
-        if placed.pieceType == .parallelogram {
-            let targetIsFlipped = detectFlip(from: target.transform)
-            // Inverted logic for parallelograms
-            guard placed.isFlipped != targetIsFlipped else {
-                return false
-            }
-        }
-        
-        // Check rotation with symmetry
-        let placedRotationRad = placed.rotation * .pi / 180
-        let rotationValid = TangramRotationValidator.isRotationValid(
-            currentRotation: placedRotationRad,
-            targetRotation: expectedZRotationSK,
-            pieceType: placed.pieceType,
-            isFlipped: placed.isFlipped,
-            toleranceDegrees: rotationTolerance
-        )
-        
-        return rotationValid
+        // This method is deprecated - it mixes raw angles with validation logic
+        // The correct path is through GamePuzzleData.TargetPiece.matches() which uses feature angles
+        // Returning false to force migration to the correct validation path
+        print("[WARNING] TangramPieceValidator.validate(placed:target:) is deprecated. Use target.matches(placed) instead.")
+        return false
     }
     
     // MARK: - Helper Methods

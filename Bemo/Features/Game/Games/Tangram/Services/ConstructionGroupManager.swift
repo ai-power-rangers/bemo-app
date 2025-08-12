@@ -23,10 +23,9 @@ class ConstructionGroupManager {
         static let angleThreshold: CGFloat = 0.26          // ~15 degrees
         static let groupTimeout: TimeInterval = 30         // Seconds before group expires
         
-        // Validation Thresholds by Zone
-        static let constructionZoneThreshold: Float = 0.25 // Very low - encourage building
-        static let workingZoneThreshold: Float = 0.35      // Medium threshold
-        static let organizationZoneThreshold: Float = 0.6  // High - only validate when confident
+        // Intent-based validation thresholds (no spatial zones)
+        static let constructingThreshold: Float = 0.30 // Low - encourage early building
+        static let buildingThreshold: Float = 0.25     // Very low for active construction
         
         // Confidence Score Weights
         static let spatialWeight: Float = 0.4
@@ -141,41 +140,24 @@ class ConstructionGroupManager {
     }
     
     /// Determine if a group should validate
-    func shouldValidate(group: ConstructionGroup, zone: TangramPuzzleScene.Zone? = nil) -> Bool {
+    func shouldValidate(group: ConstructionGroup) -> Bool {
         // Check validation state
         guard group.validationState.shouldValidate else { return false }
         
         // Check minimum group size
         guard group.pieces.count >= Config.minPiecesForValidation else { return false }
         
-        // Get threshold based on zone (if provided) or validation state
-        let threshold: Float
-        if let zone = zone {
-            switch zone {
-            case .organization:
-                threshold = Config.organizationZoneThreshold
-            case .working:
-                // Slightly lower threshold to encourage early feedback in working zone
-                threshold = max(0.3, Config.workingZoneThreshold)
-            case .construction:
-                // Lowest threshold in construction zone
-                threshold = min(Config.constructionZoneThreshold, 0.25)
-            }
-        } else {
-            // Fall back to state-based thresholds
-            switch group.validationState {
-            case .constructing:
-                threshold = Config.workingZoneThreshold
-            case .building:
-                threshold = Config.constructionZoneThreshold
-            case .completing:
-                return true // Always validate in completing state
-            default:
-                return false
-            }
+        // Intent-based thresholds based on validation state (no zones)
+        switch group.validationState {
+        case .constructing:
+            return group.confidence > Config.constructingThreshold
+        case .building:
+            return group.confidence > Config.buildingThreshold
+        case .completing:
+            return true
+        default:
+            return false
         }
-        
-        return group.confidence > threshold
     }
     
     /// Determine nudge level for a group

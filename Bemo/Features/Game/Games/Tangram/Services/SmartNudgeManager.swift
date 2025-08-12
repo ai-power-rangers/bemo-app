@@ -40,13 +40,9 @@ class SmartNudgeManager {
     
     /// Determine if a nudge should be shown for a piece
     func shouldShowNudge(for piece: PuzzlePieceNode,
-                         in group: ConstructionGroup?,
-                         zone: TangramPuzzleScene.Zone) -> Bool {
+                         in group: ConstructionGroup?) -> Bool {
         
         guard let pieceId = piece.name else { return false }
-        
-        // Never nudge in organization zone
-        if zone == .organization { return false }
         
         // Check if piece is part of a group
         guard let group = group else { return false }
@@ -54,8 +50,8 @@ class SmartNudgeManager {
         // Check group state
         guard group.validationState.shouldValidate else { return false }
         
-        // Check confidence threshold
-        if group.confidence < 0.5 { return false }
+        // Check confidence threshold - intent-based, not zone-based
+        if group.confidence < 0.3 { return false }  // Lower threshold for intent detection
         
         // Check attempt count
         let attempts = group.attemptHistory[pieceId] ?? 0
@@ -67,22 +63,18 @@ class SmartNudgeManager {
             return false
         }
         
-        // Zone-specific checks
-        switch zone {
-        case .working:
-            return attempts >= 3 && group.confidence > 0.6
-        case .construction:
-            return attempts >= 2 && group.confidence > 0.4
-        default:
-            return false
-        }
+        // Intent-based checks (confidence and attempts)
+        // Higher confidence = more likely to nudge
+        // More attempts = more likely to nudge
+        return (attempts >= 2 && group.confidence > 0.3) ||
+               (attempts >= 3 && group.confidence > 0.5) ||
+               (attempts >= 5)
     }
     
     /// Determine appropriate nudge level
     func determineNudgeLevel(confidence: Float,
                             attempts: Int,
-                            state: GroupValidationState,
-                            zone: TangramPuzzleScene.Zone) -> NudgeLevel {
+                            state: GroupValidationState) -> NudgeLevel {
         
         // Base level from validation state
         var level: NudgeLevel
@@ -105,16 +97,12 @@ class SmartNudgeManager {
             level = min(maxNudgeLevel, NudgeLevel(rawValue: level.rawValue + 1) ?? level)
         }
         
-        // Adjust for zone
-        switch zone {
-        case .organization:
-            return .none
-        case .working:
-            // Reduce intensity in working space
-            return max(.none, NudgeLevel(rawValue: level.rawValue - 1) ?? .none)
-        case .construction:
-            return level
+        // Intent-based adjustment: higher confidence = more specific nudges
+        if confidence > 0.8 && level.rawValue < NudgeLevel.specific.rawValue {
+            level = .specific
         }
+        
+        return level
     }
     
     /// Generate nudge content based on level and failure reason
