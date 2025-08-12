@@ -34,6 +34,7 @@ struct PlacedPiece: Identifiable, Codable {
     var isPlaced: Bool = false // True when piece is stationary and placed
     var lastStationaryTime: Date? // When piece stopped moving
     var isFlipped: Bool = false // Track if piece is flipped (important for parallelogram)
+    var assignedTargetId: String? // Instance-specific target binding for duplicates
     
     // MARK: - Validation State
     

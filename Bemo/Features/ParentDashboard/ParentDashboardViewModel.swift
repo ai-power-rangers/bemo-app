@@ -32,6 +32,8 @@ class ParentDashboardViewModel {
     struct ChildProfile: Identifiable {
         let id: String
         let name: String
+        let avatarSymbol: String?
+        let avatarColor: String?
         let level: Int
         let totalXP: Int
         let playTimeToday: TimeInterval
@@ -96,6 +98,8 @@ class ParentDashboardViewModel {
             ChildProfile(
                 id: profile.id,
                 name: profile.name,
+                avatarSymbol: profile.avatarSymbol,
+                avatarColor: profile.avatarColor,
                 level: calculateLevel(from: profile.totalXP),
                 totalXP: profile.totalXP,
                 playTimeToday: generateMockPlayTime(), // Mock data for now
@@ -162,6 +166,8 @@ class ParentDashboardViewModel {
             ChildProfile(
                 id: child.id,
                 name: child.name,
+                avatarSymbol: child.avatarSymbol,
+                avatarColor: child.avatarColor,
                 level: child.level,
                 totalXP: child.totalXP,
                 playTimeToday: child.playTimeToday,
@@ -228,5 +234,28 @@ class ParentDashboardViewModel {
     
     func dismiss() {
         onDismiss()
+    }
+    
+    // MARK: - Profile Management
+    
+    func getUserProfile(for childProfile: ChildProfile) -> UserProfile? {
+        return profileService.childProfiles.first { $0.id == childProfile.id }
+    }
+    
+    func updateChildProfile(_ profile: UserProfile) {
+        profileService.updateChildProfile(profile)
+        loadChildProfiles()
+        generateInsights()
+    }
+    
+    func deleteChildProfile(_ profileId: String) {
+        profileService.deleteChildProfile(profileId)
+        loadChildProfiles()
+        generateInsights()
+    }
+    
+    // Expose ProfileService for edit view
+    var getProfileService: ProfileService {
+        return profileService
     }
 }

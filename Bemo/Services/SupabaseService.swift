@@ -65,6 +65,8 @@ class SupabaseService {
             isConnected = true  // Service role is always "connected"
         } else if authService != nil {
             setupAuthenticationSync()
+            // Check if Supabase has a stored session on init
+            checkStoredSession()
         }
     }
     
@@ -79,6 +81,25 @@ class SupabaseService {
         authStateChangeTask = Task {
             for await (event, session) in client.auth.authStateChanges {
                 await handleSupabaseAuthChange(event: event, session: session)
+            }
+        }
+    }
+    
+    private func checkStoredSession() {
+        // Check if Supabase has a stored session (it persists sessions locally)
+        Task {
+            do {
+                let session = try await client.auth.session
+                await MainActor.run {
+                    self.isConnected = true
+                    self.syncError = nil
+                    print("Supabase: Restored existing session for user: \(session.user.id)")
+                }
+            } catch {
+                await MainActor.run {
+                    self.isConnected = false
+                    print("Supabase: No stored session found")
+                }
             }
         }
     }
@@ -194,6 +215,8 @@ class SupabaseService {
                 name: profile.name,
                 age: profile.age,
                 gender: profile.gender,
+                avatar_symbol: profile.avatarSymbol,
+                avatar_color: profile.avatarColor,
                 total_xp: profile.totalXP,
                 preferences: try encodePreferences(profile.preferences)
             )
@@ -631,12 +654,18 @@ class SupabaseService {
         let preferencesData = try JSONSerialization.data(withJSONObject: response.preferences)
         let preferences = try JSONDecoder().decode(UserPreferences.self, from: preferencesData)
         
+        // Extract avatar fields from response or use defaults
+        let avatarSymbol = response.avatar_symbol ?? "star.fill"
+        let avatarColor = response.avatar_color ?? "blue"
+        
         return UserProfile(
             id: response.id,
             userId: response.parent_user_id,
             name: response.name,
             age: response.age,
             gender: response.gender,
+            avatarSymbol: avatarSymbol,
+            avatarColor: avatarColor,
             totalXP: response.total_xp,
             preferences: preferences
         )
@@ -658,11 +687,13 @@ struct ChildProfileUpsert: Encodable {
     let name: String
     let age: Int
     let gender: String
+    let avatar_symbol: String?
+    let avatar_color: String?
     let total_xp: Int
     let preferences: [String: Any]
     
     enum CodingKeys: String, CodingKey {
-        case id, parent_user_id, name, age, gender, total_xp, preferences
+        case id, parent_user_id, name, age, gender, avatar_symbol, avatar_color, total_xp, preferences
     }
     
     func encode(to encoder: Encoder) throws {
@@ -672,6 +703,8 @@ struct ChildProfileUpsert: Encodable {
         try container.encode(name, forKey: .name)
         try container.encode(age, forKey: .age)
         try container.encode(gender, forKey: .gender)
+        try container.encodeIfPresent(avatar_symbol, forKey: .avatar_symbol)
+        try container.encodeIfPresent(avatar_color, forKey: .avatar_color)
         try container.encode(total_xp, forKey: .total_xp)
         
         // Encode preferences as JSONB
@@ -687,13 +720,15 @@ struct ChildProfileResponse: Decodable {
     let name: String
     let age: Int
     let gender: String
+    let avatar_symbol: String?
+    let avatar_color: String?
     let total_xp: Int
     let preferences: [String: Any]
     let created_at: String
     let updated_at: String
     
     enum CodingKeys: String, CodingKey {
-        case id, parent_user_id, name, age, gender, total_xp, preferences, created_at, updated_at
+        case id, parent_user_id, name, age, gender, avatar_symbol, avatar_color, total_xp, preferences, created_at, updated_at
     }
     
     init(from decoder: Decoder) throws {
@@ -703,6 +738,8 @@ struct ChildProfileResponse: Decodable {
         name = try container.decode(String.self, forKey: .name)
         age = try container.decode(Int.self, forKey: .age)
         gender = try container.decode(String.self, forKey: .gender)
+        avatar_symbol = try? container.decode(String.self, forKey: .avatar_symbol)
+        avatar_color = try? container.decode(String.self, forKey: .avatar_color)
         total_xp = try container.decode(Int.self, forKey: .total_xp)
         created_at = try container.decode(String.self, forKey: .created_at)
         updated_at = try container.decode(String.self, forKey: .updated_at)

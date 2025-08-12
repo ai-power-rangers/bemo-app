@@ -88,7 +88,7 @@ class PiecePlacementService {
         // Pass flip state to alignment calculation
         let transform = TangramEditorCoordinateSystem.calculateAlignmentTransform(
             pieceType: type,
-            baseRotation: rotation * .pi / 180,
+            baseRotation: rotation, // rotation is already in radians
             isFlipped: isFlipped,
             connections: connections.map { conn in
                 (canvas: conn.canvasPoint, piece: conn.piecePoint)

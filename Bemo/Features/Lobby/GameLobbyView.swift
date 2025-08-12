@@ -22,10 +22,14 @@ struct GameLobbyView: View {
             VStack(spacing: 0) {
                 // Top Navigation Bar
                 HeaderView(
-                    profileName: viewModel.displayProfile?.name,
-                    profileAvatar: viewModel.displayProfile?.avatar,
+                    profileName: viewModel.currentUserProfile?.name,
+                    avatarSymbol: viewModel.currentUserProfile?.avatarSymbol,
+                    avatarColor: viewModel.currentUserProfile?.avatarColor,
                     onMenuTapped: {
                         showingSideMenu = true
+                    },
+                    onProfileTapped: {
+                        viewModel.showProfileDetailsView()
                     }
                 )
                 
@@ -83,6 +87,19 @@ struct GameLobbyView: View {
                     viewModel.requestParentalAccess()
                 }
             )
+        }
+        .sheet(isPresented: $viewModel.showProfileDetails) {
+            if let currentProfile = viewModel.currentUserProfile {
+                ProfileDetailsView(
+                    profile: currentProfile,
+                    onSwitchProfile: {
+                        viewModel.switchProfileFromDetails()
+                    },
+                    onDismiss: {
+                        viewModel.hideProfileDetailsView()
+                    }
+                )
+            }
         }
         .sheet(isPresented: $viewModel.showProfileModal) {
             ProfileSelectionModal(

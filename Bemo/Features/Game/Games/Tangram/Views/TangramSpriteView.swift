@@ -30,8 +30,7 @@ struct TangramSpriteView: View {
     
     // Scene is created once and reused
     @State private var scene: SKScene = {
-        let scene = TangramPuzzleScene()
-        scene.size = CGSize(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
+        let scene = TangramPuzzleScene(size: CGSize(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height))
         scene.scaleMode = .resizeFill
         return scene
     }()
@@ -55,7 +54,9 @@ struct TangramSpriteView: View {
         }
         .onChange(of: isPuzzleComplete) { oldValue, newValue in
             if let tangramScene = scene as? TangramPuzzleScene {
-                tangramScene.updateCompletionState(newValue)
+                // Convert bool to set of completed pieces (empty if not complete)
+                let completedSet = newValue ? Set(puzzle.targetPieces.map { $0.id }) : Set<String>()
+                tangramScene.updateCompletionState(completedSet)
             }
         }
         .onChange(of: currentHint) { oldValue, newValue in
@@ -69,7 +70,7 @@ struct TangramSpriteView: View {
                     tangramScene.showStructuredHint(hint)
                 } else {
                     // Clear any existing hints when hint becomes nil
-                    tangramScene.clearStructuredHint()
+                    tangramScene.hideHint()
                 }
             }
         }

@@ -11,6 +11,7 @@ struct PendingPieceView: View {
     let viewModel: TangramEditorViewModel
     let pieceType: PieceType
     let rotation: Double
+    let isFlipped: Bool
     let isFirstPiece: Bool
     let canvasSize: CGSize
     
@@ -30,7 +31,7 @@ struct PendingPieceView: View {
                         PieceShapeForPending(type: pieceType, scale: 50)
                             .stroke(pieceColor.opacity(0.7), lineWidth: 2)  // Lighter stroke
                     )
-                    .scaleEffect(x: viewModel.uiState.pendingPieceIsFlipped && pieceType == .parallelogram ? -1 : 1, y: 1)
+                    .scaleEffect(x: isFlipped && pieceType == .parallelogram ? -1 : 1, y: 1)
                     .rotationEffect(Angle(degrees: rotation))
                 
                 // Show connection points when we're selecting them (after canvas points are selected)
@@ -45,7 +46,7 @@ struct PendingPieceView: View {
                             isSelected: viewModel.uiState.selectedPendingPoints.contains { $0.id == point.id },
                             isCompatible: isPointCompatible(point),
                             scale: 1,
-                            isFlipped: viewModel.uiState.pendingPieceIsFlipped && pieceType == .parallelogram
+                            isFlipped: isFlipped && pieceType == .parallelogram
                         )
                         .onTapGesture {
                             viewModel.togglePendingPoint(point)
