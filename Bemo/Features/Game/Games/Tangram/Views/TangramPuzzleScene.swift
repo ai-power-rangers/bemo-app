@@ -1327,6 +1327,11 @@ class TangramPuzzleScene: SKScene {
         // Record attempt for smart nudging
         nudgeManager.recordAttempt(for: pieceId, at: piece.position)
         
+        // Record attempt in construction group
+        if let group = pieceGroup {
+            groupManager.recordAttempt(for: pieceId, in: group.id)
+        }
+        
         // Check if we should show a smart nudge
         if let group = pieceGroup {
             let shouldNudge = nudgeManager.shouldShowNudge(

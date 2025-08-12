@@ -60,6 +60,9 @@ class AppCoordinator {
         
         // Also observe ProfileService changes
         setupProfileServiceObserver()
+        
+        // Observe Supabase connection state
+        setupSupabaseObserver()
     }
     
     private func setupProfileServiceObserver() {
@@ -75,6 +78,21 @@ class AppCoordinator {
             }
             // Re-establish observation
             self?.setupProfileServiceObserver()
+        }
+    }
+    
+    private func setupSupabaseObserver() {
+        let supabaseService = dependencyContainer.supabaseService
+        
+        withObservationTracking {
+            // Observe Supabase connection state
+            _ = supabaseService.isConnected
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.handleSupabaseConnectionChange()
+            }
+            // Re-establish observation
+            self?.setupSupabaseObserver()
         }
     }
     
@@ -167,6 +185,12 @@ class AppCoordinator {
         }
     }
     
+    /// Check if user is fully authenticated (both Apple Sign In and Supabase)
+    private func isFullyAuthenticated() -> Bool {
+        return dependencyContainer.authenticationService.isAuthenticated &&
+               dependencyContainer.supabaseService.isConnected
+    }
+    
     @ViewBuilder
     var rootView: some View {
         switch currentState {
@@ -196,17 +220,28 @@ class AppCoordinator {
             ))
             
         case .addChildProfile(let user):
-            ProfileSetupView(viewModel: ProfileSetupViewModel(
-                authenticatedUser: user,
-                profileService: self.dependencyContainer.profileService,
-                apiService: self.dependencyContainer.apiService,
-                onProfileSetupComplete: { [weak self] in
-                    self?.currentState = .lobby
-                },
-                onBackRequested: { [weak self] in
-                    self?.currentState = .lobby
-                }
-            ))
+            // Verify user is fully authenticated (Apple + Supabase) before showing profile setup
+            if isFullyAuthenticated() {
+                ProfileSetupView(viewModel: ProfileSetupViewModel(
+                    authenticatedUser: user,
+                    profileService: self.dependencyContainer.profileService,
+                    apiService: self.dependencyContainer.apiService,
+                    onProfileSetupComplete: { [weak self] in
+                        self?.currentState = .lobby
+                    },
+                    onBackRequested: { [weak self] in
+                        self?.currentState = .lobby
+                    }
+                ))
+            } else {
+                // User is not fully authenticated, redirect to onboarding
+                OnboardingView(viewModel: OnboardingViewModel(
+                    authenticationService: self.dependencyContainer.authenticationService,
+                    onAuthenticationComplete: { [weak self] user in
+                        self?.checkAuthenticationAndNavigate()
+                    }
+                ))
+            }
             
         case .lobby:
             GameLobbyView(viewModel: GameLobbyViewModel(
@@ -224,8 +259,16 @@ class AppCoordinator {
                     self?.currentState = .parentDashboard
                 },
                 onProfileSetupRequested: { [weak self] in
-                    if let currentUser = self?.dependencyContainer.authenticationService.currentUser {
-                        self?.currentState = .addChildProfile(currentUser)
+                    guard let self = self else { return }
+                    
+                    // Check full authentication status
+                    if let currentUser = self.dependencyContainer.authenticationService.currentUser,
+                       self.isFullyAuthenticated() {
+                        self.currentState = .addChildProfile(currentUser)
+                    } else {
+                        // Not fully authenticated - redirect to onboarding
+                        print("Profile setup requested but user not fully authenticated")
+                        self.currentState = .onboarding
                     }
                 }
             ))

@@ -177,6 +177,17 @@ class GameLobbyViewModel {
                 )
             )
             
+            // Add TgramViewer as a developer tool
+            let tgramViewerGame = TgramViewerGame()
+            availableGames.append(
+                GameItem(
+                    game: tgramViewerGame,
+                    iconName: "eye.circle.fill",
+                    color: .purple,
+                    badge: "CV Viewer"
+                )
+            )
+            
             print("🛠️ Developer tools loaded for developer user")
         } else {
             print("👤 Regular user - dev tools hidden")
