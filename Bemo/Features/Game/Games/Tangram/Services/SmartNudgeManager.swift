@@ -51,11 +51,11 @@ class SmartNudgeManager {
         guard group.validationState.shouldValidate else { return false }
         
         // Check confidence threshold - intent-based, not zone-based
-        if group.confidence < 0.3 { return false }  // Lower threshold for intent detection
+        if group.confidence < 0.5 { return false }  // Moderate threshold for clear intent
         
         // Check attempt count
         let attempts = group.attemptHistory[pieceId] ?? 0
-        if attempts < 2 { return false } // Need at least 2 attempts
+        if attempts < 3 { return false } // Need at least 3 attempts
         
         // Check nudge cooldown
         let history = nudgeHistories[pieceId] ?? NudgeHistory()
@@ -66,9 +66,9 @@ class SmartNudgeManager {
         // Intent-based checks (confidence and attempts)
         // Higher confidence = more likely to nudge
         // More attempts = more likely to nudge
-        return (attempts >= 2 && group.confidence > 0.3) ||
-               (attempts >= 3 && group.confidence > 0.5) ||
-               (attempts >= 5)
+        return (attempts >= 3 && group.confidence > 0.6) ||
+               (attempts >= 5 && group.confidence > 0.5) ||
+               (attempts >= 7)
     }
     
     /// Determine appropriate nudge level

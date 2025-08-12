@@ -21,6 +21,7 @@ class ProfileSetupViewModel {
     private let authenticatedUser: AuthenticatedUser
     private let profileService: ProfileService
     private let apiService: APIService
+    private let authenticationService: AuthenticationService
     private let onProfileSetupComplete: () -> Void
     private let onBackRequested: (() -> Void)?
     private var cancellables = Set<AnyCancellable>()
@@ -29,12 +30,14 @@ class ProfileSetupViewModel {
         authenticatedUser: AuthenticatedUser,
         profileService: ProfileService,
         apiService: APIService,
+        authenticationService: AuthenticationService,
         onProfileSetupComplete: @escaping () -> Void,
         onBackRequested: (() -> Void)? = nil
     ) {
         self.authenticatedUser = authenticatedUser
         self.profileService = profileService
         self.apiService = apiService
+        self.authenticationService = authenticationService
         self.onProfileSetupComplete = onProfileSetupComplete
         self.onBackRequested = onBackRequested
     }
@@ -116,6 +119,11 @@ class ProfileSetupViewModel {
     
     var canGoBack: Bool {
         return onBackRequested != nil
+    }
+    
+    func signOut() {
+        // Delegate sign out to the authentication service
+        authenticationService.signOut()
     }
     
     private func handleProfileCreated(_ profile: UserProfile) {

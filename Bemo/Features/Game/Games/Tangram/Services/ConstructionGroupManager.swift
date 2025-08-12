@@ -24,13 +24,13 @@ class ConstructionGroupManager {
         static let groupTimeout: TimeInterval = 30         // Seconds before group expires
         
         // Intent-based validation thresholds (no spatial zones)
-        static let constructingThreshold: Float = 0.30 // Low - encourage early building
-        static let buildingThreshold: Float = 0.25     // Very low for active construction
+        static let constructingThreshold: Float = 0.60 // Moderate - clear intent needed
+        static let buildingThreshold: Float = 0.50     // Active construction with purpose
         
         // Confidence Score Weights
-        static let spatialWeight: Float = 0.4
-        static let temporalWeight: Float = 0.2
-        static let behavioralWeight: Float = 0.4
+        static let spatialWeight: Float = 0.35
+        static let temporalWeight: Float = 0.35
+        static let behavioralWeight: Float = 0.30
         
         // Spatial Signal Weights
         static let edgeProximityWeight: Float = 0.3
@@ -53,7 +53,7 @@ class ConstructionGroupManager {
         static let activityTimeoutSec: TimeInterval = 30
         
         // Minimum pieces for validation
-        static let minPiecesForValidation: Int = 1
+        static let minPiecesForValidation: Int = 2
     }
     
     // MARK: - Properties
@@ -223,6 +223,13 @@ class ConstructionGroupManager {
         let connection = PieceConnection(piece1, piece2, valid: true)
         group.validatedConnections.insert(connection)
         group.lastActivity = Date()
+        groups[groupId] = group
+    }
+    
+    /// Record an attempt for a piece in a group
+    func recordAttempt(for pieceId: String, in groupId: UUID) {
+        guard var group = groups[groupId] else { return }
+        group.recordAttempt(for: pieceId)
         groups[groupId] = group
     }
     
@@ -407,17 +414,31 @@ class ConstructionGroupManager {
         var signals = TemporalSignals()
         
         let timeSinceActivity = Date().timeIntervalSince(group.lastActivity)
-        
-        // Activity recency (more recent = higher)
-        signals.activityRecency = max(0, Float(1 - timeSinceActivity / Config.activityTimeoutSec))
-        
-        // Stability (pieces not moving much)
-        signals.stabilityDuration = timeSinceActivity > Config.stabilityThresholdSec ? 1 : 
-                                    Float(timeSinceActivity / Config.stabilityThresholdSec)
-        
-        // Focus time based on group age and activity
         let groupAge = Date().timeIntervalSince(group.createdAt)
-        signals.focusTime = min(1, Float(groupAge / 10)) // Ramps up over 10 seconds
+        
+        // Activity recency (more recent = higher, with faster decay)
+        signals.activityRecency = max(0, Float(1 - pow(timeSinceActivity / 10.0, 2))) // Quadratic decay over 10 seconds
+        
+        // Stability (pieces settled for a bit = higher intent)
+        if timeSinceActivity > Config.stabilityThresholdSec {
+            // Stable for longer than threshold
+            signals.stabilityDuration = min(1, Float(timeSinceActivity / 10.0)) // Max out at 10 seconds
+        } else {
+            // Still being adjusted
+            signals.stabilityDuration = Float(timeSinceActivity / Config.stabilityThresholdSec) * 0.5
+        }
+        
+        // Focus time based on sustained attention to group
+        // Consider both age and activity patterns
+        let focusScore = min(1, Float(groupAge / 20)) // Ramps up over 20 seconds
+        let activityBonus = signals.activityRecency * 0.3 // Recent activity adds to focus
+        signals.focusTime = min(1, focusScore + activityBonus)
+        
+        // Placement speed (rapid placement = higher intent)
+        let avgAttempts = Float(group.attemptHistory.values.reduce(0, +)) / Float(max(1, group.pieces.count))
+        if groupAge > 0 {
+            signals.placementSpeed = min(1, avgAttempts / Float(groupAge) * 10) // Normalize to attempts per 10 seconds
+        }
         
         return signals
     }
