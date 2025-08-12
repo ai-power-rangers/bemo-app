@@ -55,6 +55,12 @@ class TgramViewerViewModel {
     
     private weak var delegate: GameDelegate?
     
+    // MARK: - File Cycling State
+    
+    private let fileIndexRange = 1...9
+    var currentFileIndex: Int = 9
+    private var currentFileBaseName: String { String(format: "%012d_plane_coords", currentFileIndex) }
+    
     // MARK: - Initialization
     
     init(delegate: GameDelegate) {
@@ -69,10 +75,10 @@ class TgramViewerViewModel {
         errorMessage = nil
         
         // Load from bundle resources
-        guard let url = Bundle.main.url(forResource: "000000000009_plane_coords", withExtension: "json", subdirectory: "cv-output-cat") else {
+        guard let url = Bundle.main.url(forResource: currentFileBaseName, withExtension: "json", subdirectory: "cv-output-cat") else {
             // Try without subdirectory if the above fails
-            guard let fallbackUrl = Bundle.main.url(forResource: "000000000009_plane_coords", withExtension: "json") else {
-                errorMessage = "Could not find CV data file in app bundle"
+            guard let fallbackUrl = Bundle.main.url(forResource: currentFileBaseName, withExtension: "json") else {
+                errorMessage = "Could not find CV data file: \(currentFileBaseName).json"
                 isLoading = false
                 return
             }
@@ -218,6 +224,14 @@ class TgramViewerViewModel {
     
     func quit() {
         delegate?.gameDidRequestQuit()
+    }
+    
+    /// Cycles to the next available CV data file and reloads the view.
+    func cycleToNextFile() {
+        if let first = fileIndexRange.first, let last = fileIndexRange.last {
+            currentFileIndex = (currentFileIndex >= last) ? first : (currentFileIndex + 1)
+        }
+        loadCVData()
     }
 }
 

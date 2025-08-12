@@ -247,6 +247,7 @@ class AppCoordinator {
                 authenticatedUser: user,
                 profileService: self.dependencyContainer.profileService,
                 apiService: self.dependencyContainer.apiService,
+                authenticationService: self.dependencyContainer.authenticationService,
                 onProfileSetupComplete: { [weak self] in
                     self?.currentState = .lobby
                 },
@@ -262,6 +263,7 @@ class AppCoordinator {
                     authenticatedUser: user,
                     profileService: self.dependencyContainer.profileService,
                     apiService: self.dependencyContainer.apiService,
+                    authenticationService: self.dependencyContainer.authenticationService,
                     onProfileSetupComplete: { [weak self] in
                         self?.currentState = .lobby
                     },

@@ -84,6 +84,19 @@ struct TgramViewerView: View {
             }
             .navigationTitle("CV Output Viewer")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: {
+                        viewModel.cycleToNextFile()
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Text(String(format: "#%02d", viewModel.currentFileIndex))
+                        }
+                    }
+                    .font(BemoTheme.font(for: .body))
+                }
+            }
         }
     }
 }
