@@ -85,49 +85,84 @@ class AppCoordinator {
         // Only handle profile changes if user is authenticated
         guard authService.isAuthenticated else { return }
         
-        // If no profiles exist, navigate to profile setup
-        if !profileService.hasProfiles {
-            if let currentUser = authService.currentUser {
-                currentState = .profileSetup(currentUser)
-            }
-        } else {
-            // If profiles exist and we're in profile setup/add child, navigate to lobby
+        // Only navigate if we're currently in profile setup/add child and profiles now exist
+        if profileService.hasProfiles {
             switch currentState {
             case .profileSetup, .addChildProfile:
+                // Profile was just created, go to lobby
                 currentState = .lobby
+                // Auto-select the profile if it's the only one
+                if profileService.childProfiles.count == 1 && profileService.activeProfile == nil {
+                    profileService.setActiveProfile(profileService.childProfiles[0])
+                }
             default:
                 break
             }
         }
+        // Don't automatically navigate to profile setup - let checkAuthenticationAndNavigate handle that
     }
     
     private func checkAuthenticationAndNavigate() {
         let authService = dependencyContainer.authenticationService
         
         if authService.isAuthenticated {
-            // Check if user has child profiles
-            if dependencyContainer.profileService.hasProfiles {
+            let profileService = dependencyContainer.profileService
+            
+            // Check if we have local profiles first
+            // This handles the case where Supabase might not be authenticated yet
+            if !profileService.childProfiles.isEmpty {
+                // Have local profiles - go to lobby immediately
                 currentState = .lobby
+                
+                // Auto-select if only one profile
+                if profileService.childProfiles.count == 1 && profileService.activeProfile == nil {
+                    profileService.setActiveProfile(profileService.childProfiles[0])
+                }
+                
+                // Try to sync from Supabase in background (will work if Supabase session exists)
+                profileService.syncWithSupabase()
             } else {
-                // Authenticated but no profiles exist
-                if let currentUser = authService.currentUser {
-                    currentState = .profileSetup(currentUser)
-                } else {
-                    currentState = .onboarding
+                // No local profiles - try to sync from Supabase
+                profileService.syncWithSupabase()
+                
+                // Give sync a moment to complete, then check for profiles
+                Task {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second for sync
+                    
+                    await MainActor.run {
+                        // After sync attempt, check if any profiles exist
+                        if profileService.childProfiles.isEmpty {
+                            // No profiles exist at all - go to profile setup
+                            if let currentUser = authService.currentUser {
+                                self.currentState = .profileSetup(currentUser)
+                            }
+                        } else {
+                            // Profiles were synced - go to lobby
+                            self.currentState = .lobby
+                            
+                            // Auto-select if only one profile
+                            if profileService.childProfiles.count == 1 && profileService.activeProfile == nil {
+                                profileService.setActiveProfile(profileService.childProfiles[0])
+                            }
+                        }
+                    }
                 }
             }
         } else {
+            // Not authenticated, show onboarding
             currentState = .onboarding
         }
     }
     
     private func handleAuthenticationChange(isAuthenticated: Bool) {
         if !isAuthenticated {
-            // User signed out, clear profile and go to onboarding
+            // User signed out, only clear active profile selection (not all profiles)
             dependencyContainer.profileService.clearActiveProfile()
             currentState = .onboarding
         } else {
-            // User signed in, check for profile setup
+            // User signed in, filter profiles for current user and sync
+            dependencyContainer.profileService.filterProfilesForCurrentUser()
+            dependencyContainer.profileService.syncWithSupabase()
             checkAuthenticationAndNavigate()
         }
     }

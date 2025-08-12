@@ -13,12 +13,14 @@ import SwiftUI
 
 struct ProfileBadgeView: View {
     let name: String?
-    let avatar: String?
+    let avatarSymbol: String?
+    let avatarColor: String?
     let size: CGFloat
     
-    init(name: String? = nil, avatar: String? = nil, size: CGFloat = 40) {
+    init(name: String? = nil, avatarSymbol: String? = nil, avatarColor: String? = nil, size: CGFloat = 40) {
         self.name = name
-        self.avatar = avatar
+        self.avatarSymbol = avatarSymbol
+        self.avatarColor = avatarColor
         self.size = size
     }
     
@@ -30,17 +32,20 @@ struct ProfileBadgeView: View {
     }
     
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(BemoTheme.Colors.primary)
-                .frame(width: size, height: size)
-            
-            if let avatar = avatar, !avatar.isEmpty {
-                // Future: Display avatar image
-                Image(systemName: "person.fill")
-                    .foregroundColor(.white)
-                    .font(.system(size: size * 0.5))
-            } else {
+        if let symbol = avatarSymbol, let colorName = avatarColor {
+            // Use the actual avatar
+            AvatarView(
+                symbol: symbol,
+                colorName: colorName,
+                size: size
+            )
+        } else {
+            // Fallback to initials
+            ZStack {
+                Circle()
+                    .fill(BemoTheme.Colors.primary)
+                    .frame(width: size, height: size)
+                
                 Text(displayInitial)
                     .foregroundColor(.white)
                     .font(.system(size: size * 0.5, weight: .bold, design: .rounded))
@@ -56,7 +61,7 @@ struct ProfileBadgeView: View {
         ProfileBadgeView(name: "Alice")
         ProfileBadgeView(name: "Bob", size: 60)
         ProfileBadgeView(name: nil)
-        ProfileBadgeView(name: "", avatar: "avatar1")
+        ProfileBadgeView(name: "Emma", avatarSymbol: "star.fill", avatarColor: "purple")
     }
     .padding()
 }

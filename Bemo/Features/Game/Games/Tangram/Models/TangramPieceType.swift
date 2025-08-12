@@ -53,4 +53,14 @@ enum TangramPieceType: String, CaseIterable, Codable, Identifiable {
     var color: Color {
         TangramColors.pieceColor(for: self)
     }
+    
+    /// Helper to determine if this piece type is a triangle
+    var isTriangle: Bool {
+        switch self {
+        case .smallTriangle1, .smallTriangle2, .mediumTriangle, .largeTriangle1, .largeTriangle2:
+            return true
+        case .square, .parallelogram:
+            return false
+        }
+    }
 }

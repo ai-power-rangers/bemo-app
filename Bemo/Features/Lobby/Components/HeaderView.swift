@@ -13,17 +13,23 @@ import SwiftUI
 
 struct HeaderView: View {
     let profileName: String?
-    let profileAvatar: String?
+    let avatarSymbol: String?
+    let avatarColor: String?
     let onMenuTapped: () -> Void
+    let onProfileTapped: (() -> Void)?
     
     init(
         profileName: String? = nil,
-        profileAvatar: String? = nil,
-        onMenuTapped: @escaping () -> Void
+        avatarSymbol: String? = nil,
+        avatarColor: String? = nil,
+        onMenuTapped: @escaping () -> Void,
+        onProfileTapped: (() -> Void)? = nil
     ) {
         self.profileName = profileName
-        self.profileAvatar = profileAvatar
+        self.avatarSymbol = avatarSymbol
+        self.avatarColor = avatarColor
         self.onMenuTapped = onMenuTapped
+        self.onProfileTapped = onProfileTapped
     }
     
     var body: some View {
@@ -40,10 +46,22 @@ struct HeaderView: View {
             Spacer()
             
             // Profile Badge
-            ProfileBadgeView(
-                name: profileName,
-                avatar: profileAvatar
-            )
+            if let onProfileTapped = onProfileTapped {
+                Button(action: onProfileTapped) {
+                    ProfileBadgeView(
+                        name: profileName,
+                        avatarSymbol: avatarSymbol,
+                        avatarColor: avatarColor
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+            } else {
+                ProfileBadgeView(
+                    name: profileName,
+                    avatarSymbol: avatarSymbol,
+                    avatarColor: avatarColor
+                )
+            }
         }
         .padding(.horizontal, BemoTheme.Spacing.large)
         .padding(.vertical, BemoTheme.Spacing.medium)

@@ -71,9 +71,42 @@ struct GamePuzzleData: Codable, Equatable, Identifiable {
         
         /// Check if a placed piece matches this target within tolerances
         func matches(_ placed: PlacedPiece) -> Bool {
-            // Use centralized validation logic
+            // Must be same piece type
+            guard placed.pieceType == pieceType else { return false }
+            
+            // Use feature-angle validation for consistency
             let validator = TangramPieceValidator()
-            return validator.validate(placed: placed, target: self)
+            
+            // Compute feature angles
+            let canonicalTarget: CGFloat = pieceType.isTriangle ? (.pi/4) : 0  // 45° for triangles
+            let canonicalPiece: CGFloat = pieceType.isTriangle ? (3 * .pi/4) : 0  // 135° for triangles
+            
+            // Get expected rotation from transform
+            let rawAngle = TangramPoseMapper.rawAngle(from: transform)
+            let expectedZRotationSK = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAngle)
+            
+            // Compute feature angles
+            let targetFeatureAngle = expectedZRotationSK + canonicalTarget
+            let pieceLocalFeatureAngle = placed.isFlipped ? -canonicalPiece : canonicalPiece
+            let pieceRotationRad = placed.rotation * .pi / 180
+            let pieceFeatureAngle = pieceRotationRad + pieceLocalFeatureAngle
+            
+            // Get target position
+            let rawPosition = TangramPoseMapper.rawPosition(from: transform)
+            let targetPosition = TangramPoseMapper.spriteKitPosition(fromRawPosition: rawPosition)
+            
+            // Validate using feature angles
+            let result = validator.validateForSpriteKitWithFeatures(
+                piecePosition: placed.position,
+                pieceFeatureAngle: pieceFeatureAngle,
+                targetFeatureAngle: targetFeatureAngle,
+                pieceType: pieceType,
+                isFlipped: placed.isFlipped,
+                targetTransform: transform,
+                targetWorldPos: targetPosition
+            )
+            
+            return result.positionValid && result.rotationValid && result.flipValid
         }
     }
     
