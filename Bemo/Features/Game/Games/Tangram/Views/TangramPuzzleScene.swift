@@ -553,10 +553,7 @@ class TangramPuzzleScene: SKScene {
         let startX = leftZoneCenter - gridWidth / 2
         let startY: CGFloat = 0  // Center vertically
         
-        // Show zone overlay in debug mode
-        #if DEBUG
-        showZoneOverlay()
-        #endif
+        // Removed zone overlay visuals per design feedback
         
         for (index, target) in puzzle.targetPieces.enumerated() {
             let piece = PuzzlePieceNode(pieceType: target.pieceType)
@@ -583,10 +580,16 @@ class TangramPuzzleScene: SKScene {
             let rowOffset = (rowFloat - rowsFloat/2.0) * pieceSpacing
             let yPos = startY + rowOffset
             
-            piece.position = CGPoint(x: xPos, y: yPos)
+            // Ensure fully on-screen: clamp by estimated radius
+            let pieceRadius: CGFloat = TangramGameConstants.visualScale * 1.2
+            let halfW = physicalBounds.width / 2
+            let halfH = physicalBounds.height / 2
+            let clampedX = max(-halfW + pieceRadius, min(halfW - pieceRadius, xPos))
+            let clampedY = max(-halfH + pieceRadius, min(halfH - pieceRadius, yPos))
+            piece.position = CGPoint(x: clampedX, y: clampedY)
             
-            // Random rotation
-            piece.zRotation = CGFloat.random(in: 0...(2 * .pi))
+            // Mild randomized rotation for variety
+            piece.zRotation = CGFloat.random(in: -(.pi/4)...(.pi/4))
             
             // Initialize piece state as DETECTED
             let pieceId = piece.name ?? "unknown"
@@ -1062,6 +1065,7 @@ class TangramPuzzleScene: SKScene {
         // Establish or refresh per-group anchor mapping
         if let group = pieceGroup {
             // Select anchor (prefer validated > largest stable > most central)
+            // Use all pieces in the group (no spatial zone filtering)
             let groupNodes = availablePieces.filter { node in
                 guard let id = node.name else { return false }
                 return group.pieces.contains(id)
@@ -1148,9 +1152,9 @@ class TangramPuzzleScene: SKScene {
             for target in availableTargets {
                 guard let targetNode = targetSilhouettes[target.id] else { continue }
                 
-                let targetCentroid = (targetNode.userData?["centroidSK"] as? NSValue)?.cgPointValue ?? .zero
-                let targetScenePos = targetSection.convert(targetCentroid, to: self)
-                let targetRotation = targetNode.userData?["expectedZRotationSK"] as? CGFloat ?? 0
+                guard let targetPose = resolvePose(for: target) else { continue }
+                let targetScenePos = targetSection.convert(targetPose.centroidInContainer, to: self)
+                let targetRotation = targetPose.zRotationSK
                 let targetLocalFeature = pieceType.isTriangle ? (3 * CGFloat.pi / 4) : 0
                 let targetFeatureAngle = targetRotation + targetLocalFeature
                 let mappedFeatureAngle = mappedRotation + localFeatureAngle
@@ -1199,6 +1203,11 @@ class TangramPuzzleScene: SKScene {
                 
                 // Store which target this piece validated against
                 piece.userData!["validatedTargetId"] = match.target.id
+                groupValidatedPairs[group.id, default: []].append((pieceId: pieceId, targetId: match.target.id))
+                // Mapping refinement if we have ≥ 2 pairs
+                if groupValidatedPairs[group.id, default: []].count >= 2 {
+                    refineMapping(for: group.id)
+                }
                 
                 showPieceCelebration(piece)
                 let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
@@ -1228,9 +1237,9 @@ class TangramPuzzleScene: SKScene {
         for target in availableTargets {
             guard let targetNode = targetSilhouettes[target.id] else { continue }
             
-            let targetCentroid = (targetNode.userData?["centroidSK"] as? NSValue)?.cgPointValue ?? .zero
-            let targetScenePos = targetSection.convert(targetCentroid, to: self)
-            let targetRotation = targetNode.userData?["expectedZRotationSK"] as? CGFloat ?? 0
+            guard let tPose = resolvePose(for: target) else { continue }
+            let targetScenePos = targetSection.convert(tPose.centroidInContainer, to: self)
+            let targetRotation = tPose.zRotationSK
             let targetLocalFeature = pieceType.isTriangle ? (3 * CGFloat.pi / 4) : 0
             let targetFeatureAngle = targetRotation + targetLocalFeature
             
@@ -1296,12 +1305,22 @@ class TangramPuzzleScene: SKScene {
             }
         }
         
-        // Validation failed - update state and provide feedback
-        var updatedState = state
-        updatedState.markAsInvalid(reason: .wrongPosition(offset: 100))
-        pieceStates[pieceId] = updatedState
-        piece.pieceState = updatedState
-        piece.updateStateIndicator()
+        // Validation failed - apply hysteresis before marking invalid
+        let current = pieceInvalidStreak[pieceId] ?? 0
+        let next = current + 1
+        pieceInvalidStreak[pieceId] = next
+        if next >= invalidStreakThreshold {
+            var updatedState = state
+            updatedState.markAsInvalid(reason: .wrongPosition(offset: 100))
+            pieceStates[pieceId] = updatedState
+            piece.pieceState = updatedState
+            piece.updateStateIndicator()
+        } else {
+            // Keep in validating state, do not penalize yet
+            pieceStates[pieceId] = state
+            piece.pieceState = state
+            piece.updateStateIndicator()
+        }
         
         // Record attempt for smart nudging
         nudgeManager.recordAttempt(for: pieceId, at: piece.position)
@@ -1798,6 +1817,21 @@ class TangramPuzzleScene: SKScene {
     }
 
     // MARK: - Helpers
+    private struct ResolvedPose {
+        let centroidInContainer: CGPoint
+        let zRotationSK: CGFloat
+        let isFlipped: Bool
+        let displayScale: CGFloat
+    }
+
+    private func resolvePose(for target: GamePuzzleData.TargetPiece) -> ResolvedPose? {
+        guard let targetNode = targetSilhouettes[target.id] else { return nil }
+        let centroidLocal = (targetNode.userData?["centroidSK"] as? NSValue)?.cgPointValue ?? .zero
+        // Centroid is stored relative to puzzleContainer coordinates already
+        let zRot = targetNode.userData?["expectedZRotationSK"] as? CGFloat ?? TangramPoseMapper.spriteKitAngle(fromRawAngle: TangramPoseMapper.rawAngle(from: target.transform))
+        let flipped = targetNode.userData?["isFlipped"] as? Bool ?? false
+        return ResolvedPose(centroidInContainer: centroidLocal, zRotationSK: zRot, isFlipped: flipped, displayScale: targetDisplayScale)
+    }
     private func applyValidatedFill(to targetNode: SKShapeNode, for pieceType: TangramPieceType) {
         let ui = TangramColors.Sprite.uiColor(for: pieceType)
         targetNode.fillColor = ui.withAlphaComponent(0.7)
@@ -1809,6 +1843,55 @@ class TangramPuzzleScene: SKScene {
     private func tNodeIsFlipped(for target: GamePuzzleData.TargetPiece) -> Bool {
         let det = target.transform.a * target.transform.d - target.transform.b * target.transform.c
         return det < 0
+    }
+
+    // Refine mapping using best-fit rigid transform when we have ≥2 validated pairs
+    private func refineMapping(for groupId: UUID) {
+        guard let pairs = groupValidatedPairs[groupId], pairs.count >= 2,
+              let mapping = groupAnchorMappings[groupId] else { return }
+        // Build corresponding point sets in scene space
+        var src: [CGPoint] = [] // piece positions relative to anchorPiece
+        var dst: [CGPoint] = [] // target positions relative to anchorTarget
+        guard let anchorNode = availablePieces.first(where: { $0.name == mapping.anchorPieceId }),
+              let anchorTargetNode = targetSilhouettes[mapping.anchorTargetId] else { return }
+        let anchorScene = physicalWorldSection.convert(anchorNode.position, to: self)
+        let anchorTargetCentroid = (anchorTargetNode.userData?["centroidSK"] as? NSValue)?.cgPointValue ?? .zero
+        let anchorTargetScene = targetSection.convert(anchorTargetCentroid, to: self)
+        for (pid, tid) in pairs {
+            guard let node = availablePieces.first(where: { $0.name == pid }),
+                  let tNode = targetSilhouettes[tid] else { continue }
+            let pScene = physicalWorldSection.convert(node.position, to: self)
+            let tCentroid = (tNode.userData?["centroidSK"] as? NSValue)?.cgPointValue ?? .zero
+            let tScene = targetSection.convert(tCentroid, to: self)
+            src.append(CGPoint(x: pScene.x - anchorScene.x, y: pScene.y - anchorScene.y))
+            dst.append(CGPoint(x: tScene.x - anchorTargetScene.x, y: tScene.y - anchorTargetScene.y))
+        }
+        guard src.count == dst.count, src.count >= 2 else { return }
+        // Estimate rotation by averaging angle differences
+        var sumCos: CGFloat = 0, sumSin: CGFloat = 0
+        for i in 0..<src.count {
+            let ps = src[i]; let pd = dst[i]
+            let a = atan2(ps.y, ps.x)
+            let b = atan2(pd.y, pd.x)
+            let d = b - a
+            sumCos += cos(d)
+            sumSin += sin(d)
+        }
+        let rot = atan2(sumSin, sumCos)
+        // Compute translation using means
+        let rotatedSrc = src.map { pt -> CGPoint in
+            CGPoint(x: pt.x * cos(rot) - pt.y * sin(rot), y: pt.x * sin(rot) + pt.y * cos(rot))
+        }
+        let meanDst = dst.reduce(CGPoint.zero) { CGPoint(x: $0.x + $1.x, y: $0.y + $1.y) }
+        let meanSrc = rotatedSrc.reduce(CGPoint.zero) { CGPoint(x: $0.x + $1.x, y: $0.y + $1.y) }
+        let n = CGFloat(dst.count)
+        let trans = CGVector(dx: (meanDst.x - meanSrc.x) / n, dy: (meanDst.y - meanSrc.y) / n)
+        // Update mapping
+        groupAnchorMappings[groupId]?.rotationDelta = rot
+        groupAnchorMappings[groupId]?.translationOffset = CGPoint(x: mapping.translationOffset.x + trans.dx,
+                                                                  y: mapping.translationOffset.y + trans.dy)
+        groupAnchorMappings[groupId]?.version = mapping.version + 1
+        groupAnchorMappings[groupId]?.pairCount = pairs.count
     }
     
     private func createGhostPiece(type: TangramPieceType, at position: CGPoint, rotation: CGFloat) -> SKNode {
@@ -2076,20 +2159,11 @@ class TangramPuzzleScene: SKScene {
         
         guard let puzzle = puzzle else { return }
         
-        // Find the target for this hint
-        let target = puzzle.targetPieces.first { $0.pieceType == hint.targetPiece }
-        guard let target = target,
-              let targetNode = targetSilhouettes[target.id] else { return }
-        
-        print("[HINT] Showing hint for \(hint.targetPiece.rawValue) → target \(target.id)")
-        
-        // Get the actual centroid from stored userData (not position which is 0,0)
-        let targetCentroid = (targetNode.userData?["centroidSK"] as? NSValue)?.cgPointValue ?? .zero
-        _ = targetSection.convert(targetCentroid, to: self) // Will use later for mapping
-        
-        // Calculate target rotation and flip state
-        let targetRotation = TangramPoseMapper.spriteKitAngle(fromRawAngle: TangramPoseMapper.rawAngle(from: target.transform))
-        let targetFlipped = target.transform.a * target.transform.d - target.transform.b * target.transform.c < 0
+        // Locate the exact target; prefer transform match, fallback to type
+        let target = puzzle.targetPieces.first(where: { $0.pieceType == hint.targetPiece })
+        guard let targetPiece = target,
+              let pose = resolvePose(for: targetPiece) else { return }
+        print("[HINT] Showing hint for \(hint.targetPiece.rawValue) → target \(targetPiece.id)")
         
         // Create hint visualization in TARGET section (silhouette area) for clarity
         let hintPiece = PuzzlePieceNode(pieceType: hint.targetPiece)
@@ -2112,7 +2186,7 @@ class TangramPuzzleScene: SKScene {
             }
         } else {
             // Start from a default position below the silhouette
-            startPos = CGPoint(x: targetCentroid.x, y: -100)
+            startPos = CGPoint(x: pose.centroidInContainer.x, y: -100)
         }
         
         hintPiece.position = startPos
@@ -2122,10 +2196,10 @@ class TangramPuzzleScene: SKScene {
             targetSection.addChild(hintPiece)
         }
         // Scale hint to match silhouette display scale so rotation visually matches
-        hintPiece.setScale(targetDisplayScale)
+        hintPiece.setScale(pose.displayScale)
         
         // Apply flip if needed for parallelogram BEFORE animation
-        if hint.targetPiece == .parallelogram && targetFlipped {
+        if hint.targetPiece == .parallelogram && pose.isFlipped {
             hintPiece.flip()
         }
         
@@ -2133,10 +2207,10 @@ class TangramPuzzleScene: SKScene {
         let fadeIn = SKAction.fadeAlpha(to: 0.6, duration: 0.3)
         
         // Step 1: Rotate to correct orientation
-        let rotateAction = SKAction.rotate(toAngle: targetRotation, duration: 0.6, shortestUnitArc: true)
+        let rotateAction = SKAction.rotate(toAngle: pose.zRotationSK, duration: 0.6, shortestUnitArc: true)
         
         // Step 2: Move to exact position in silhouette (centroid is in container coordinates)
-        let moveAction = SKAction.move(to: targetCentroid, duration: 0.8)
+        let moveAction = SKAction.move(to: pose.centroidInContainer, duration: 0.8)
         moveAction.timingMode = .easeInEaseOut
         
         // Step 3: Pulse to show it's in the right place
@@ -2167,7 +2241,7 @@ class TangramPuzzleScene: SKScene {
         }
         
         hintNode = hintPiece
-        currentHint = (hint.targetPiece, target.id)
+        currentHint = (hint.targetPiece, targetPiece.id)
     }
     
     func hideHint() {

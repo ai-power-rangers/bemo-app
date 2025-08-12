@@ -57,7 +57,7 @@ class APIService {
     
     // MARK: - Profile Management
     
-    func createChildProfile(userId: String, name: String, age: Int, gender: String) -> AnyPublisher<UserProfile, APIError> {
+    func createChildProfile(userId: String, name: String, age: Int, gender: String, avatarSymbol: String? = nil, avatarColor: String? = nil) -> AnyPublisher<UserProfile, APIError> {
         guard let supabaseService = supabaseService else {
             return Fail(error: APIError.supabaseNotAvailable)
                 .eraseToAnyPublisher()
@@ -73,21 +73,30 @@ class APIService {
         
         print("DEBUG: APIService - Creating profile for user: \(userId), name: '\(name)', age: \(age)")
         
-        // Create profile object
-        let profile = UserProfile(
-            id: UUID().uuidString,
-            userId: userId,
-            name: name,
-            age: age,
-            gender: gender,
-            totalXP: 0,
-            preferences: UserPreferences()
-        )
-        
-        // Use Supabase to persist the profile
+        // Use Supabase to get the actual Supabase user ID and create the profile
         return Future { promise in
             Task {
                 do {
+                    // Get the Supabase user ID instead of using Apple ID
+                    let supabaseUserId = try await supabaseService.getCurrentUserID()
+                    
+                    // Use provided avatar or generate random one
+                    let defaultAvatar = Avatar.random()
+                    
+                    // Create profile object with Supabase user ID
+                    let profile = UserProfile(
+                        id: UUID().uuidString,
+                        userId: supabaseUserId,  // Use Supabase UUID, not Apple ID
+                        name: name,
+                        age: age,
+                        gender: gender,
+                        avatarSymbol: avatarSymbol ?? defaultAvatar.symbol,
+                        avatarColor: avatarColor ?? defaultAvatar.colorName,
+                        totalXP: 0,
+                        preferences: UserPreferences()
+                    )
+                    
+                    // Persist to Supabase
                     try await supabaseService.syncChildProfile(profile)
                     promise(.success(profile))
                 } catch {
@@ -100,6 +109,7 @@ class APIService {
     
     func getChildProfiles(userId: String) -> AnyPublisher<[UserProfile], APIError> {
         // Stub implementation
+        let defaultAvatar = Avatar.random()
         let profiles = [
             UserProfile(
                 id: "1",
@@ -107,6 +117,8 @@ class APIService {
                 name: "Emma",
                 age: 6,
                 gender: "Female",
+                avatarSymbol: defaultAvatar.symbol,
+                avatarColor: defaultAvatar.colorName,
                 totalXP: 450,
                 preferences: UserPreferences()
             )

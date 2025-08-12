@@ -16,6 +16,8 @@ struct ProfileSetupView: View {
     @State private var childName = ""
     @State private var childAge = 5
     @State private var selectedGender = "Not specified"
+    @State private var selectedAvatar = Avatar.random()
+    @State private var showAvatarPicker = false
     @FocusState private var isNameFieldFocused: Bool
     
     private let genderOptions = ["Male", "Female", "Not specified"]
@@ -79,6 +81,21 @@ struct ProfileSetupView: View {
                 LoadingOverlay()
             }
         }
+        .sheet(isPresented: $showAvatarPicker) {
+            NavigationView {
+                AvatarPicker(selectedAvatar: $selectedAvatar)
+                    .padding()
+                    .navigationTitle("Choose Avatar")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Done") {
+                                showAvatarPicker = false
+                            }
+                        }
+                    }
+            }
+        }
     }
     
     private var headerSection: some View {
@@ -101,6 +118,35 @@ struct ProfileSetupView: View {
     
     private var profileFormSection: some View {
         VStack(spacing: 24) {
+            // Avatar selection
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Choose Avatar")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                HStack {
+                    AvatarView(avatar: selectedAvatar, size: 60)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(selectedAvatar.displayName)
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                        
+                        Button("Change Avatar") {
+                            showAvatarPicker = true
+                        }
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    }
+                    .padding(.leading, 8)
+                    
+                    Spacer()
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(12)
+            }
+            
             // Name input
             VStack(alignment: .leading, spacing: 8) {
                 Text("Child's Name")
@@ -204,7 +250,13 @@ struct ProfileSetupView: View {
         let trimmedName = childName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
         
-        viewModel.createChildProfile(name: trimmedName, age: childAge, gender: selectedGender)
+        viewModel.createChildProfile(
+            name: trimmedName,
+            age: childAge,
+            gender: selectedGender,
+            avatarSymbol: selectedAvatar.symbol,
+            avatarColor: selectedAvatar.colorName
+        )
     }
 }
 

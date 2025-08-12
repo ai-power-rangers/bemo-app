@@ -43,10 +43,8 @@ class ProfileService {
         loadActiveProfile()
         loadChildProfiles()
         
-        // Set first profile as active if no active profile but profiles exist
-        if activeProfile == nil && !childProfiles.isEmpty {
-            setActiveProfile(childProfiles.first!)
-        }
+        // Don't auto-set profile on init - wait for proper authentication
+        // Profile will be set after sync or user selection
     }
     
     // MARK: - Supabase Integration
@@ -73,24 +71,27 @@ class ProfileService {
         Task {
             do {
                 let remoteProfiles = try await supabaseService.fetchChildProfiles()
-                // Get the current Supabase user ID for proper filtering
-                let currentSupabaseUserId = await getCurrentSupabaseUserId()
                 
                 await MainActor.run {
-                    // Filter profiles to only include those belonging to the current authenticated user
-                    let userRemoteProfiles = remoteProfiles.filter { profile in
-                        guard let userId = currentSupabaseUserId else { return false }
-                        return profile.belongsTo(authenticatedUserId: userId)
-                    }
+                    // All fetched profiles belong to the current authenticated user
+                    // (Supabase RLS policies ensure we only get our own profiles)
                     
-                    // Merge filtered remote profiles with local profiles, keeping local as source of truth
-                    for remoteProfile in userRemoteProfiles {
+                    // Merge remote profiles with local profiles
+                    for remoteProfile in remoteProfiles {
                         if !childProfiles.contains(where: { $0.id == remoteProfile.id }) {
                             childProfiles.append(remoteProfile)
+                        } else {
+                            // Update existing profile with remote data
+                            if let index = childProfiles.firstIndex(where: { $0.id == remoteProfile.id }) {
+                                childProfiles[index] = remoteProfile
+                            }
                         }
                     }
                     saveChildProfiles()
-                    print("Profile sync from Supabase completed - synced \(userRemoteProfiles.count) profiles for user \(currentSupabaseUserId ?? "unknown")")
+                    print("Profile sync from Supabase completed - synced \(remoteProfiles.count) profiles")
+                    
+                    // Don't auto-select profile here - let the coordinator handle it
+                    // This ensures proper UI flow
                 }
             } catch {
                 print("Profile sync from Supabase failed (non-critical): \(error)")
@@ -127,6 +128,35 @@ class ProfileService {
         userDefaults.removeObject(forKey: childProfilesKey)
         
         print("All local profile data cleared")
+    }
+    
+    func filterProfilesForCurrentUser() {
+        // Filter local profiles to only keep those belonging to the current authenticated user
+        // This is called after authentication to ensure we only show the right profiles
+        Task {
+            if let supabaseService = supabaseService {
+                do {
+                    let currentUserId = try await supabaseService.getCurrentUserID()
+                    await MainActor.run {
+                        // Filter profiles to only those belonging to current user
+                        let filteredProfiles = childProfiles.filter { $0.userId == currentUserId }
+                        if filteredProfiles.count != childProfiles.count {
+                            print("Filtered profiles: keeping \(filteredProfiles.count) of \(childProfiles.count) profiles for user \(currentUserId)")
+                            childProfiles = filteredProfiles
+                            saveChildProfiles()
+                            
+                            // Clear active profile if it doesn't belong to current user
+                            if let active = activeProfile,
+                               !filteredProfiles.contains(where: { $0.id == active.id }) {
+                                clearActiveProfile()
+                            }
+                        }
+                    }
+                } catch {
+                    print("Failed to filter profiles for current user: \(error)")
+                }
+            }
+        }
     }
     
     func addChildProfile(_ profile: UserProfile) {
@@ -296,13 +326,18 @@ class ProfileService {
     
     // MARK: - Profile Creation
     
-    func createProfile(name: String, age: Int, gender: String, userId: String) -> UserProfile {
+    func createProfile(name: String, age: Int, gender: String, userId: String, avatarSymbol: String? = nil, avatarColor: String? = nil) -> UserProfile {
+        // Use provided avatar or generate random one
+        let defaultAvatar = Avatar.random()
+        
         return UserProfile(
             id: UUID().uuidString,
             userId: userId,
             name: name,
             age: age,
             gender: gender,
+            avatarSymbol: avatarSymbol ?? defaultAvatar.symbol,
+            avatarColor: avatarColor ?? defaultAvatar.colorName,
             totalXP: 0,
             preferences: UserPreferences()
         )
@@ -380,12 +415,14 @@ class ProfileService {
 
 // MARK: - Data Models
 
-struct UserProfile: Codable {
+struct UserProfile: Codable, Identifiable {
     let id: String
     let userId: String // Parent's authenticated user ID
     var name: String
     var age: Int
     var gender: String
+    var avatarSymbol: String
+    var avatarColor: String
     var totalXP: Int
     var preferences: UserPreferences
     

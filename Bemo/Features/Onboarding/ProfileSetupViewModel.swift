@@ -39,7 +39,7 @@ class ProfileSetupViewModel {
         self.onBackRequested = onBackRequested
     }
     
-    func createChildProfile(name: String, age: Int, gender: String) {
+    func createChildProfile(name: String, age: Int, gender: String, avatarSymbol: String? = nil, avatarColor: String? = nil) {
         guard !isLoading else { return }
         
         // Validate inputs before proceeding
@@ -79,7 +79,9 @@ class ProfileSetupViewModel {
             userId: authenticatedUser.id,
             name: trimmedName,
             age: age,
-            gender: gender
+            gender: gender,
+            avatarSymbol: avatarSymbol,
+            avatarColor: avatarColor
         )
         .receive(on: DispatchQueue.main)
         .sink(

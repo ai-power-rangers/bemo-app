@@ -175,6 +175,8 @@ struct ProfileSelectionModal_Previews: PreviewProvider {
                     name: "Emma",
                     age: 7,
                     gender: "Female",
+                    avatarSymbol: "star.fill",
+                    avatarColor: "purple",
                     totalXP: 250,
                     preferences: UserPreferences()
                 ),
@@ -184,6 +186,8 @@ struct ProfileSelectionModal_Previews: PreviewProvider {
                     name: "Lucas",
                     age: 5,
                     gender: "Male",
+                    avatarSymbol: "heart.fill",
+                    avatarColor: "blue",
                     totalXP: 150,
                     preferences: UserPreferences()
                 )
