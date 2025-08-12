@@ -53,6 +53,7 @@ struct TangramSpriteView: View {
                 tangramScene.loadPuzzle(newValue)
             }
         }
+        // Propagate difficulty changes via puzzle reloads or view updates if needed later
         .onChange(of: isPuzzleComplete) { oldValue, newValue in
             if let tangramScene = scene as? TangramPuzzleScene {
                 // Convert bool to set of completed pieces (empty if not complete)

@@ -53,3 +53,40 @@
   - Hints will only pick connected, frontier pieces; no more top-left outliers.
 
 This design removes the brittle branches, uses one consistent math path, and stabilizes behavior across small code changes while aligning nudges tightly to what the validator actually requires.
+
+Ran tool
+Ran tool
+Ran tool
+Ran tool
+
+Ran tool
+
+Ran tool
+
+Ran tool
+Ran tool
+
+Ran tool
+Plan looks good. I’ll implement difficulty as a first-class setting flowing from parent profile → game host → game (via delegate/config), then wire Tangram to read those tolerances and visuals:
+
+- Add difficulty to preferences
+  - Use existing `UserPreferences.DifficultySetting` (easy, normal, hard). Interpret “normal” as medium.
+  - Expose current child’s difficulty from `ProfileService` to `GameHostViewModel`.
+
+- Extend GameDelegate or config
+  - Add a read method or pass a `GameDifficulty` to the game at view creation time (e.g., via `gameUIConfig` or a small `GameplayConfig` struct).
+  - Provide per-difficulty tolerances (centroidTolerance, edgeTolerance, rotationTolerance, connectionDistance) and visual flags (colored outlines on silhouettes).
+  - Tangram reads these and:
+    - Uses them universally in the single validator path (both direct and mapped).
+    - Switches silhouettes: easy = colored outlines; medium = current; hard = black.
+
+- Implement unified validator and mapping
+  - Use the single validator path everywhere (flip/rotation/position with polygon or centroid and difficulty thresholds).
+  - Use least-squares mapping refinement (already close; continue to refine by pairs; no re-anchoring).
+  - Hysteresis: once validated, don’t invalidate unless the piece actually moves beyond relaxed drop-out bounds.
+
+- Nudges/hints alignment
+  - Nudges only from the unified validator result; one at a time.
+  - Hints only propose connected frontier pieces if any validated exist; otherwise no hint or starter.
+
+This will make difficulty parent-controlled, visuals appropriate, and validation/nudges consistent and robust.

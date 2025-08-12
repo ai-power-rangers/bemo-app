@@ -59,7 +59,7 @@ class TangramDependencyContainer {
         self.geometryUtilities = TangramGeometryUtilities.self
         self.dataConverter = PuzzleDataConverter.self
         
-        // Initialize core services
+        // Initialize core services with default tolerances; scene/viewmodel can replace if difficulty override applies
         self.pieceValidator = TangramPieceValidator()
         // gameplayService and positioningService removed
         self.hintEngine = TangramHintEngine()

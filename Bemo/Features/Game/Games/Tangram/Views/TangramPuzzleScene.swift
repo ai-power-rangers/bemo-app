@@ -513,11 +513,30 @@ class TangramPuzzleScene: SKScene {
         }
         
         let silhouette = SKShapeNode(path: path)
-        // Start with light gray outline, will turn green when completed
-        silhouette.fillColor = .clear  // Start with no fill
-        silhouette.strokeColor = .systemGray2
-        silhouette.lineWidth = 2
-        silhouette.alpha = 0.6
+        // Style depends on difficulty (easy colored outlines, medium standard, hard black)
+        let childDifficulty: UserPreferences.DifficultySetting = {
+            if let host = self.delegate as? GameDelegate {
+                return host.getChildDifficultySetting()
+            }
+            return .normal
+        }()
+        switch TangramGameConstants.VisualDifficultyStyle.style(for: childDifficulty) {
+        case .easyColoredOutlines:
+            silhouette.fillColor = .clear
+            silhouette.strokeColor = TangramColors.Sprite.uiColor(for: target.pieceType)
+            silhouette.lineWidth = 3
+            silhouette.alpha = 0.85
+        case .mediumStandard:
+            silhouette.fillColor = .clear
+            silhouette.strokeColor = .systemGray2
+            silhouette.lineWidth = 2
+            silhouette.alpha = 0.6
+        case .hardAllBlack:
+            silhouette.fillColor = .black
+            silhouette.strokeColor = .black
+            silhouette.lineWidth = 1
+            silhouette.alpha = 0.9
+        }
         silhouette.name = "target_\(target.id)"
         silhouette.position = .zero  // Already positioned via vertices
         
@@ -1786,16 +1805,13 @@ class TangramPuzzleScene: SKScene {
         return ResolvedPose(centroidInContainer: centroidLocal, zRotationSK: zRot, isFlipped: flipped, displayScale: targetDisplayScale)
     }
 
-    // Dynamic connection threshold based on puzzle difficulty (easier levels are more forgiving)
+    // Dynamic connection threshold based on parent-set difficulty (easy > forgiving)
     private func dynamicConnectionThreshold() -> CGFloat {
-        guard let difficulty = puzzle?.difficulty else { return TangramGameConstants.Validation.connectionDistance }
-        switch difficulty {
-        case 0: return 170
-        case 1: return 150
-        case 2: return 130
-        case 3: return 110
-        default: return TangramGameConstants.Validation.connectionDistance // 4 and above
-        }
+        let childDifficulty: UserPreferences.DifficultySetting = {
+            if let host = self.delegate as? GameDelegate { return host.getChildDifficultySetting() }
+            return .normal
+        }()
+        return TangramGameConstants.Validation.tolerances(for: childDifficulty).connection
     }
     private func applyValidatedFill(to targetNode: SKShapeNode, for pieceType: TangramPieceType) {
         let ui = TangramColors.Sprite.uiColor(for: pieceType)

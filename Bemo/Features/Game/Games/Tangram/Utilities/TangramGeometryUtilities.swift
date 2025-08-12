@@ -116,13 +116,6 @@ enum TangramGeometryUtilities {
         return -extractRotation(from: transform)
     }
     
-    /// Extracts rotation angle for SpriteKit scene space (negated to account for Y-flip in target rendering)
-    /// This converts from the stored transform's rotation to the scene's coordinate space
-    /// where target silhouettes are rendered with Y inverted
-    static func sceneRotation(from transform: CGAffineTransform) -> Double {
-        return -extractRotation(from: transform)
-    }
-    
     /// Creates a CGAffineTransform from position, rotation, and scale
     static func createTransform(position: CGPoint, rotation: Double, scale: CGFloat = 1.0) -> CGAffineTransform {
         var transform = CGAffineTransform.identity

@@ -17,6 +17,7 @@ struct TangramGameView: View {
     @State private var searchText = ""
     @State private var selectedCategory: String? = nil
     @State private var selectedDifficulty: Int? = nil
+    @State private var difficultyOverride: UserPreferences.DifficultySetting? = nil
     
     #if DEBUG
     // Debug-only properties for CV mocking
@@ -148,6 +149,25 @@ struct TangramGameView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            // Difficulty override control (per-game)
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    Button("Use Child Default", action: { difficultyOverride = nil; viewModel.applyDifficultyOverride(nil) })
+                    Divider()
+                    Button("Easy", action: { difficultyOverride = .easy; viewModel.applyDifficultyOverride(.easy) })
+                    Button("Medium", action: { difficultyOverride = .normal; viewModel.applyDifficultyOverride(.normal) })
+                    Button("Hard", action: { difficultyOverride = .hard; viewModel.applyDifficultyOverride(.hard) })
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "slider.horizontal.3")
+                        Text(difficultyOverrideLabel)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                }
+            }
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: {
                     viewModel.requestQuit()
@@ -483,6 +503,17 @@ struct TangramGameView: View {
                 .shadow(radius: 10)
         )
         .padding()
+    }
+}
+
+extension TangramGameView {
+    private var difficultyOverrideLabel: String {
+        guard let d = difficultyOverride else { return "Child Default" }
+        switch d {
+        case .easy: return "Easy"
+        case .normal: return "Medium"
+        case .hard: return "Hard"
+        }
     }
 }
 

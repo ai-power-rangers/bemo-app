@@ -91,6 +91,12 @@ class TangramGameViewModel {
     private let container: TangramDependencyContainer
     private let supabaseService: SupabaseService?
     var availablePuzzles: [GamePuzzleData] = []
+
+    // MARK: - Difficulty
+    private(set) var effectiveDifficulty: UserPreferences.DifficultySetting = .normal
+    func setEffectiveDifficulty(_ difficulty: UserPreferences.DifficultySetting) {
+        effectiveDifficulty = difficulty
+    }
     
     
     // MARK: - Metrics Tracking
@@ -123,6 +129,20 @@ class TangramGameViewModel {
                 }
             }
         }
+    }
+
+    // MARK: - Difficulty Override API (from View)
+    func applyDifficultyOverride(_ difficulty: UserPreferences.DifficultySetting?) {
+        if let d = difficulty {
+            setEffectiveDifficulty(d)
+        } else {
+            // Ask delegate for child default
+            let base = delegate?.getChildDifficultySetting() ?? .normal
+            setEffectiveDifficulty(base)
+        }
+        // Notify scene if already running
+        // The scene is created in TangramSpriteView; we propagate via a lightweight notification in placedPieces change
+        // Actual consumption occurs in TangramPuzzleScene by reading viewModel when binding or via per-call parameters
     }
     
     // Alternative init for backward compatibility
@@ -574,6 +594,16 @@ class TangramGameViewModel {
             }
         )
         
+        // Resolve difficulty tolerances
+        let tol = TangramGameConstants.Validation.tolerances(for: effectiveDifficulty)
+
+        // Swap in a difficulty-configured validator for this pass
+        let difficultyValidator = TangramPieceValidator(
+            positionTolerance: tol.position,
+            rotationTolerance: tol.rotationDeg,
+            edgeContactTolerance: tol.edgeContact
+        )
+
         // Validate non-anchor pieces using mapped pose and instance-binding
         // Require at least 2 pieces in the CV group before allowing any validations
         guard placedPieces.count >= 2 else {
@@ -633,7 +663,7 @@ class TangramGameViewModel {
                     pieceType: piece.pieceType,
                     target: target,
                     targetCentroidScene: centroid,
-                    validator: container.pieceValidator
+                    validator: difficultyValidator
                 )
                 if isValid {
                     piece.validationState = .correct
@@ -653,7 +683,7 @@ class TangramGameViewModel {
                         pieceType: piece.pieceType,
                         target: t,
                         targetCentroidScene: centroid,
-                        validator: container.pieceValidator
+                        validator: difficultyValidator
                     )
                     if isValid {
                         if best == nil || d < best!.dist { best = (t.id, d) }

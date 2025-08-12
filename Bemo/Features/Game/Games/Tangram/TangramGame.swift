@@ -39,6 +39,7 @@ class TangramGame: Game {
     private let supabaseService: SupabaseService?
     private let puzzleManagementService: PuzzleManagementService?
     private var childProfileId: String?
+    private var overrideDifficulty: UserPreferences.DifficultySetting? = nil
     
     // MARK: - Initialization
     
@@ -60,6 +61,10 @@ class TangramGame: Game {
         if let childId = childProfileId {
             vm.setChildProfileId(childId)
         }
+
+        // Provide effective difficulty (parent default with optional override)
+        let base = delegate.getChildDifficultySetting()
+        vm.setEffectiveDifficulty(overrideDifficulty ?? base)
         
         self.viewModel = vm
         return AnyView(
@@ -73,6 +78,14 @@ class TangramGame: Game {
         self.childProfileId = childId
         // Also update view model if it exists
         viewModel?.setChildProfileId(childId)
+    }
+
+    /// Optional per-game override from the puzzle library
+    func setDifficultyOverride(_ difficulty: UserPreferences.DifficultySetting?) {
+        self.overrideDifficulty = difficulty
+        if let vm = viewModel, let difficulty = difficulty {
+            vm.setEffectiveDifficulty(difficulty)
+        }
     }
     
     func processRecognizedPieces(_ pieces: [RecognizedPiece]) -> PlayerActionOutcome {

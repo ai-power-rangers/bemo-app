@@ -75,7 +75,7 @@ struct TgramViewerView: View {
                         .onAppear {
                             viewModel.updateCanvasSize(to: geometry.size)
                         }
-                        .onChange(of: geometry.size) { newSize in
+                        .onChange(of: geometry.size) { previous, newSize in
                             viewModel.updateCanvasSize(to: newSize)
                         }
                     }

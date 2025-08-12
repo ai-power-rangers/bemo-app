@@ -51,14 +51,26 @@ enum TangramGameConstants {
     
     enum Validation {
         /// Distance tolerance for piece center position matching (in pixels)
-        static let positionTolerance: CGFloat = 35.0  // Increased for better touch interaction with triangles
+        static let positionTolerance: CGFloat = 35.0
         
         /// Rotation tolerance for piece angle matching (in degrees)
-        static let rotationTolerance: CGFloat = 18.0  // Stricter to reduce false-positive validations
+        static let rotationTolerance: CGFloat = 18.0
 
         /// Minimum center-to-center distance for two pieces to be considered "connected"
         /// This gates early validation to ensure the first relations are built physically next to each other
         static let connectionDistance: CGFloat = 100.0
+
+        /// Per-difficulty tolerance presets
+        static func tolerances(for difficulty: UserPreferences.DifficultySetting) -> (position: CGFloat, rotationDeg: CGFloat, connection: CGFloat, edgeContact: CGFloat) {
+            switch difficulty {
+            case .easy:
+                return (position: 55, rotationDeg: 24, connection: 170, edgeContact: 16)
+            case .normal:
+                return (position: 40, rotationDeg: 18, connection: 130, edgeContact: 14)
+            case .hard:
+                return (position: 28, rotationDeg: 12, connection: 90, edgeContact: 10)
+            }
+        }
     }
     
     // MARK: - Animation
@@ -83,5 +95,19 @@ enum TangramGameConstants {
     static let targetPieceAlpha: CGFloat = 0.3
     
     // Snap preview alpha removed (snapping disabled)
+
+    enum VisualDifficultyStyle {
+        case easyColoredOutlines
+        case mediumStandard
+        case hardAllBlack
+        
+        static func style(for difficulty: UserPreferences.DifficultySetting) -> VisualDifficultyStyle {
+            switch difficulty {
+            case .easy: return .easyColoredOutlines
+            case .normal: return .mediumStandard
+            case .hard: return .hardAllBlack
+            }
+        }
+    }
 }
 
