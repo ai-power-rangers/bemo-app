@@ -59,7 +59,7 @@ class TangramHintRenderer {
     }
     
     /// Shows a movement hint arrow
-    func showMovementHint(from: CGPoint, to: CGPoint) {
+    func showMovementHint(for pieceType: TangramPieceType, from: CGPoint, to: CGPoint) {
         guard let effectsLayer = effectsLayer else { return }
         
         // Create arrow path
@@ -68,7 +68,7 @@ class TangramHintRenderer {
         path.addLine(to: to)
         
         let arrow = SKShapeNode(path: path)
-        arrow.strokeColor = .systemYellow
+        arrow.strokeColor = TangramColors.Sprite.uiColor(for: pieceType)
         arrow.lineWidth = 4  // Increased for visibility
         arrow.alpha = 0
         arrow.zPosition = 500  // High z-position for visibility
@@ -94,14 +94,14 @@ class TangramHintRenderer {
     }
     
     /// Shows rotation hint
-    func showRotationHint(at position: CGPoint, targetRotation: CGFloat) {
+    func showRotationHint(for pieceType: TangramPieceType, at position: CGPoint, targetRotation: CGFloat) {
         guard let effectsLayer = effectsLayer else { return }
         
         // Create rotation indicator with enhanced visibility
         let radius: CGFloat = 45  // Slightly larger
         let circle = SKShapeNode(circleOfRadius: radius)
         circle.position = position
-        circle.strokeColor = .systemYellow
+        circle.strokeColor = TangramColors.Sprite.uiColor(for: pieceType)
         circle.fillColor = .clear
         circle.lineWidth = 3  // Thicker line
         circle.glowWidth = 4  // Add glow
@@ -115,7 +115,7 @@ class TangramHintRenderer {
                         clockwise: false)
         
         let rotationArrow = SKShapeNode(path: arrowPath)
-        rotationArrow.strokeColor = .systemYellow
+        rotationArrow.strokeColor = TangramColors.Sprite.uiColor(for: pieceType)
         rotationArrow.lineWidth = 4
         rotationArrow.glowWidth = 2
         circle.addChild(rotationArrow)
@@ -136,14 +136,14 @@ class TangramHintRenderer {
     }
     
     /// Shows flip hint
-    func showFlipHint(at position: CGPoint) {
+    func showFlipHint(for pieceType: TangramPieceType, at position: CGPoint) {
         guard let effectsLayer = effectsLayer else { return }
         
         // Create flip indicator with enhanced visibility
         let label = SKLabelNode(text: "↔ Flip")
         label.position = CGPoint(x: position.x, y: position.y + 60)
         label.fontSize = 28  // Larger for visibility
-        label.fontColor = .systemYellow
+        label.fontColor = TangramColors.Sprite.uiColor(for: pieceType)
         label.fontName = "System-Bold"  // Bold for user hints
         label.alpha = 0
         label.zPosition = 500
@@ -151,7 +151,7 @@ class TangramHintRenderer {
         // Add background for better visibility
         let background = SKShapeNode(rectOf: CGSize(width: 80, height: 35), cornerRadius: 8)
         background.fillColor = .black.withAlphaComponent(0.5)
-        background.strokeColor = .systemYellow
+        background.strokeColor = TangramColors.Sprite.uiColor(for: pieceType)
         background.lineWidth = 2
         background.position = .zero
         background.zPosition = -1
@@ -209,8 +209,9 @@ class TangramHintRenderer {
         
         // Create shape node with enhanced visibility
         let shape = SKShapeNode(path: path)
-        shape.strokeColor = .systemYellow
-        shape.fillColor = .systemYellow.withAlphaComponent(0.2)
+        let uiColor = TangramColors.Sprite.uiColor(for: pieceType)
+        shape.strokeColor = uiColor
+        shape.fillColor = uiColor.withAlphaComponent(0.2)
         shape.lineWidth = 3  // Increased for better visibility
         shape.glowWidth = 8  // Increased glow for user-requested hints
         shape.zPosition = 500  // Ensure it's visible above pieces
@@ -237,7 +238,7 @@ class TangramHintRenderer {
         ))
         
         let arrowhead = SKShapeNode(path: path)
-        arrowhead.strokeColor = .systemYellow
+        arrowhead.strokeColor = .white
         arrowhead.lineWidth = 3
         
         return arrowhead

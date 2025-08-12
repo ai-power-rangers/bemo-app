@@ -204,7 +204,7 @@ class TangramGameViewModel {
         )
         
         if let hint = hint {
-            // Set the hint directly - no need for nil pattern
+            // Set the hint directly - engine guarantees a hint while incomplete
             currentHint = hint
             
             // Track hint
@@ -430,6 +430,12 @@ class TangramGameViewModel {
     
     func processCVInput(_ pieces: [PlacedPiece]) {
         guard currentPhase == .playingPuzzle else { return }
+        
+        // In SpriteKit mode, ignore CV-driven updates entirely to avoid
+        // clearing hints due to CV movement noise and to prevent conflicting states.
+        if useSpriteKit {
+            return
+        }
         
         // Check if any hinted piece is being moved
         if let hint = currentHint {

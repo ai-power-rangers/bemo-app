@@ -87,8 +87,9 @@ class TangramHintEngine {
     // MARK: - Constants
     
     private let stuckThreshold: TimeInterval = 30.0  // 30 seconds without progress
-    private let rotationTolerance: Double = 15.0      // Degrees
-    private let positionTolerance: CGFloat = 50.0     // Points
+    // Use centralized tolerances for consistency with validation and snapping
+    private var rotationToleranceDegrees: CGFloat { TangramGameConstants.Validation.rotationTolerance }
+    private var positionTolerancePoints: CGFloat { TangramGameConstants.Validation.positionTolerance }
     
     // MARK: - Public Interface
     
@@ -100,12 +101,27 @@ class TangramHintEngine {
         timeSinceLastProgress: TimeInterval,
         previousHints: [HintData] = []
     ) -> HintData? {
+        // Build a fast lookup of correctly placed piece types so we never hint them again
+        let correctlyPlacedTypes = Set(
+            placedPieces
+                .filter { $0.validationState == .correct }
+                .map { $0.pieceType }
+        )
         
         // Priority 1: Last moved piece was incorrect
         if let lastMoved = lastMovedPiece,
+           !correctlyPlacedTypes.contains(lastMoved),
            let placed = placedPieces.first(where: { $0.pieceType == lastMoved }),
            placed.validationState != .correct {
-            return createHintForIncorrectPiece(lastMoved, placed, puzzle)
+            // Double-check with centralized validator to avoid hinting when within tolerance
+            if let target = puzzle.targetPieces.first(where: { $0.pieceType == lastMoved }) {
+                let validator = TangramPieceValidator()
+                if !validator.validate(placed: placed, target: target) {
+                    // Provide a targeted hint only if it's actually incorrect
+                    return createHintForIncorrectPiece(lastMoved, placed, puzzle)
+                }
+                // If it's effectively correct, fall through to generic hint selection
+            }
         }
         
         // Priority 2: Player stuck for too long
@@ -118,12 +134,19 @@ class TangramHintEngine {
             return createHintForFirstPiece(puzzle)
         }
         
-        // Priority 4: Find easiest unplaced piece
+        // Priority 4: Always return a hint for the next unplaced piece if puzzle is incomplete
         let unplacedPieces = findUnplacedPieces(puzzle, placedPieces)
-        if let easiestPiece = selectEasiestPiece(unplacedPieces) {
-            return createHintForPiece(easiestPiece, puzzle, reason: .userRequested)
+        if !unplacedPieces.isEmpty {
+            if let easiestPiece = selectEasiestPiece(unplacedPieces) {
+                return createHintForPiece(easiestPiece, puzzle, reason: .userRequested)
+            }
+            // Fallback to first unplaced if somehow selectEasiestPiece returns nil
+            if let anyUnplaced = unplacedPieces.first {
+                return createHintForPiece(anyUnplaced, puzzle, reason: .userRequested)
+            }
         }
-        
+
+        // If there are no unplaced pieces left, the puzzle is complete
         return nil
     }
     
@@ -181,7 +204,12 @@ class TangramHintEngine {
         let targetPosSK = TangramPoseMapper.spriteKitPosition(fromRawPosition: rawPos)
         
         let hintType: HintType = timeStuck > 60 ? .fullSolution : .position(
-            from: getDefaultStartPosition(for: targetPieceType),
+            from: getActualPiecePosition(
+                for: targetPieceType,
+                availablePieces: nil,
+                piecesLayer: nil,
+                scene: nil
+            ),
             to: targetPosSK
         )
         
@@ -252,6 +280,7 @@ class TangramHintEngine {
         let rawPos = TangramPoseMapper.rawPosition(from: target.transform)
         let targetPosSK = TangramPoseMapper.spriteKitPosition(fromRawPosition: rawPos)
         
+        // Use default start for now; scene will adjust to actual if available
         let startPos = getDefaultStartPosition(for: pieceType)
         let hintType: HintType = .position(from: startPos, to: targetPosSK)
         
@@ -280,7 +309,7 @@ class TangramHintEngine {
         let rawPosition = TangramPoseMapper.rawPosition(from: target.transform)
         let targetPositionSK = TangramPoseMapper.spriteKitPosition(fromRawPosition: rawPosition)
         
-        // Check position difference in SK space
+        // Check position difference in SK space (use centralized tolerance)
         let positionDiff = hypot(
             current.position.x - targetPositionSK.x,
             current.position.y - targetPositionSK.y
@@ -309,7 +338,7 @@ class TangramHintEngine {
             targetRotation: targetFeatureAngle,
             pieceType: current.pieceType,
             isFlipped: current.isFlipped,
-            toleranceDegrees: rotationTolerance
+            toleranceDegrees: rotationToleranceDegrees
         )
         
         // Check if flip is needed (for parallelogram)
@@ -318,7 +347,7 @@ class TangramHintEngine {
         // Determine hint type based on what's wrong
         if needsFlip {
             return .flip
-        } else if !rotationCorrect && positionDiff < positionTolerance {
+        } else if !rotationCorrect && positionDiff < positionTolerancePoints {
             // Find the nearest valid rotation in feature space
             let nearestFeatureAngle = TangramRotationValidator.nearestValidRotation(
                 currentRotation: currentFeatureAngle,
@@ -329,7 +358,7 @@ class TangramHintEngine {
             // Convert back to node zRotation for display
             let nearestNodeZ = nearestFeatureAngle - adjustedLocalBaseline
             return .rotation(degrees: nearestNodeZ * 180 / .pi)
-        } else if positionDiff >= positionTolerance {
+        } else if positionDiff >= positionTolerancePoints {
             return .position(from: current.position, to: targetPositionSK)
         } else {
             return .nudge
