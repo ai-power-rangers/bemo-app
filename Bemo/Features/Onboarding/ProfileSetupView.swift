@@ -39,7 +39,7 @@ struct ProfileSetupView: View {
                     // Action buttons
                     actionButtonsSection
                     
-                    Spacer(minLength: 40)
+                    Spacer(minLength: 100)
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 20)
@@ -64,6 +64,24 @@ struct ProfileSetupView: View {
                         .disabled(viewModel.isLoading)
                     }
                 }
+            }
+            .safeAreaInset(edge: .bottom) {
+                Button(action: { viewModel.signOut() }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                        Text("Sign Out")
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.red.opacity(0.1))
+                    .foregroundColor(.red)
+                    .cornerRadius(12)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 8)
+                }
+                .disabled(viewModel.isLoading)
+                .background(.ultraThinMaterial)
             }
             .disabled(viewModel.isLoading)
         }
@@ -299,6 +317,7 @@ struct ProfileSetupView_Previews: PreviewProvider {
             ),
             profileService: ProfileService(),
             apiService: APIService(),
+            authenticationService: AuthenticationService(),
             onProfileSetupComplete: {}
         ))
     }
