@@ -185,6 +185,31 @@ class AppCoordinator {
         }
     }
     
+    private func handleSupabaseConnectionChange() {
+        // When Supabase connection state changes, we may need to update navigation
+        let isConnected = dependencyContainer.supabaseService.isConnected
+        
+        if isConnected {
+            print("Supabase connected - checking authentication state")
+            // If we were waiting for Supabase to connect, check navigation again
+            if dependencyContainer.authenticationService.isAuthenticated {
+                checkAuthenticationAndNavigate()
+            }
+        } else {
+            print("Supabase disconnected")
+            // If we lose Supabase connection while in profile setup, we should handle it
+            switch currentState {
+            case .profileSetup, .addChildProfile:
+                // Can't create profiles without Supabase - redirect to onboarding
+                print("Lost Supabase connection during profile setup - redirecting to onboarding")
+                currentState = .onboarding
+            default:
+                // Other states can continue offline
+                break
+            }
+        }
+    }
+    
     /// Check if user is fully authenticated (both Apple Sign In and Supabase)
     private func isFullyAuthenticated() -> Bool {
         return dependencyContainer.authenticationService.isAuthenticated &&
