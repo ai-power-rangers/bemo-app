@@ -184,8 +184,8 @@ class PuzzlePieceNode: SKNode {
     func updateStateIndicator() {
         guard let state = pieceState,
               let indicator = stateIndicator,
-              let background = indicator.childNode(withName: "stateBackground") as? SKShapeNode,
-              let icon = indicator.childNode(withName: "stateIcon") as? SKLabelNode else { return }
+              let _ = indicator.childNode(withName: "stateBackground") as? SKShapeNode,
+              let _ = indicator.childNode(withName: "stateIcon") as? SKLabelNode else { return }
         
         // Update visibility and appearance based on state
         switch state.state {
@@ -208,12 +208,9 @@ class PuzzlePieceNode: SKNode {
             }
             
         case .validating:
-            indicator.isHidden = false
-            background.fillColor = SKColor(red: 0.5, green: 0.0, blue: 1.0, alpha: 0.3)
-            icon.text = "⏳"
-            if state.shouldPulse {
-                addPulseAnimation()
-            }
+            // Suppress bottom-area validating icon; keep piece visuals clean
+            indicator.isHidden = true
+            self.alpha = state.displayOpacity
             
         case .validated:
             // Don't show indicator - validation is shown in target section

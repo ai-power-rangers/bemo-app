@@ -1017,11 +1017,7 @@ class TangramPuzzleScene: SKScene {
               let pieceType = piece.pieceType,
               let pieceId = piece.name else { return }
         
-        // Check zone first - never validate in organization zone
-        let zone = determineZone(for: piece.position)
-        if zone == .organization {
-            return
-        }
+        // No zone gating: validation is intent-based (clustering + stability), not screen regions
         
         // Update construction groups
         constructionGroups = groupManager.updateGroups(with: availablePieces)
@@ -1029,17 +1025,9 @@ class TangramPuzzleScene: SKScene {
         // Find this piece's group
         let pieceGroup = constructionGroups.first { $0.pieces.contains(pieceId) }
         
-        // Check if we should validate based on group and zone
+        // Validation gating: ensure group exists; we allow first piece mapping and direct validation
         if let group = pieceGroup {
-            let zoneAllows = shouldValidateInZone(zone, confidence: group.confidence)
-            let groupAllows = groupManager.shouldValidate(group: group, zone: zone)
-            
-            print("[VALIDATION] Group: \(group.pieces.count) pieces, confidence: \(String(format: "%.2f", group.confidence)), zone: \(zone.rawValue)")
-            
-            _ = zoneAllows && groupAllows
-        } else {
-            // Piece not in a group - don't validate scattered pieces
-            // no-op; we still allow first piece mapping/direct validation
+            print("[VALIDATION] Group: \(group.pieces.count) pieces, confidence: \(String(format: "%.2f", group.confidence))")
         }
         
         // Only validate pieces in PLACED state or later
@@ -1142,10 +1130,11 @@ class TangramPuzzleScene: SKScene {
             let mappedRotation = piece.zRotation + mapping.rotationDelta
             let mappedFlipped = mapping.flipParity ? !piece.isFlipped : piece.isFlipped
             
-            // Find best matching target of the same type
-            let availableTargets = puzzle.targetPieces.filter { target in
-                target.pieceType == pieceType && !(groupValidatedTargets[group.id] ?? []).contains(target.id)
-            }
+                // Enforce instance-based binding: use assignedTargetId only
+                let assignedId = piece.userData?["assignedTargetId"] as? String
+                let availableTargets = puzzle.targetPieces.filter { target in
+                    target.id == assignedId && !(groupValidatedTargets[group.id] ?? []).contains(target.id)
+                }
             
             var bestMatch: (target: GamePuzzleData.TargetPiece, result: TangramPieceValidator.ValidationResult, distance: CGFloat)?
             
@@ -1227,11 +1216,11 @@ class TangramPuzzleScene: SKScene {
             }
         }
         
-        // If no anchor mapping yet or validation failed, try direct validation (for backwards compatibility)
-        // This allows pieces placed directly on silhouette to still validate
+        // If no anchor mapping yet or validation failed, try direct validation (tight fallback)
+        let assignedId = piece.userData?["assignedTargetId"] as? String
         let groupTargetsConsumed = pieceGroup.flatMap { groupValidatedTargets[$0.id] } ?? []
         let availableTargets = puzzle.targetPieces.filter { target in
-            target.pieceType == pieceType && !groupTargetsConsumed.contains(target.id)
+            target.id == assignedId && !groupTargetsConsumed.contains(target.id)
         }
         
         for target in availableTargets {
@@ -1327,10 +1316,11 @@ class TangramPuzzleScene: SKScene {
         
         // Check if we should show a smart nudge
         if let group = pieceGroup {
+            let currentZone = determineZone(for: piece.position)
             let shouldNudge = nudgeManager.shouldShowNudge(
                 for: piece,
                 in: group,
-                zone: zone
+                zone: currentZone
             )
             
             if shouldNudge {
@@ -1338,7 +1328,7 @@ class TangramPuzzleScene: SKScene {
                     confidence: group.confidence,
                     attempts: group.attemptHistory[pieceId] ?? 0,
                     state: group.validationState,
-                    zone: zone
+                    zone: currentZone
                 )
                 
                 // Find a target to nudge towards (prefer unvalidated targets of same type)
@@ -2206,8 +2196,11 @@ class TangramPuzzleScene: SKScene {
         // Create animation sequence showing the solution path
         let fadeIn = SKAction.fadeAlpha(to: 0.6, duration: 0.3)
         
-        // Step 1: Rotate to correct orientation
-        let rotateAction = SKAction.rotate(toAngle: pose.zRotationSK, duration: 0.6, shortestUnitArc: true)
+        // Step 1: Rotate to correct orientation using feature-angle formula
+        let canonicalTarget: CGFloat = (hint.targetPiece.isTriangle ? (.pi/4) : 0) // 45° for triangles
+        let canonicalPiece: CGFloat = (hint.targetPiece.isTriangle ? (3 * .pi/4) : 0) // 135° for triangles
+        let desiredZ = TangramRotationValidator.normalizeAngle(pose.zRotationSK + canonicalTarget - canonicalPiece)
+        let rotateAction = SKAction.rotate(toAngle: desiredZ, duration: 0.6, shortestUnitArc: true)
         
         // Step 2: Move to exact position in silhouette (centroid is in container coordinates)
         let moveAction = SKAction.move(to: pose.centroidInContainer, duration: 0.8)
