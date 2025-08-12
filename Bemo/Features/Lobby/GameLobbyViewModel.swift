@@ -177,17 +177,17 @@ class GameLobbyViewModel {
                 )
             )
             
-            // Animation Lab DevTool
-            let animationLab = AnimationLabTool()
+            // Add TgramViewer as a developer tool
+            let tgramViewerGame = TgramViewerGame()
             availableGames.append(
                 GameItem(
-                    devTool: animationLab,
-                    iconName: "sparkles",
+                    game: tgramViewerGame,
+                    iconName: "eye.circle.fill",
                     color: .purple,
-                    badge: "Dev Tool"
+                    badge: "CV Viewer"
                 )
             )
-
+            
             print("🛠️ Developer tools loaded for developer user")
         } else {
             print("👤 Regular user - dev tools hidden")
