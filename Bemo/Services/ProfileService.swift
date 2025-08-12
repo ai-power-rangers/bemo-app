@@ -66,6 +66,11 @@ class ProfileService {
             print("Supabase service not available - skipping profile sync")
             return
         }
+        // Avoid noisy errors during cold start when Supabase has no stored session yet
+        guard supabaseService.isConnected else {
+            print("Profile sync from Supabase skipped: not connected")
+            return
+        }
         
         // Background sync from Supabase to local storage
         Task {
@@ -425,7 +430,61 @@ struct UserProfile: Codable, Identifiable {
     var avatarColor: String
     var totalXP: Int
     var preferences: UserPreferences
-    
+
+    // Maintain backward compatibility with older saved profiles that didn't include avatar fields
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId
+        case name
+        case age
+        case gender
+        case avatarSymbol
+        case avatarColor
+        case totalXP
+        case preferences
+    }
+
+    init(
+        id: String,
+        userId: String,
+        name: String,
+        age: Int,
+        gender: String,
+        avatarSymbol: String,
+        avatarColor: String,
+        totalXP: Int,
+        preferences: UserPreferences
+    ) {
+        self.id = id
+        self.userId = userId
+        self.name = name
+        self.age = age
+        self.gender = gender
+        self.avatarSymbol = avatarSymbol
+        self.avatarColor = avatarColor
+        self.totalXP = totalXP
+        self.preferences = preferences
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.userId = try container.decode(String.self, forKey: .userId)
+        self.name = try container.decode(String.self, forKey: .name)
+        self.age = try container.decode(Int.self, forKey: .age)
+        self.gender = try container.decode(String.self, forKey: .gender)
+
+        // Provide safe defaults if avatar fields were missing in previously saved data
+        let defaultAvatar = Avatar.random()
+        self.avatarSymbol = try container.decodeIfPresent(String.self, forKey: .avatarSymbol) ?? defaultAvatar.symbol
+        self.avatarColor = try container.decodeIfPresent(String.self, forKey: .avatarColor) ?? defaultAvatar.colorName
+
+        self.totalXP = (try? container.decode(Int.self, forKey: .totalXP)) ?? 0
+
+        // Preferences were introduced later; default if missing
+        self.preferences = (try? container.decode(UserPreferences.self, forKey: .preferences)) ?? UserPreferences()
+    }
+
     // Helper to check if profile belongs to authenticated user
     func belongsTo(authenticatedUserId: String) -> Bool {
         return userId == authenticatedUserId
