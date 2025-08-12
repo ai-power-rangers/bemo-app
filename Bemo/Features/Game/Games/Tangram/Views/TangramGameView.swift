@@ -243,8 +243,9 @@ struct TangramGameView: View {
                     onStartTimer: {
                         viewModel.startTimer()
                     },
-                    onToggleHints: {
-                        viewModel.toggleHints()
+                    onToggleHints: { viewModel.toggleHints() },
+                    onValidatedTargetsChanged: { ids in
+                        viewModel.syncValidatedTargetIds(ids)
                     }
                 )
                 .ignoresSafeArea(edges: .bottom) // Only ignore bottom

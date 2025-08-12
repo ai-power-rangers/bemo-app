@@ -177,6 +177,17 @@ class GameLobbyViewModel {
                 )
             )
             
+            // Animation Lab DevTool
+            let animationLab = AnimationLabTool()
+            availableGames.append(
+                GameItem(
+                    devTool: animationLab,
+                    iconName: "sparkles",
+                    color: .purple,
+                    badge: "Dev Tool"
+                )
+            )
+
             print("🛠️ Developer tools loaded for developer user")
         } else {
             print("👤 Regular user - dev tools hidden")

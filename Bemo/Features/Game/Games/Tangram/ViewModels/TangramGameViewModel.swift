@@ -50,6 +50,36 @@ class TangramGameViewModel {
     var lastProgressTime = Date()
     var isShowingHintAnimation: Bool = false
     private var hintDismissTask: Task<Void, Never>?
+    // MARK: - Validated targets tracking for hints
+    private func validatedTargetIds() -> Set<String> {
+        // Build from placedPieces with .correct state where we know assigned target
+        var ids: Set<String> = []
+        for p in placedPieces where p.validationState == .correct {
+            if let assigned = p.assignedTargetId { ids.insert(assigned) }
+        }
+        return ids
+    }
+
+    // Sync from SpriteKit scene validated targets → update placedPieces and internal state
+    func syncValidatedTargetIds(_ ids: Set<String>) {
+        // Ensure placedPieces entries exist for each validated target id and assign them
+        guard let puzzle = selectedPuzzle else { return }
+        for tid in ids {
+            if let target = puzzle.targetPieces.first(where: { $0.id == tid }) {
+                // Ensure a placed piece entry exists (create a lightweight entry if missing)
+                if let idx = placedPieces.firstIndex(where: { $0.pieceType == target.pieceType }) {
+                    placedPieces[idx].assignedTargetId = tid
+                    placedPieces[idx].validationState = PlacedPiece.ValidationState.correct
+                } else {
+                    // Create a minimal PlacedPiece so hints can treat it as validated
+                    var p = PlacedPiece(pieceType: target.pieceType, position: CGPoint(x: 0, y: 0), rotation: 0, isFlipped: false)
+                    p.assignedTargetId = tid
+                    p.validationState = PlacedPiece.ValidationState.correct
+                    placedPieces.append(p)
+                }
+            }
+        }
+    }
 
     // Persist instance-binding (pieceId -> assignedTargetId) across frames for CV path
     private var pieceAssignments: [String: String] = [:]
@@ -205,7 +235,8 @@ class TangramGameViewModel {
             placedPieces: placedPieces,
             lastMovedPiece: lastMovedPiece,
             timeSinceLastProgress: timeSinceProgress,
-            previousHints: hintHistory
+            previousHints: hintHistory,
+            validatedTargetIds: validatedTargetIds()
         )
         
         if let hint = hint {
@@ -544,6 +575,15 @@ class TangramGameViewModel {
         )
         
         // Validate non-anchor pieces using mapped pose and instance-binding
+        // Require at least 2 pieces in the CV group before allowing any validations
+        guard placedPieces.count >= 2 else {
+            for i in 0..<placedPieces.count {
+                var piece = placedPieces[i]
+                if piece.id != anchor.id { piece.validationState = .pending }
+                placedPieces[i] = piece
+            }
+            return
+        }
         for i in 0..<placedPieces.count {
             var piece = placedPieces[i]
             

@@ -19,13 +19,13 @@ class ConstructionGroupManager {
     
     private enum Config {
         // Proximity & Grouping
-        static let proximityThreshold: CGFloat = 100       // Pixels between edges
+        static let proximityThreshold: CGFloat = 60        // Require closer proximity to form a group
         static let angleThreshold: CGFloat = 0.26          // ~15 degrees
         static let groupTimeout: TimeInterval = 30         // Seconds before group expires
         
         // Intent-based validation thresholds (no spatial zones)
-        static let constructingThreshold: Float = 0.30 // Low - encourage early building
-        static let buildingThreshold: Float = 0.25     // Very low for active construction
+        static let constructingThreshold: Float = 0.45 // Higher to avoid premature validation
+        static let buildingThreshold: Float = 0.40     // Higher to avoid premature validation
         
         // Confidence Score Weights
         static let spatialWeight: Float = 0.4
@@ -53,7 +53,7 @@ class ConstructionGroupManager {
         static let activityTimeoutSec: TimeInterval = 30
         
         // Minimum pieces for validation
-        static let minPiecesForValidation: Int = 1
+        static let minPiecesForValidation: Int = 2
     }
     
     // MARK: - Properties

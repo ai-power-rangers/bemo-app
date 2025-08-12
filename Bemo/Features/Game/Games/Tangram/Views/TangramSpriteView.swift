@@ -27,6 +27,7 @@ struct TangramSpriteView: View {
     let onNextPressed: () -> Void
     let onStartTimer: () -> Void
     let onToggleHints: () -> Void
+    let onValidatedTargetsChanged: (Set<String>) -> Void
     
     // Scene is created once and reused
     @State private var scene: SKScene = {
@@ -90,6 +91,7 @@ struct TangramSpriteView: View {
         tangramScene.onNextPressed = onNextPressed
         tangramScene.onStartTimer = onStartTimer
         tangramScene.onToggleHints = onToggleHints
+        tangramScene.onValidatedTargetsChanged = onValidatedTargetsChanged
         
         // Load the puzzle (no UI elements needed - handled by SwiftUI)
         tangramScene.loadPuzzle(puzzle)
