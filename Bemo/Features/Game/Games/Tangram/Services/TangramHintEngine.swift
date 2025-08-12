@@ -114,19 +114,32 @@ class TangramHintEngine {
             return createHintForStuckPlayer(puzzle, placedPieces, timeSinceLastProgress)
         }
         
-        // Priority 3: No pieces placed yet - help with first piece
-        if placedPieces.isEmpty {
-            return createHintForFirstPiece(puzzle)
-        }
-        
-        // Priority 4: If there are validated pieces, choose a connected neighbor that opens the most
+        // Priority 3: If there are validated pieces, ALWAYS suggest a connected piece to the validated cluster
         if !validatedTargetIds.isEmpty {
-            if let pieceType = selectBestConnectedPiece(puzzle: puzzle, validated: validatedTargetIds, placedPieces: placedPieces, lastMovedPiece: lastMovedPiece) {
+            if let pieceType = selectFrontierConnectedPiece(
+                puzzle: puzzle,
+                validated: validatedTargetIds,
+                placedPieces: placedPieces,
+                previousHints: previousHints
+            ) {
                 return createHintForPiece(pieceType, puzzle, reason: .userRequested)
             }
+            // If adjacency fails, do NOT fall back to disconnected nearest; wait or show none to avoid irrelevant hints
+            return nil
         }
-        
-        // Fallback: easiest unplaced piece
+
+        // Priority 4: No validated pieces yet
+        if placedPieces.isEmpty {
+            // Absolutely first action → show an easy starter
+            return createHintForFirstPiece(puzzle)
+        }
+
+        // Infer a starting frontier from where the user has begun placing pieces
+        if let pieceType = selectFrontierFromPlacedPieces(puzzle: puzzle, placedPieces: placedPieces, previousHints: previousHints) {
+            return createHintForPiece(pieceType, puzzle, reason: .userRequested)
+        }
+
+        // Last resort: easiest unplaced piece (only when no validated pieces exist)
         let unplacedPieces = findUnplacedPieces(puzzle, placedPieces)
         if let easiestPiece = selectEasiestPiece(unplacedPieces) {
             return createHintForPiece(easiestPiece, puzzle, reason: .userRequested)
@@ -217,46 +230,166 @@ class TangramHintEngine {
         return hypot(dpx, dpy)
     }
     
-    private func selectBestConnectedPiece(puzzle: GamePuzzleData,
-                                          validated: Set<String>,
-                                          placedPieces: [PlacedPiece],
-                                          lastMovedPiece: TangramPieceType?) -> TangramPieceType? {
+    // New frontier-based, connection-aware selection that avoids repeating the same disconnected piece
+    private func selectFrontierConnectedPiece(puzzle: GamePuzzleData,
+                                              validated: Set<String>,
+                                              placedPieces: [PlacedPiece],
+                                              previousHints: [HintData]) -> TangramPieceType? {
         let adj = buildAdjacency(for: puzzle)
-        let unvalidatedIds = Set(puzzle.targetPieces.map { $0.id }).subtracting(validated)
-        let validatedIds = validated
-        
-        // Cluster centroid of validated for proximity scoring
-        let validatedCentroid: CGPoint = {
-            var sum = CGPoint.zero; var count: CGFloat = 0
-            for id in validatedIds {
-                if let t = puzzle.targetPieces.first(where: { $0.id == id }) {
-                    let raw = TangramPoseMapper.rawPosition(from: t.transform)
-                    let sk = TangramPoseMapper.spriteKitPosition(fromRawPosition: raw)
-                    sum.x += sk.x; sum.y += sk.y; count += 1
+        let allIds = Set(puzzle.targetPieces.map { $0.id })
+        let unvalidatedIds = allIds.subtracting(validated)
+
+        // Find the largest connected component within the validated set
+        let component = largestValidatedComponent(validated: validated, adjacency: adj)
+        if component.isEmpty { return nil }
+
+        // Frontier = neighbors of component that are unvalidated
+        var frontier: Set<String> = []
+        for v in component {
+            if let ns = adj[v] {
+                for n in ns where unvalidatedIds.contains(n) {
+                    frontier.insert(n)
                 }
             }
-            if count == 0 { return .zero }
-            return CGPoint(x: sum.x/count, y: sum.y/count)
-        }()
-        
+        }
+        if frontier.isEmpty { return nil }
+
+        // Build scoring
+        // Compute centroid of component for proximity
+        let centroid: CGPoint = centroidOf(ids: component, puzzle: puzzle)
+        // Recent hint penalty to avoid repeating same piece type endlessly
+        let recentPieceTypes = Set(previousHints.suffix(2).map { $0.targetPiece })
+        // Prefer candidates near any incorrectly placed piece the user is trying
+        let incorrectTypesNearby: Set<TangramPieceType> = Set(placedPieces.filter { $0.validationState != .correct }.map { $0.pieceType })
+
         var best: (type: TangramPieceType, score: CGFloat)?
-        for id in unvalidatedIds {
-            // Only consider neighbors of any validated id
-            let isNeighbor = validatedIds.contains { adj[$0]?.contains(id) ?? false }
-            if !isNeighbor { continue }
+        for id in frontier {
             guard let t = puzzle.targetPieces.first(where: { $0.id == id }) else { continue }
             let neighbors = adj[id] ?? []
             let neighborsOpened = neighbors.filter { unvalidatedIds.contains($0) }.count
-            let neighborValidatedCount = neighbors.filter { validatedIds.contains($0) }.count
-            let raw = TangramPoseMapper.rawPosition(from: t.transform)
-            let sk = TangramPoseMapper.spriteKitPosition(fromRawPosition: raw)
-            let proximity = 1 / max(1, hypot(sk.x - validatedCentroid.x, sk.y - validatedCentroid.y))
-            // difficulty penalty
-            let diffPenalty: CGFloat = CGFloat(getPieceDifficulty(t.pieceType).rawValue) * 0.05
-            let score = CGFloat(neighborsOpened)*3 + CGFloat(neighborValidatedCount)*2 + proximity*1 - diffPenalty
+            let neighborValidatedCount = neighbors.filter { component.contains($0) }.count
+            let posRaw = TangramPoseMapper.rawPosition(from: t.transform)
+            let posSK = TangramPoseMapper.spriteKitPosition(fromRawPosition: posRaw)
+            let proximity = 1 / max(1, hypot(posSK.x - centroid.x, posSK.y - centroid.y))
+            let diffPenalty: CGFloat = CGFloat(getPieceDifficulty(t.pieceType).rawValue) * 0.06
+            let repeatPenalty: CGFloat = recentPieceTypes.contains(t.pieceType) ? 0.5 : 0.0
+            let userIntentBoost: CGFloat = incorrectTypesNearby.contains(t.pieceType) ? 0.4 : 0.0
+
+            // Score weights: prioritize tying into current cluster (neighborValidatedCount), next openings, then proximity
+            let score = CGFloat(neighborValidatedCount) * 5
+                     + CGFloat(neighborsOpened) * 3
+                     + proximity * 1.5
+                     + userIntentBoost
+                     - diffPenalty
+                     - repeatPenalty
+
             if best == nil || score > best!.score { best = (t.pieceType, score) }
         }
+
         return best?.type
+    }
+
+    private func largestValidatedComponent(validated: Set<String>, adjacency: [String: Set<String>]) -> Set<String> {
+        var visited: Set<String> = []
+        var best: Set<String> = []
+        for start in validated where !visited.contains(start) {
+            var comp: Set<String> = []
+            var stack: [String] = [start]
+            visited.insert(start)
+            while let v = stack.popLast() {
+                comp.insert(v)
+                for n in (adjacency[v] ?? []) where validated.contains(n) && !visited.contains(n) {
+                    visited.insert(n)
+                    stack.append(n)
+                }
+            }
+            if comp.count > best.count { best = comp }
+        }
+        return best
+    }
+
+    private func centroidOf(ids: Set<String>, puzzle: GamePuzzleData) -> CGPoint {
+        var sum = CGPoint.zero; var count: CGFloat = 0
+        for id in ids {
+            if let t = puzzle.targetPieces.first(where: { $0.id == id }) {
+                let raw = TangramPoseMapper.rawPosition(from: t.transform)
+                let sk = TangramPoseMapper.spriteKitPosition(fromRawPosition: raw)
+                sum.x += sk.x; sum.y += sk.y; count += 1
+            }
+        }
+        if count == 0 { return .zero }
+        return CGPoint(x: sum.x/count, y: sum.y/count)
+    }
+
+    // Fallback when adjacency fails: nearest remaining target to the centroid of validated cluster
+    private func selectNearestToValidated(puzzle: GamePuzzleData,
+                                          validated: Set<String>,
+                                          previousHints: [HintData]) -> TangramPieceType? {
+        let centroid = centroidOf(ids: validated, puzzle: puzzle)
+        let remaining = Set(puzzle.targetPieces.map { $0.id }).subtracting(validated)
+        let recent = Set(previousHints.suffix(2).map { $0.targetPiece })
+        var best: (type: TangramPieceType, dist: CGFloat)?
+        for id in remaining {
+            guard let t = puzzle.targetPieces.first(where: { $0.id == id }) else { continue }
+            let raw = TangramPoseMapper.rawPosition(from: t.transform)
+            let sk = TangramPoseMapper.spriteKitPosition(fromRawPosition: raw)
+            let d = hypot(sk.x - centroid.x, sk.y - centroid.y)
+            let penalty: CGFloat = recent.contains(t.pieceType) ? 30 : 0
+            let adj = d + penalty
+            if best == nil || adj < best!.dist { best = (t.pieceType, adj) }
+        }
+        return best?.type
+    }
+
+    // Infer frontier using placed pieces when no validated targets yet
+    private func selectFrontierFromPlacedPieces(puzzle: GamePuzzleData,
+                                                placedPieces: [PlacedPiece],
+                                                previousHints: [HintData]) -> TangramPieceType? {
+        let adj = buildAdjacency(for: puzzle)
+        // Project placed pieces onto nearest targets of the same type within a loose threshold
+        var seed: Set<String> = []
+        for p in placedPieces {
+            // Only consider stationary or slowly moving pieces to avoid noise
+            if !p.isPlacedLongEnough() { continue }
+            var best: (id: String, dist: CGFloat)?
+            for t in puzzle.targetPieces where t.pieceType == p.pieceType {
+                let raw = TangramPoseMapper.rawPosition(from: t.transform)
+                let sk = TangramPoseMapper.spriteKitPosition(fromRawPosition: raw)
+                let d = hypot(p.position.x - sk.x, p.position.y - sk.y)
+                if best == nil || d < best!.dist { best = (t.id, d) }
+            }
+            if let best = best, best.dist < 140 { // generous to capture intent
+                seed.insert(best.id)
+            }
+        }
+        if seed.isEmpty { return nil }
+
+        // Build frontier around projected seed
+        var frontier: Set<String> = []
+        for s in seed {
+            if let ns = adj[s] {
+                frontier.formUnion(ns.filter { !seed.contains($0) })
+            }
+        }
+        if frontier.isEmpty { return nil }
+
+        let centroid = centroidOf(ids: seed, puzzle: puzzle)
+        let recentTypes = Set(previousHints.suffix(2).map { $0.targetPiece })
+
+        var bestPick: (type: TangramPieceType, score: CGFloat)?
+        for id in frontier {
+            guard let t = puzzle.targetPieces.first(where: { $0.id == id }) else { continue }
+            let neighbors = adj[id] ?? []
+            let neighborSeedCount = neighbors.filter { seed.contains($0) }.count
+            let raw = TangramPoseMapper.rawPosition(from: t.transform)
+            let sk = TangramPoseMapper.spriteKitPosition(fromRawPosition: raw)
+            let proximity = 1 / max(1, hypot(sk.x - centroid.x, sk.y - centroid.y))
+            let diffPenalty: CGFloat = CGFloat(getPieceDifficulty(t.pieceType).rawValue) * 0.05
+            let repeatPenalty: CGFloat = recentTypes.contains(t.pieceType) ? 0.4 : 0.0
+            let score = CGFloat(neighborSeedCount) * 5 + proximity * 1.5 - diffPenalty - repeatPenalty
+            if bestPick == nil || score > bestPick!.score { bestPick = (t.pieceType, score) }
+        }
+        return bestPick?.type
     }
     
     // MARK: - Hint Creation

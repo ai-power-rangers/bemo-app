@@ -33,7 +33,7 @@ class SmartNudgeManager {
     
     private var nudgeHistories: [String: NudgeHistory] = [:]
     private var pieceAttempts: [String: [(date: Date, position: CGPoint)]] = [:]
-    private let baseNudgeInterval: TimeInterval = 5.0
+    private let baseNudgeInterval: TimeInterval = 3.0
     private let maxNudgeLevel: NudgeLevel = .solution
     
     // MARK: - Public Interface
@@ -66,8 +66,8 @@ class SmartNudgeManager {
         // Intent-based checks (confidence and attempts)
         // Higher confidence = more likely to nudge
         // More attempts = more likely to nudge
-        return (attempts >= 2 && group.confidence > 0.3) ||
-               (attempts >= 3 && group.confidence > 0.5) ||
+        return (attempts >= 2 && group.confidence > 0.25) ||
+               (attempts >= 3 && group.confidence > 0.45) ||
                (attempts >= 5)
     }
     
@@ -83,9 +83,9 @@ class SmartNudgeManager {
         case .scattered, .exploring:
             level = .none
         case .constructing:
-            level = confidence > 0.7 ? .gentle : .visual
+            level = confidence > 0.6 ? .gentle : .visual
         case .building:
-            level = confidence > 0.7 ? .specific : .gentle
+            level = confidence > 0.6 ? .specific : .gentle
         case .completing:
             level = .directed
         }
@@ -124,18 +124,34 @@ class SmartNudgeManager {
             duration = 2.0
             
         case .gentle:
-            message = failure?.nudgeMessage ?? "Try adjusting this piece"
+            // If there's a specific failure (rotation/flip), escalate message but keep subtle visual
+            switch failure {
+            case .wrongRotation:
+                message = "Try rotating"
+            case .needsFlip:
+                message = "Try flipping"
+            default:
+                message = failure?.nudgeMessage ?? "Try adjusting this piece"
+            }
             visualHint = .pulse(intensity: 0.5)
             duration = 3.0
             
         case .specific:
             switch failure {
             case .wrongRotation(let degrees):
-                message = degrees > 45 ? "Rotate significantly" : "Fine-tune rotation"
-                visualHint = .colorChange(color: .systemYellow, alpha: 0.5)
+                message = degrees > 45 ? "Rotate significantly" : "Slight rotation needed"
+                if let target = targetInfo {
+                    visualHint = .ghostPiece(position: target.position, rotation: target.rotation)
+                } else {
+                    visualHint = .colorChange(color: .systemYellow, alpha: 0.5)
+                }
             case .needsFlip:
-                message = "Try flipping this piece"
-                visualHint = .pulse(intensity: 0.7)
+                message = "Flip the piece"
+                if let target = targetInfo {
+                    visualHint = .ghostPiece(position: target.position, rotation: target.rotation)
+                } else {
+                    visualHint = .pulse(intensity: 0.7)
+                }
             case .wrongPosition:
                 message = "Move closer to other pieces"
                 visualHint = .colorChange(color: .systemBlue, alpha: 0.5)

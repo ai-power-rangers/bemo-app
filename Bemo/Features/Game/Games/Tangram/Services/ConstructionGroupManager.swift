@@ -19,7 +19,8 @@ class ConstructionGroupManager {
     
     private enum Config {
         // Proximity & Grouping
-        static let proximityThreshold: CGFloat = 60        // Require closer proximity to form a group
+        static let proximityThreshold: CGFloat = 60        // Centroid proximity fallback
+        static let edgeAdjacencyTolerance: CGFloat = 16    // Pixel tolerance for edge/vertex contact
         static let angleThreshold: CGFloat = 0.26          // ~15 degrees
         static let groupTimeout: TimeInterval = 30         // Seconds before group expires
         
@@ -104,6 +105,13 @@ class ConstructionGroupManager {
         }
         
         return Array(groups.values)
+    }
+
+    /// Record an attempt for a specific piece inside a group to drive nudge logic
+    func recordAttempt(in groupId: UUID, pieceId: String) {
+        guard var group = groups[groupId] else { return }
+        group.recordAttempt(for: pieceId)
+        groups[groupId] = group
     }
     
     /// Calculate confidence score for a group
@@ -244,12 +252,16 @@ class ConstructionGroupManager {
             for j in (i+1)..<pieces.count {
                 guard let id2 = pieces[j].name else { continue }
                 
-                let distance = hypot(
+                // Centroid distance fallback
+                let centerDistance = hypot(
                     pieces[i].position.x - pieces[j].position.x,
                     pieces[i].position.y - pieces[j].position.y
                 )
                 
-                if distance < Config.proximityThreshold {
+                // Polygon edge/vertex adjacency detection (physical realism: touching pieces are connected)
+                let polyDistance = minimumPolygonDistance(between: pieces[i], and: pieces[j])
+                
+                if centerDistance < Config.proximityThreshold || polyDistance <= Config.edgeAdjacencyTolerance {
                     proximityMap[id1]?.insert(id2)
                     proximityMap[id2, default: []].insert(id1)
                 }
@@ -257,6 +269,75 @@ class ConstructionGroupManager {
         }
         
         return proximityMap
+    }
+
+    // Compute minimum distance between two piece polygons in the current coordinate space
+    private func minimumPolygonDistance(between a: PuzzlePieceNode, and b: PuzzlePieceNode) -> CGFloat {
+        func transformedVertices(for piece: PuzzlePieceNode) -> [CGPoint] {
+            guard let type = piece.pieceType else { return [] }
+            // 1) Base vertices in local piece space
+            let base = TangramGameGeometry.scaleVertices(
+                TangramGameGeometry.normalizedVertices(for: type),
+                by: TangramGameConstants.visualScale
+            )
+            // 2) Apply flip
+            let flipped: [CGPoint]
+            if piece.isFlipped {
+                flipped = base.map { CGPoint(x: -$0.x, y: $0.y) }
+            } else {
+                flipped = base
+            }
+            // 3) Apply rotation around origin (piece path is centered at 0,0)
+            let cosA = cos(piece.zRotation)
+            let sinA = sin(piece.zRotation)
+            let rotated = flipped.map { v in CGPoint(x: v.x * cosA - v.y * sinA, y: v.x * sinA + v.y * cosA) }
+            // 4) Translate to piece.position
+            let translated = rotated.map { CGPoint(x: $0.x + piece.position.x, y: $0.y + piece.position.y) }
+            return translated
+        }
+        func edges(_ poly: [CGPoint]) -> [(CGPoint, CGPoint)] {
+            guard poly.count >= 2 else { return [] }
+            return (0..<poly.count).map { i in (poly[i], poly[(i+1) % poly.count]) }
+        }
+        func segmentDistance(_ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint, _ p4: CGPoint) -> CGFloat {
+            // Standard segment-segment distance
+            let u = CGVector(dx: p2.x - p1.x, dy: p2.y - p1.y)
+            let v = CGVector(dx: p4.x - p3.x, dy: p4.y - p3.y)
+            let w = CGVector(dx: p1.x - p3.x, dy: p1.y - p3.y)
+            let a = u.dx*u.dx + u.dy*u.dy
+            let b = u.dx*v.dx + u.dy*v.dy
+            let c = v.dx*v.dx + v.dy*v.dy
+            let d = u.dx*w.dx + u.dy*w.dy
+            let e = v.dx*w.dx + v.dy*w.dy
+            let denom = a*c - b*b
+            var sc: CGFloat = 0
+            var tc: CGFloat = 0
+            func clamp(_ x: CGFloat, _ lo: CGFloat, _ hi: CGFloat) -> CGFloat { max(lo, min(hi, x)) }
+            if denom < 1e-6 {
+                sc = 0
+                tc = clamp(e/c, 0, 1)
+            } else {
+                sc = clamp((b*e - c*d)/denom, 0, 1)
+                tc = clamp((a*e - b*d)/denom, 0, 1)
+            }
+            let dpx = w.dx + sc*u.dx - tc*v.dx
+            let dpy = w.dy + sc*u.dy - tc*v.dy
+            return hypot(dpx, dpy)
+        }
+        let pa = transformedVertices(for: a)
+        let pb = transformedVertices(for: b)
+        if pa.isEmpty || pb.isEmpty { return .greatestFiniteMagnitude }
+        let ea = edges(pa)
+        let eb = edges(pb)
+        var minDist: CGFloat = .greatestFiniteMagnitude
+        for (a0, a1) in ea {
+            for (b0, b1) in eb {
+                let d = segmentDistance(a0, a1, b0, b1)
+                if d < minDist { minDist = d }
+                if minDist == 0 { return 0 }
+            }
+        }
+        return minDist
     }
     
     private func findCluster(starting: String, in proximityMap: [String: Set<String>]) -> Set<String> {

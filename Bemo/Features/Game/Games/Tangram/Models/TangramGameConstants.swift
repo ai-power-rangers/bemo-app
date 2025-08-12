@@ -54,7 +54,7 @@ enum TangramGameConstants {
         static let positionTolerance: CGFloat = 35.0  // Increased for better touch interaction with triangles
         
         /// Rotation tolerance for piece angle matching (in degrees)
-        static let rotationTolerance: CGFloat = 25.0  // More forgiving tolerance for touch interaction
+        static let rotationTolerance: CGFloat = 18.0  // Stricter to reduce false-positive validations
 
         /// Minimum center-to-center distance for two pieces to be considered "connected"
         /// This gates early validation to ensure the first relations are built physically next to each other

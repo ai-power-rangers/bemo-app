@@ -183,6 +183,20 @@ final class TangramRelativeMappingService {
     func consumedTargets(groupId: UUID) -> Set<String> { groupValidatedTargets[groupId] ?? [] }
     func appendPair(groupId: UUID, pieceId: String, targetId: String) { groupValidatedPairs[groupId, default: []].append((pieceId, targetId)) }
     func pairs(groupId: UUID) -> [(pieceId: String, targetId: String)] { groupValidatedPairs[groupId] ?? [] }
+
+    // Unconsume a target when a previously validated piece is moved out of valid position
+    func unmarkTargetConsumed(groupId: UUID, targetId: String) {
+        var set = groupValidatedTargets[groupId] ?? []
+        set.remove(targetId)
+        groupValidatedTargets[groupId] = set
+    }
+
+    // Remove an established pair for refinement bookkeeping
+    func removePair(groupId: UUID, pieceId: String, targetId: String) {
+        guard var list = groupValidatedPairs[groupId] else { return }
+        list.removeAll { $0.pieceId == pieceId && $0.targetId == targetId }
+        groupValidatedPairs[groupId] = list
+    }
 }
 
 

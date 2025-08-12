@@ -13,6 +13,7 @@ struct AnimationLabContainerView: View {
     @State private var scene: AnimationLabScene
     @State private var selectedSection: AnimationSection = .generic
     @State private var selectedExitDirection: AnimationLabScene.ExitDirection = .up
+    @State private var selectedEntranceDirection: AnimationLabScene.EntranceDirection = .random
     @State private var showFullscreenAnimation = false
     @State private var fullscreenScene: AnimationLabScene? = nil
     
@@ -76,9 +77,11 @@ struct AnimationLabContainerView: View {
                                 VStack(spacing: 12) {
                                     puzzleSelector
                                     
-                                    // Exit direction selector for exit animations
+                                    // Direction selectors for entrance/exit animations
                                     if selectedSection == .exit {
                                         exitDirectionSelector
+                                    } else if selectedSection == .entrance {
+                                        entranceDirectionSelector
                                     }
                                 }
                                 .padding(.horizontal)
@@ -207,6 +210,64 @@ struct AnimationLabContainerView: View {
             .disabled(viewModel.puzzles.isEmpty)
             
             Spacer()
+        }
+    }
+    
+    private var entranceDirectionSelector: some View {
+        HStack {
+            Text("Entrance Direction:")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundColor(.secondary)
+            
+            Menu {
+                ForEach(AnimationLabScene.EntranceDirection.allCases, id: \.self) { direction in
+                    Button(action: {
+                        selectedEntranceDirection = direction
+                        scene.setEntranceDirection(direction)
+                    }) {
+                        HStack {
+                            Text(direction.displayName)
+                            if selectedEntranceDirection == direction {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack {
+                    Image(systemName: iconForEntranceDirection(selectedEntranceDirection))
+                        .font(.system(size: 14))
+                    Text(selectedEntranceDirection.displayName)
+                        .font(.system(size: 15))
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(8)
+            }
+            
+            Spacer()
+        }
+    }
+    
+    private func iconForEntranceDirection(_ direction: AnimationLabScene.EntranceDirection) -> String {
+        switch direction {
+        case .up: return "arrow.down"  // Opposite arrow since pieces come FROM this direction
+        case .down: return "arrow.up"
+        case .left: return "arrow.right"
+        case .right: return "arrow.left"
+        case .upLeft: return "arrow.down.right"
+        case .upRight: return "arrow.down.left"
+        case .downLeft: return "arrow.up.right"
+        case .downRight: return "arrow.up.left"
+        case .random: return "shuffle"
         }
     }
     
@@ -350,18 +411,12 @@ struct AnimationLabContainerView: View {
                 showFullscreenAnimation = true
             }
             
-            // Start animation after scene is visible
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                fullScene.runSquareTakeover()
-                // Auto-hide after animation duration
-                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        self.showFullscreenAnimation = false
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        self.fullscreenScene = nil
-                    }
-                }
+            // Start animation immediately
+            fullScene.runSquareTakeover()
+            // Auto-hide before animation fully ends to avoid white screen
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.5) {  // End before 6s animation
+                self.showFullscreenAnimation = false
+                self.fullscreenScene = nil
             }
         case .squareWave:
             // Create fullscreen scene for Column Slide
@@ -375,27 +430,21 @@ struct AnimationLabContainerView: View {
                 showFullscreenAnimation = true
             }
             
-            // Start animation after scene is visible
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                fullScene.runSquareWave()
-                // Auto-hide after animation duration
-                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        self.showFullscreenAnimation = false
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        self.fullscreenScene = nil
-                    }
-                }
+            // Start animation immediately
+            fullScene.runSquareWave()
+            // Auto-hide before animation fully ends to avoid white screen
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.5) {  // End before 6s animation
+                self.showFullscreenAnimation = false
+                self.fullscreenScene = nil
             }
         case .squareSpiral:
             scene.runSquareSpiral()
         case .assemble:
-            scene.runAssemble()
-        case .explosion:
-            scene.runExplosionWithDust()
+            scene.runEntrance()
         case .celebration:
             scene.runCelebration()
+        case .celebrationExit:
+            scene.runCelebrationExit()
         case .breathing:
             scene.startBreathingLoop()
         case .pulse:

@@ -49,6 +49,65 @@ enum TangramGeometryUtilities {
         // For all other cases, use standard atan2
         return atan2(b, a)
     }
+
+    // MARK: - Polygon Utilities
+
+    /// Returns the vertices of a piece in scene space given flip, rotation and translation
+    static func transformedVertices(for pieceType: TangramPieceType,
+                                    isFlipped: Bool,
+                                    zRotation: CGFloat,
+                                    translation: CGPoint) -> [CGPoint] {
+        let base = TangramGameGeometry.scaleVertices(
+            TangramGameGeometry.normalizedVertices(for: pieceType),
+            by: TangramGameConstants.visualScale
+        )
+        let flipped = isFlipped ? base.map { CGPoint(x: -$0.x, y: $0.y) } : base
+        let cosA = cos(zRotation)
+        let sinA = sin(zRotation)
+        let rotated = flipped.map { v in CGPoint(x: v.x * cosA - v.y * sinA, y: v.x * sinA + v.y * cosA) }
+        return rotated.map { CGPoint(x: $0.x + translation.x, y: $0.y + translation.y) }
+    }
+
+    /// Computes the minimum distance between two polygons (arrays of points) in the same coordinate space
+    static func minimumDistanceBetweenPolygons(_ a: [CGPoint], _ b: [CGPoint]) -> CGFloat {
+        func edges(_ poly: [CGPoint]) -> [(CGPoint, CGPoint)] {
+            guard poly.count >= 2 else { return [] }
+            return (0..<poly.count).map { i in (poly[i], poly[(i+1) % poly.count]) }
+        }
+        func segmentDistance(_ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint, _ p4: CGPoint) -> CGFloat {
+            let u = CGVector(dx: p2.x - p1.x, dy: p2.y - p1.y)
+            let v = CGVector(dx: p4.x - p3.x, dy: p4.y - p3.y)
+            let w = CGVector(dx: p1.x - p3.x, dy: p1.y - p3.y)
+            let a = u.dx*u.dx + u.dy*u.dy
+            let b = u.dx*v.dx + u.dy*v.dy
+            let c = v.dx*v.dx + v.dy*v.dy
+            let d = u.dx*w.dx + u.dy*w.dy
+            let e = v.dx*w.dx + v.dy*w.dy
+            let denom = a*c - b*b
+            var sc: CGFloat = 0
+            var tc: CGFloat = 0
+            func clamp(_ x: CGFloat, _ lo: CGFloat, _ hi: CGFloat) -> CGFloat { max(lo, min(hi, x)) }
+            if denom < 1e-6 {
+                sc = 0
+                tc = clamp(e/c, 0, 1)
+            } else {
+                sc = clamp((b*e - c*d)/denom, 0, 1)
+                tc = clamp((a*e - b*d)/denom, 0, 1)
+            }
+            let dpx = w.dx + sc*u.dx - tc*v.dx
+            let dpy = w.dy + sc*u.dy - tc*v.dy
+            return hypot(dpx, dpy)
+        }
+        let ea = edges(a)
+        let eb = edges(b)
+        var minDist: CGFloat = .greatestFiniteMagnitude
+        for (a0, a1) in ea { for (b0, b1) in eb {
+            let d = segmentDistance(a0, a1, b0, b1)
+            if d < minDist { minDist = d }
+            if minDist == 0 { return 0 }
+        }}
+        return minDist
+    }
     
     /// Extracts rotation angle for SpriteKit scene space (negated to account for Y-flip in target rendering)
     /// This converts from the stored transform's rotation to the scene's coordinate space

@@ -735,6 +735,13 @@ class TangramPuzzleScene: SKScene {
                 pieceStates[pieceId] = state
                 selected.pieceState = state
                 selected.updateStateIndicator()
+
+                // If this piece was previously validated, moving it should trigger re-check and potential invalidation
+                if case .validated = state.state {
+                    // Immediately re-validate this piece under current mapping; if it fails, invalidate it
+                    // We reuse the same path as placement-time validation
+                    validatePlacedPiece(selected)
+                }
             }
             
             let lastPos = lastEmittedPositions[pieceId] ?? CGPoint.zero
@@ -897,7 +904,21 @@ class TangramPuzzleScene: SKScene {
         constructionGroups = groupManager.updateGroups(with: availablePieces)
         
         // Find this piece's group
-        let pieceGroup = constructionGroups.first { $0.pieces.contains(pieceId) }
+        var pieceGroup = constructionGroups.first { $0.pieces.contains(pieceId) }
+        // Fallback: if not in any group yet, attach to nearest mapped group within relaxed radius to allow mapped validation
+        if pieceGroup == nil {
+            let attachRadius: CGFloat = 160
+            var best: (group: ConstructionGroup, dist: CGFloat)?
+            for g in constructionGroups {
+                // Only consider groups that already have a mapping (anchor chosen)
+                if mappingService.mapping(for: g.id) == nil { continue }
+                let d = hypot(piece.position.x - g.centerOfMass.x, piece.position.y - g.centerOfMass.y)
+                if best == nil || d < best!.dist { best = (g, d) }
+            }
+            if let best = best, best.dist <= attachRadius {
+                pieceGroup = best.group
+            }
+        }
         
         // Validation gating: ensure group exists; we allow first piece mapping and direct validation
         if let group = pieceGroup {
@@ -1000,8 +1021,8 @@ class TangramPuzzleScene: SKScene {
                 print("[MAP] Skipping anchor piece mapped-validation id=\(pieceId)")
                 // Anchor validation occurs when a second piece validates in relation to it
             } else {
-            // Apply anchor transformation to get expected target position
-            // mappedPosition = anchorTarget + R(delta) * (piece - anchorPiece)
+            // Apply anchor transformation (raw SK space delta) to get expected target position
+            // mappedPosition = anchorTarget + R(deltaSK) * (piece - anchorPiece)
             guard let anchorNode = availablePieces.first(where: { $0.name == mapping.anchorPieceId }) else { return }
             let anchorScenePos = physicalWorldSection.convert(anchorNode.position, to: self)
             let rel = CGVector(dx: pieceScenePos.x - anchorScenePos.x, dy: pieceScenePos.y - anchorScenePos.y)
@@ -1031,13 +1052,35 @@ class TangramPuzzleScene: SKScene {
                 guard let targetPose = resolvePose(for: target) else { continue }
                 let targetScenePos = targetSection.convert(targetPose.centroidInContainer, to: self)
                 let distance = hypot(mappedPosition.x - targetScenePos.x, mappedPosition.y - targetScenePos.y)
-                let isValid = mappingService.validateMapped(
-                    mappedPose: (mappedPosition, mappedRotation, mappedFlipped),
+                // Compute feature-angle validation in-place to gain access to components
+                let canonicalTarget: CGFloat = pieceType.isTriangle ? (.pi/4) : 0
+                let canonicalPiece: CGFloat = pieceType.isTriangle ? (3 * .pi/4) : 0
+                let targetFeatureAngle = TangramRotationValidator.normalizeAngle(targetPose.zRotationSK + canonicalTarget)
+                let pieceFeatureAngle = TangramRotationValidator.normalizeAngle(mappedRotation + (mappedFlipped ? -canonicalPiece : canonicalPiece))
+                let res = validator.validateForSpriteKitWithFeatures(
+                    piecePosition: mappedPosition,
+                    pieceFeatureAngle: pieceFeatureAngle,
+                    targetFeatureAngle: targetFeatureAngle,
                     pieceType: pieceType,
-                    target: target,
-                    targetCentroidScene: targetScenePos,
-                    validator: validator
+                    isFlipped: mappedFlipped,
+                    targetTransform: target.transform,
+                    targetWorldPos: targetScenePos
                 )
+                // Polygon contact override for position
+                var effectiveDistance = distance
+                if effectiveDistance > TangramGameConstants.Validation.positionTolerance {
+                    let piecePoly = TangramGeometryUtilities.transformedVertices(
+                        for: pieceType,
+                        isFlipped: mappedFlipped,
+                        zRotation: mappedRotation,
+                        translation: mappedPosition
+                    )
+                    let targetPoly = TangramBounds.computeSKTransformedVertices(for: target)
+                    let polyDist = TangramGeometryUtilities.minimumDistanceBetweenPolygons(piecePoly, targetPoly)
+                    if polyDist <= 12 { effectiveDistance = TangramGameConstants.Validation.positionTolerance - 1 }
+                    print("[MAP] polyDist=\(Int(polyDist)) effDist=\(Int(effectiveDistance)) rot=\(res.rotationValid) flip=\(res.flipValid)")
+                }
+                let isValid = res.rotationValid && res.flipValid && (effectiveDistance <= TangramGameConstants.Validation.positionTolerance)
                 print("[MAP] Check target=\(target.id) dist=\(Int(distance)) valid=\(isValid)")
                 if isValid {
                     if bestMatch == nil || distance < bestMatch!.distance {
@@ -1051,7 +1094,7 @@ class TangramPuzzleScene: SKScene {
                 let targetPose = resolvePose(for: match.target)
                 let targetScenePos = targetPose.map { targetSection.convert($0.centroidInContainer, to: self) } ?? .zero
                 let centerDistance = hypot(mappedPosition.x - targetScenePos.x, mappedPosition.y - targetScenePos.y)
-                if centerDistance > TangramGameConstants.Validation.connectionDistance {
+                if centerDistance > dynamicConnectionThreshold() {
                     // Too far to be a real connection; defer validation
                     print("[VALIDATION] ❌ Too far for connection: \(Int(centerDistance))px > \(Int(TangramGameConstants.Validation.connectionDistance))px")
                     // keep validating state; do not mark valid
@@ -1090,6 +1133,9 @@ class TangramPuzzleScene: SKScene {
                         SKAction.scale(to: 1.0, duration: 0.1)
                     ])
                     targetNode.run(pulse)
+
+                    // Show top-panel validation nudge (green checkmark over silhouette)
+                    showValidationCheckmark(over: targetNode)
                 }
                 
                 // Store which target this piece validated against
@@ -1142,6 +1188,9 @@ class TangramPuzzleScene: SKScene {
                                 SKAction.scale(to: 1.0, duration: 0.1)
                             ])
                             tNode.run(pulse)
+
+                            // Show top-panel validation nudge for anchor
+                            showValidationCheckmark(over: tNode)
                         }
                         // Emit CV validation event for anchor as well
                         eventBus.emit(.validationChanged(pieceId: mapping.anchorTargetId, isValid: true))
@@ -1181,8 +1230,12 @@ class TangramPuzzleScene: SKScene {
         }
         let assignedId = piece.userData?["assignedTargetId"] as? String
         let groupTargetsConsumed = pieceGroup.map { mappingService.consumedTargets(groupId: $0.id) } ?? []
-        let availableTargets = puzzle.targetPieces.filter { target in
-            target.id == assignedId && !groupTargetsConsumed.contains(target.id)
+        let availableTargets: [GamePuzzleData.TargetPiece]
+        if let assignedId = assignedId {
+            availableTargets = puzzle.targetPieces.filter { $0.id == assignedId && !groupTargetsConsumed.contains($0.id) }
+        } else {
+            // First-time direct validation: allow any unconsumed target of the same type
+            availableTargets = puzzle.targetPieces.filter { $0.pieceType == pieceType && !groupTargetsConsumed.contains($0.id) }
         }
         
         print("[DIRECT] Candidates for piece id=\(pieceId): \(availableTargets.map{ $0.id }.joined(separator: ","))")
@@ -1205,14 +1258,33 @@ class TangramPuzzleScene: SKScene {
                 targetWorldPos: targetScenePos
             )
             
-            let isValid = result.positionValid && result.rotationValid && result.flipValid
+            // Position gating for vertex-to-vertex connections: allow a smaller effective distance when polygons touch
+            var isValid = result.rotationValid && result.flipValid
+            var effectiveDistance = hypot(pieceScenePos.x - targetScenePos.x, pieceScenePos.y - targetScenePos.y)
+            if effectiveDistance > TangramGameConstants.Validation.positionTolerance {
+                // Check polygon contact using current piece pose vs target polygon
+                let piecePoly = TangramGeometryUtilities.transformedVertices(
+                    for: pieceType,
+                    isFlipped: piece.isFlipped,
+                    zRotation: piece.zRotation,
+                    translation: pieceScenePos
+                )
+                let targetPoly = TangramBounds.computeSKTransformedVertices(for: target)
+                let polyDist = TangramGeometryUtilities.minimumDistanceBetweenPolygons(piecePoly, targetPoly)
+                // If edges/vertices are within contact tolerance, treat position as valid
+                if polyDist <= 12 { effectiveDistance = TangramGameConstants.Validation.positionTolerance - 1 }
+            }
+            isValid = isValid && (effectiveDistance <= TangramGameConstants.Validation.positionTolerance)
             
             // Additional gating: must be within connection distance
             let centerDistance = hypot(pieceScenePos.x - targetScenePos.x, pieceScenePos.y - targetScenePos.y)
             print("[DIRECT] Check target=\(target.id) dist=\(Int(centerDistance)) valid=\(isValid)")
-            if isValid && centerDistance <= TangramGameConstants.Validation.connectionDistance {
-                // Enforce instance binding even for direct validation
-                if piece.userData?["assignedTargetId"] as? String != target.id {
+            if isValid && centerDistance <= dynamicConnectionThreshold() {
+                // Bind on first success if not yet assigned; otherwise enforce match
+                if piece.userData?["assignedTargetId"] as? String == nil {
+                    piece.userData?["assignedTargetId"] = target.id
+                    print("[BIND] Assigned piece id=\(pieceId) → target=\(target.id) [DIRECT]")
+                } else if piece.userData?["assignedTargetId"] as? String != target.id {
                     print("[DIRECT] ❌ assignedTargetId mismatch id=\(pieceId) expected=\(String(describing: piece.userData?["assignedTargetId"])) got=\(target.id)")
                     continue
                 }
@@ -1244,6 +1316,9 @@ class TangramPuzzleScene: SKScene {
                     SKAction.scale(to: 1.0, duration: 0.1)
                 ])
                 targetNode.run(pulse)
+
+                // Show top-panel validation nudge (green checkmark over silhouette)
+                showValidationCheckmark(over: targetNode)
                 
                 // Add celebration effect on the physical piece
                 showPieceCelebration(piece)
@@ -1270,12 +1345,34 @@ class TangramPuzzleScene: SKScene {
         let current = pieceInvalidStreak[pieceId] ?? 0
         let next = current + 1
         pieceInvalidStreak[pieceId] = next
+        // Record an attempt for nudge thresholds
+        if let group = pieceGroup { groupManager.recordAttempt(in: group.id, pieceId: pieceId) }
         if next >= invalidStreakThreshold {
             var updatedState = state
             updatedState.markAsInvalid(reason: .wrongPosition(offset: 100))
             pieceStates[pieceId] = updatedState
             piece.pieceState = updatedState
             piece.updateStateIndicator()
+
+            // If this piece had previously validated a target, unmark it as consumed and remove fills
+            if let group = pieceGroup,
+               let validatedId = piece.userData?["validatedTargetId"] as? String {
+                mappingService.unmarkTargetConsumed(groupId: group.id, targetId: validatedId)
+                validatedTargets.remove(validatedId)
+                completedPieces.remove(validatedId)
+                onValidatedTargetsChanged?(validatedTargets)
+                // Reset silhouette visual
+                if let tNode = targetSilhouettes[validatedId] {
+                    tNode.fillColor = .clear
+                    tNode.alpha = 1.0
+                }
+                // Clear binding to allow re-bind on next valid placement
+                piece.userData?["validatedTargetId"] = nil
+                // Keep assignedTargetId to preserve intent, or clear? We clear to allow rebind in case of drift
+                piece.userData?["assignedTargetId"] = nil
+                // Remove pair from mapping refinement bookkeeping
+                mappingService.removePair(groupId: group.id, pieceId: pieceId, targetId: validatedId)
+            }
         } else {
             // Keep in validating state, do not penalize yet
             pieceStates[pieceId] = state
@@ -1301,26 +1398,69 @@ class TangramPuzzleScene: SKScene {
                 )
                 
                 // Find a target to nudge towards (prefer unvalidated targets of same type)
-                if let target = puzzle.targetPieces.first(where: { 
-                    $0.pieceType == pieceType && !validatedTargets.contains($0.id) 
-                }) {
-                    if let targetNode = targetSilhouettes[target.id] {
-                        // Get actual centroid for correct hint position
-                        let targetCentroid = (targetNode.userData?["centroidSK"] as? NSValue)?.cgPointValue ?? .zero
-                        let targetPos = targetSection.convert(targetCentroid, to: physicalWorldSection)
-                        // Use feature-angle desiredZ so ghost aligns visually with baked silhouette
-                        let targetRotation = targetNode.userData?["expectedZRotationSK"] as? CGFloat ?? 0
-                        let canonicalTarget: CGFloat = pieceType.isTriangle ? (.pi/4) : 0
-                        let canonicalPiece: CGFloat = pieceType.isTriangle ? (3 * .pi/4) : 0
-                        let desiredZ = TangramRotationValidator.normalizeAngle(targetRotation + canonicalTarget - canonicalPiece)
-                        let nudgeContent = nudgeManager.generateNudge(
-                            level: nudgeLevel,
-                            failure: .wrongPosition(offset: 50),
-                            targetInfo: (position: targetPos, rotation: desiredZ)
-                        )
-                        
-                        // Show nudge in top panel near the target piece
-                        showSmartNudgeInTarget(targetNode: targetNode, content: nudgeContent, pieceType: pieceType)
+                if let target = puzzle.targetPieces.first(where: {
+                    $0.pieceType == pieceType && !validatedTargets.contains($0.id)
+                }), let targetNode = targetSilhouettes[target.id] {
+                    // Get true centroid and pose for hint positioning and feature-angle checks
+                    let targetCentroid = (targetNode.userData?["centroidSK"] as? NSValue)?.cgPointValue ?? .zero
+                    let targetPosPhysical = targetSection.convert(targetCentroid, to: physicalWorldSection)
+                    let tPose = resolvePose(for: target)
+                    let targetScenePos = tPose.map { targetSection.convert($0.centroidInContainer, to: self) } ?? .zero
+                    let targetRotation = tPose?.zRotationSK ?? 0
+                    let canonicalTarget: CGFloat = pieceType.isTriangle ? (.pi/4) : 0
+                    let canonicalPiece: CGFloat = pieceType.isTriangle ? (3 * .pi/4) : 0
+                    let desiredZ = TangramRotationValidator.normalizeAngle(targetRotation + canonicalTarget - canonicalPiece)
+
+                    // Compute detailed failure reason using feature-angle validator
+                    let result = validator.validateForSpriteKitWithFeatures(
+                        piecePosition: pieceScenePos,
+                        pieceFeatureAngle: pieceFeatureAngle,
+                        targetFeatureAngle: targetRotation + canonicalTarget,
+                        pieceType: pieceType,
+                        isFlipped: piece.isFlipped,
+                        targetTransform: target.transform,
+                        targetWorldPos: targetScenePos
+                    )
+                    let centerDistance = hypot(pieceScenePos.x - targetScenePos.x, pieceScenePos.y - targetScenePos.y)
+                    let failureReason: ValidationFailure = {
+                        if pieceType == .parallelogram && !result.flipValid { return .needsFlip }
+                        if !result.rotationValid { return .wrongRotation(degreesOff: 45) }
+                        return .wrongPosition(offset: centerDistance)
+                    }()
+
+                    // Escalate to specific level for rotation/flip feedback
+                    let effectiveLevel: NudgeLevel = {
+                        switch failureReason {
+                        case .wrongRotation, .needsFlip: return max(nudgeLevel, .specific)
+                        default: return nudgeLevel
+                        }
+                    }()
+
+                    // Promote slide arrows when close enough in position but not yet valid
+                    let promoteDirected = (centerDistance < 140) && (failureReason == .wrongPosition(offset: centerDistance))
+                    let levelToUse: NudgeLevel = promoteDirected ? max(effectiveLevel, .directed) : effectiveLevel
+                    let nudgeContent = nudgeManager.generateNudge(
+                        level: levelToUse,
+                        failure: failureReason,
+                        targetInfo: (position: targetPosPhysical, rotation: desiredZ)
+                    )
+
+                    // Show nudge in top panel near the target piece
+                    showSmartNudgeInTarget(targetNode: targetNode, content: nudgeContent, pieceType: pieceType)
+                    nudgeManager.recordNudgeShown(for: pieceId)
+                } else if pieceType == .parallelogram {
+                    // No target found due to consumption / instance-binding; still show flip-specific nudge when flip invalid
+                    let canonicalTarget: CGFloat = 0
+                    let canonicalPiece: CGFloat = 0
+                    let desiredZ = piece.zRotation + (piece.isFlipped ? -canonicalPiece : canonicalPiece)
+                    let nudgeContent = nudgeManager.generateNudge(
+                        level: .specific,
+                        failure: .needsFlip,
+                        targetInfo: (position: .zero, rotation: desiredZ)
+                    )
+                    // Pin the nudge to the puzzle container center as a fallback
+                    if let anyTarget = targetSilhouettes.values.first {
+                        showSmartNudgeInTarget(targetNode: anyTarget, content: nudgeContent, pieceType: pieceType)
                         nudgeManager.recordNudgeShown(for: pieceId)
                     }
                 }
@@ -1334,7 +1474,12 @@ class TangramPuzzleScene: SKScene {
     // MARK: - Nudge System
     
     private func showSmartNudgeInTarget(targetNode: SKShapeNode, content: NudgeContent, pieceType: TangramPieceType) {
-        // Remove any existing nudge for this target
+        // Enforce only ONE nudge visible at a time in the silhouette area
+        targetSection.enumerateChildNodes(withName: "nudge_*") { node, _ in node.removeFromParent() }
+        if let container = targetSection.childNode(withName: "puzzleContainer") {
+            container.enumerateChildNodes(withName: "nudge_*") { node, _ in node.removeFromParent() }
+        }
+        // Remove any existing nudge for this target (redundant safety)
         targetSection.childNode(withName: "nudge_\(targetNode.name ?? "")")?.removeFromParent()
         
         guard content.level != .none else { return }
@@ -1398,6 +1543,20 @@ class TangramPuzzleScene: SKScene {
                     SKAction.moveBy(x: -5, y: 0, duration: 0.5)
                 ]))
                 arrowNode.run(bounce)
+
+                // Slide demonstration: show a ghost piece sliding along the indicated direction into place
+                let offset: CGFloat = 60
+                let start = CGPoint(x: -cos(direction) * offset, y: -sin(direction) * offset)
+                let ghost = createGhostPiece(pieceType: pieceType, at: start, rotation: 0)
+                ghost.alpha = 0.35
+                nudgeNode.addChild(ghost)
+
+                let slide = SKAction.move(to: .zero, duration: 0.8)
+                slide.timingMode = .easeOut
+                ghost.run(SKAction.sequence([
+                    slide,
+                    SKAction.wait(forDuration: 0.6)
+                ]))
             }
             
             // Also show message
@@ -1412,31 +1571,28 @@ class TangramPuzzleScene: SKScene {
         case .solution:
             // Show ghost piece in correct position
             if let visualHint = content.visualHint,
-               case .ghostPiece(let position, let rotation) = visualHint {
-                let ghostPiece = createGhostPiece(pieceType: pieceType, at: position, rotation: rotation)
+               case .ghostPiece(_, let rotation) = visualHint {
+                // Place ghost at centroid and demonstrate rotation into place
+                let ghostPiece = createGhostPiece(pieceType: pieceType, at: .zero, rotation: rotation)
                 ghostPiece.alpha = 0.4
                 nudgeNode.addChild(ghostPiece)
                 
-                // Fade in/out animation
-                let fadeAnimation = SKAction.repeatForever(SKAction.sequence([
-                    SKAction.fadeAlpha(to: 0.2, duration: 1.0),
-                    SKAction.fadeAlpha(to: 0.6, duration: 1.0)
-                ]))
-                ghostPiece.run(fadeAnimation)
+                // Rotate demonstration (wiggle to show required alignment)
+                let wiggle: CGFloat = .pi / 10 // ~18°
+                let rotateDemo = SKAction.sequence([
+                    SKAction.rotate(toAngle: rotation - wiggle, duration: 0.25, shortestUnitArc: true),
+                    SKAction.rotate(toAngle: rotation + wiggle, duration: 0.25, shortestUnitArc: true),
+                    SKAction.rotate(toAngle: rotation, duration: 0.2, shortestUnitArc: true)
+                ])
+                let loop = SKAction.repeat(rotateDemo, count: 2)
+                ghostPiece.run(loop)
             }
             
         default:
             break
         }
         
-        // Add text message if present and not already added
-        if !content.message.isEmpty && content.level == .visual {
-            let label = SKLabelNode(text: content.message)
-            label.fontSize = 14
-            label.fontColor = .white
-            label.position = CGPoint(x: 0, y: 40)
-            nudgeNode.addChild(label)
-        }
+        // No bottom-panel nudges; all indicators live in target section only
         
         // Add to target section
         if let container = targetSection.childNode(withName: "puzzleContainer") {
@@ -1468,6 +1624,42 @@ class TangramPuzzleScene: SKScene {
         }
     }
     
+    // MARK: - Top-panel validation checkmark
+    private func showValidationCheckmark(over targetNode: SKShapeNode) {
+        // Remove any prior check for this target
+        let name = "check_\(targetNode.name ?? UUID().uuidString)"
+        targetSection.childNode(withName: name)?.removeFromParent()
+
+        let check = SKLabelNode(text: "✅")
+        check.name = name
+        check.zPosition = 1200
+        // Position at the silhouette centroid
+        let centroid = (targetNode.userData?["centroidSK"] as? NSValue)?.cgPointValue ?? .zero
+        check.position = centroid
+
+        // Pop-in animation
+        check.setScale(0.1)
+        let anim = SKAction.sequence([
+            SKAction.group([
+                SKAction.scale(to: 1.0, duration: 0.18),
+                SKAction.fadeIn(withDuration: 0.18)
+            ]),
+            SKAction.wait(forDuration: 1.0),
+            SKAction.group([
+                SKAction.moveBy(x: 0, y: 16, duration: 0.25),
+                SKAction.fadeOut(withDuration: 0.25)
+            ]),
+            SKAction.removeFromParent()
+        ])
+
+        if let container = targetSection.childNode(withName: "puzzleContainer") {
+            container.addChild(check)
+        } else {
+            targetSection.addChild(check)
+        }
+        check.run(anim)
+    }
+    
     private func updateCVPieceVisualState(_ cvPiece: PuzzlePieceNode, state: PieceState) {
         // CV mini viewer: neutral appearance only
         cvPiece.shapeNode?.strokeColor = .white
@@ -1481,61 +1673,8 @@ class TangramPuzzleScene: SKScene {
     }
     
     private func showPieceCelebration(_ piece: PuzzlePieceNode) {
-        // Create success effect on the piece
-        let successNode = SKNode()
-        successNode.position = .zero
-        successNode.zPosition = 1000
-        
-        // Green glow effect
-        let glow = SKShapeNode(circleOfRadius: 50)
-        glow.fillColor = .systemGreen
-        glow.strokeColor = .clear
-        glow.alpha = 0.5
-        successNode.addChild(glow)
-        
-        // Animate glow
-        let glowAnimation = SKAction.sequence([
-            SKAction.group([
-                SKAction.scale(to: 2.0, duration: 0.3),
-                SKAction.fadeOut(withDuration: 0.3)
-            ]),
-            SKAction.removeFromParent()
-        ])
-        glow.run(glowAnimation)
-        
-        // Add checkmark
-        let checkmark = SKLabelNode(text: "✅")
-        checkmark.fontSize = 30
-        checkmark.position = CGPoint(x: 0, y: 0)
-        checkmark.zPosition = 1001
-        successNode.addChild(checkmark)
-        
-        // Animate checkmark
-        checkmark.setScale(0)
-        let checkAnimation = SKAction.sequence([
-            SKAction.scale(to: 1.0, duration: 0.2),
-            SKAction.wait(forDuration: 1.0),
-            SKAction.group([
-                SKAction.moveBy(x: 0, y: 20, duration: 0.3),
-                SKAction.fadeOut(withDuration: 0.3)
-            ]),
-            SKAction.removeFromParent()
-        ])
-        checkmark.run(checkAnimation)
-        
-        piece.addChild(successNode)
-        
-        // Also add particles
-        if let particles = SKEmitterNode(fileNamed: "Success") {
-            particles.position = .zero
-            particles.zPosition = 999
-            piece.addChild(particles)
-            
-            particles.run(SKAction.sequence([
-                SKAction.wait(forDuration: 1.0),
-                SKAction.removeFromParent()
-            ]))
-        }
+        // Bottom-panel celebration visuals are disabled; success feedback is shown in the silhouette area only
+        return
     }
     
     private func showPuzzleCompleteCelebration() {
@@ -1646,6 +1785,18 @@ class TangramPuzzleScene: SKScene {
         let flipped = targetNode.userData?["isFlipped"] as? Bool ?? false
         return ResolvedPose(centroidInContainer: centroidLocal, zRotationSK: zRot, isFlipped: flipped, displayScale: targetDisplayScale)
     }
+
+    // Dynamic connection threshold based on puzzle difficulty (easier levels are more forgiving)
+    private func dynamicConnectionThreshold() -> CGFloat {
+        guard let difficulty = puzzle?.difficulty else { return TangramGameConstants.Validation.connectionDistance }
+        switch difficulty {
+        case 0: return 170
+        case 1: return 150
+        case 2: return 130
+        case 3: return 110
+        default: return TangramGameConstants.Validation.connectionDistance // 4 and above
+        }
+    }
     private func applyValidatedFill(to targetNode: SKShapeNode, for pieceType: TangramPieceType) {
         let ui = TangramColors.Sprite.uiColor(for: pieceType)
         targetNode.fillColor = ui.withAlphaComponent(0.7)
@@ -1671,90 +1822,7 @@ class TangramPuzzleScene: SKScene {
         return ghost
     }
     
-    private func showNudge(for piece: PuzzlePieceNode, reason: ValidationFailure) {
-        // Remove any existing nudge
-        piece.childNode(withName: "nudge")?.removeFromParent()
-        
-        // Create nudge node
-        let nudgeNode = SKNode()
-        nudgeNode.name = "nudge"
-        nudgeNode.zPosition = 100
-        
-        // Add text label
-        let label = SKLabelNode(text: reason.nudgeMessage)
-        label.fontSize = 14
-        label.fontColor = .white
-        label.fontName = "System-Bold"
-        
-        // Add background
-        let background = SKShapeNode(rectOf: CGSize(width: label.frame.width + 20, height: 25), cornerRadius: 12)
-        background.fillColor = SKColor.systemOrange
-        background.strokeColor = .clear
-        background.position = CGPoint(x: 0, y: 40)
-        
-        label.position = CGPoint(x: 0, y: 35)
-        
-        nudgeNode.addChild(background)
-        nudgeNode.addChild(label)
-        
-        // Add directional arrow if position is wrong
-        if case .wrongPosition = reason {
-            // Calculate direction to target - find an unvalidated target of same type
-            if let pieceType = piece.pieceType,
-               let target = puzzle?.targetPieces.first(where: { 
-                   $0.pieceType == pieceType && !validatedTargets.contains($0.id) 
-               }),
-               let targetNode = targetSilhouettes[target.id] {
-                // Use the actual centroid, not the node position
-                let targetCentroid = (targetNode.userData?["centroidSK"] as? NSValue)?.cgPointValue ?? .zero
-                let targetScenePos = targetSection.convert(targetCentroid, to: self)
-                
-                // Apply inverse per-group anchor mapping if available
-                let targetPhysicalPos: CGPoint = {
-                    guard let group = constructionGroups.first(where: { $0.pieces.contains(piece.name ?? "") }),
-                          let mapping = mappingService.mapping(for: group.id),
-                          let anchorNode = availablePieces.first(where: { $0.name == mapping.anchorPieceId }) else {
-                        return self.convert(targetScenePos, to: physicalWorldSection)
-                    }
-                    let anchorScenePos = physicalWorldSection.convert(anchorNode.position, to: self)
-                    let inverseScene = mappingService.inverseMapTargetToPhysical(mapping: mapping, anchorScenePos: anchorScenePos, targetScenePos: targetScenePos)
-                    return self.convert(inverseScene, to: physicalWorldSection)
-                }()
-                
-                let direction = CGPoint(
-                    x: targetPhysicalPos.x - piece.position.x,
-                    y: targetPhysicalPos.y - piece.position.y
-                )
-                let angle = atan2(direction.y, direction.x)
-                
-                // Create arrow
-                let arrow = SKShapeNode()
-                let path = CGMutablePath()
-                path.move(to: CGPoint(x: 0, y: 0))
-                path.addLine(to: CGPoint(x: 20, y: 0))
-                path.addLine(to: CGPoint(x: 15, y: 5))
-                path.move(to: CGPoint(x: 20, y: 0))
-                path.addLine(to: CGPoint(x: 15, y: -5))
-                arrow.path = path
-                arrow.strokeColor = .systemOrange
-                arrow.lineWidth = 2
-                arrow.zRotation = angle
-                arrow.position = CGPoint(x: 0, y: 0)
-                
-                nudgeNode.addChild(arrow)
-            }
-        }
-        
-        piece.addChild(nudgeNode)
-        
-        // Auto-remove after 3 seconds
-        let fadeOut = SKAction.sequence([
-            SKAction.wait(forDuration: 2.5),
-            SKAction.fadeOut(withDuration: 0.5),
-            SKAction.removeFromParent()
-        ])
-        nudgeNode.run(fadeOut)
-    }
+    private func showNudge(for piece: PuzzlePieceNode, reason: ValidationFailure) { /* bottom-area nudges disabled */ }
     
     // MARK: - Validation Helpers
     

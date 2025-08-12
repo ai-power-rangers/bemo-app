@@ -213,10 +213,12 @@ class PuzzlePieceNode: SKNode {
             self.alpha = state.displayOpacity
             
         case .validated:
-            // Don't show indicator - validation is shown in target section
+            // Validation visuals are shown in the target (silhouette) only. Keep piece visuals neutral.
             indicator.isHidden = true
             self.alpha = 1.0
-            shapeNode?.strokeColor = .systemGreen
+            if let fill = shapeNode?.fillColor {
+                shapeNode?.strokeColor = fill.darker(by: 20)
+            }
             shapeNode?.lineWidth = 2
             shapeNode?.glowWidth = 0
             

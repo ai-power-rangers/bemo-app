@@ -22,11 +22,11 @@ class AnimationLabViewModel {
         // Generic
         case squareTakeover, squareWave, squareSpiral
         // Transitional
-        case assemble, explosion, fadeIn, scatter, disassemble
+        case assemble, fadeIn, scatter, disassemble
         // Character
         case breathing, pulse, wobble, happyJump, shimmer
         // Combined
-        case celebration
+        case celebration, celebrationExit
     }
     
     struct AnimationItem: Identifiable, Hashable {
@@ -77,7 +77,7 @@ class AnimationLabViewModel {
         
         // Exit animations - for puzzle transitions
         let exitAnims = [
-            AnimationItem(name: "Explosion", group: .transitional, category: .exit, type: .explosion, requiresPuzzle: true),
+            AnimationItem(name: "Full Celebration Exit", group: .transitional, category: .exit, type: .celebrationExit, requiresPuzzle: true),
             AnimationItem(name: "Disassemble", group: .transitional, category: .exit, type: .disassemble, requiresPuzzle: true)
         ]
         

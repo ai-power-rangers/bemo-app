@@ -86,7 +86,10 @@ enum TransitionAnimations {
         let totalSize = squareSize + spacing
         
         // Calculate how many rows and columns we need to fill the screen
-        let cols = Int(scene.size.width / totalSize) + 3  // Extra for sliding and offset
+        // Need MANY more columns since they continuously slide horizontally for 10 seconds
+        // At fastest speed (after acceleration), squares move 1 square width per ~0.3 seconds
+        // So in 10 seconds, they can move ~33 square widths
+        let cols = Int(scene.size.width / totalSize) + 40  // Enough extra for 10 seconds of sliding
         let rows = Int(scene.size.height / totalSize) + 2  // Extra to cover full height
         
         // Rotation options (0°, 90°, 180°, 270°) 
@@ -100,10 +103,15 @@ enum TransitionAnimations {
             // Brick pattern offset - every other row is offset by half a square
             let xOffset = (row % 2 == 0) ? 0 : totalSize / 2
             
+            // IMPORTANT: Offset rows need extra squares on both ends to maintain coverage
+            // When offset, we lose half a square on each end, so add extra squares
+            let extraCols = (row % 2 == 0) ? 0 : 2
+            let adjustedCols = cols + extraCols
+            
             // Create all squares for this row
-            for col in 0..<cols {
-                // Final position for this square
-                let finalX = CGFloat(col) * totalSize + xOffset - totalSize
+            for col in -10..<adjustedCols {  // Start from -10 to ensure full left coverage
+                // Position squares extending from far left to far right
+                let finalX = CGFloat(col) * totalSize + xOffset
                 let finalY = CGFloat(row) * totalSize
                 
                 // Each square gets its own random rotation
@@ -147,35 +155,17 @@ enum TransitionAnimations {
             }
             
             // PHASE 2: Sliding animation starts IMMEDIATELY
-            // Alternate rows slide in opposite directions
-            let slideDirection: CGFloat = (row % 2 == 0) ? 1 : -1
+            // Alternate rows slide in opposite directions - but keep going the same way
+            let slideDirection: CGFloat = (row % 2 == 0) ? 1 : -1  // Even rows go right, odd rows go left
             
-            // Start faster and accelerate more
-            var slideDuration = 0.8  // Much faster start
-            let acceleration = 0.85  // Speed up factor
+            // Constant speed - no acceleration, just steady movement
+            let slideSpeed: CGFloat = 120.0  // pixels per second (slightly faster constant speed)
+            let totalSlideDistance = slideSpeed * 6.0  // Distance for 6 seconds
             
-            // Create accelerating slide sequence - NO WAIT, start sliding immediately
-            var slideActions: [SKAction] = []
+            let continuousSlide = SKAction.moveBy(x: totalSlideDistance * slideDirection, y: 0, duration: 6.0)
+            continuousSlide.timingMode = .linear  // Constant speed, no acceleration
             
-            for _ in 0..<10 {  // 10 cycles of back and forth, getting faster
-                let slideDistance = totalSize  // Slide by 1 square width
-                slideActions.append(SKAction.moveBy(x: slideDistance * slideDirection, y: 0, duration: slideDuration))
-                slideActions.append(SKAction.moveBy(x: -slideDistance * slideDirection, y: 0, duration: slideDuration))
-                slideDuration *= acceleration  // Get faster each cycle
-            }
-            
-            // After acceleration, maintain fast speed
-            slideActions.append(SKAction.repeatForever(
-                SKAction.sequence([
-                    SKAction.moveBy(x: totalSize * 2 * slideDirection, y: 0, duration: slideDuration),
-                    SKAction.moveBy(x: -totalSize * 2 * slideDirection, y: 0, duration: slideDuration)
-                ])
-            ))
-            
-            let slideSequence = SKAction.sequence(slideActions)
-            slideSequence.timingMode = .easeInEaseOut
-            
-            rowContainer.run(slideSequence)
+            rowContainer.run(continuousSlide)
         }
         
         return SKAction.sequence([SKAction.wait(forDuration: duration + 1.0)])
@@ -191,7 +181,8 @@ enum TransitionAnimations {
         
         // Calculate how many columns and rows we need to fill the screen
         let cols = Int(scene.size.width / totalSize) + 2  // Extra to cover full width
-        let rows = Int(scene.size.height / totalSize) + 3  // Extra for sliding and offset
+        // Need MANY more rows since they continuously slide vertically for 10 seconds
+        let rows = Int(scene.size.height / totalSize) + 40  // Enough extra for 10 seconds of sliding
         
         // Rotation options (0°, 90°, 180°, 270°)
         let rotations: [CGFloat] = [0, .pi/2, .pi, .pi * 3/2]
@@ -204,11 +195,16 @@ enum TransitionAnimations {
             // Vertical brick pattern offset - every other column is offset by half a square
             let yOffset = (col % 2 == 0) ? 0 : totalSize / 2
             
+            // IMPORTANT: Offset columns need extra squares on both ends to maintain coverage
+            // When offset, we lose half a square on each end, so add extra squares
+            let extraRows = (col % 2 == 0) ? 0 : 2
+            let adjustedRows = rows + extraRows
+            
             // Create all squares for this column
-            for row in 0..<rows {
-                // Final position for this square
+            for row in -10..<adjustedRows {  // Start from -10 to ensure full bottom coverage
+                // Position squares extending from far bottom to far top
                 let finalX = CGFloat(col) * totalSize
-                let finalY = CGFloat(row) * totalSize + yOffset - totalSize
+                let finalY = CGFloat(row) * totalSize + yOffset
                 
                 // Each square gets its own random rotation
                 let finalRotation = rotations[Int.random(in: 0..<rotations.count)]
@@ -251,35 +247,17 @@ enum TransitionAnimations {
             }
             
             // PHASE 2: Sliding animation starts IMMEDIATELY
-            // Alternate columns slide in opposite directions (up/down)
-            let slideDirection: CGFloat = (col % 2 == 0) ? 1 : -1
+            // Alternate columns slide in opposite directions (up/down) - but keep going the same way
+            let slideDirection: CGFloat = (col % 2 == 0) ? 1 : -1  // Even columns go up, odd columns go down
             
-            // Start faster and accelerate more (same as row animation)
-            var slideDuration = 0.8  // Much faster start - matches row animation
-            let acceleration = 0.85  // Same acceleration as rows
+            // Constant speed - no acceleration, just steady movement (matches row animation)
+            let slideSpeed: CGFloat = 120.0  // pixels per second (slightly faster constant speed)
+            let totalSlideDistance = slideSpeed * 6.0  // Distance for 6 seconds
             
-            // Create accelerating slide sequence - NO WAIT
-            var slideActions: [SKAction] = []
+            let continuousSlide = SKAction.moveBy(x: 0, y: totalSlideDistance * slideDirection, duration: 6.0)
+            continuousSlide.timingMode = .linear  // Constant speed, no acceleration
             
-            for _ in 0..<10 {  // 10 cycles of up and down, getting faster
-                let slideDistance = totalSize  // Slide by 1 square height
-                slideActions.append(SKAction.moveBy(x: 0, y: slideDistance * slideDirection, duration: slideDuration))
-                slideActions.append(SKAction.moveBy(x: 0, y: -slideDistance * slideDirection, duration: slideDuration))
-                slideDuration *= acceleration  // Get faster each cycle
-            }
-            
-            // After acceleration, maintain fast speed
-            slideActions.append(SKAction.repeatForever(
-                SKAction.sequence([
-                    SKAction.moveBy(x: 0, y: totalSize * slideDirection, duration: slideDuration),
-                    SKAction.moveBy(x: 0, y: -totalSize * slideDirection, duration: slideDuration)
-                ])
-            ))
-            
-            let slideSequence = SKAction.sequence(slideActions)
-            slideSequence.timingMode = .easeInEaseOut
-            
-            colContainer.run(slideSequence)
+            colContainer.run(continuousSlide)
         }
     }
     

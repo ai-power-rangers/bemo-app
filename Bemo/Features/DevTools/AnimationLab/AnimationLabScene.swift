@@ -49,11 +49,32 @@ final class AnimationLabScene: SKScene {
         var displayName: String { rawValue }
     }
     
+    // MARK: - Entrance Directions
+    enum EntranceDirection: String, CaseIterable {
+        case up = "Up"
+        case down = "Down"
+        case left = "Left"
+        case right = "Right"
+        case upLeft = "Up-Left"
+        case upRight = "Up-Right"
+        case downLeft = "Down-Left"
+        case downRight = "Down-Right"
+        case random = "Random"
+        
+        var displayName: String { rawValue }
+    }
+    
     private var currentExitDirection: ExitDirection = .up
+    private var currentEntranceDirection: EntranceDirection = .random
     
     // Public setter for exit direction
     func setExitDirection(_ direction: ExitDirection) {
         currentExitDirection = direction
+    }
+    
+    // Public setter for entrance direction
+    func setEntranceDirection(_ direction: EntranceDirection) {
+        currentEntranceDirection = direction
     }
     
     // Helper to get exit vector
@@ -102,20 +123,8 @@ final class AnimationLabScene: SKScene {
     func runSquareTakeover() {
         overlayLayer.removeAllChildren()
         let animation = TransitionAnimations.squareTakeover(in: self, layer: overlayLayer, duration: 1.5)
-        
-        // Add additional animation effects after squares are in place
-        overlayLayer.run(SKAction.sequence([
-            animation,
-            SKAction.wait(forDuration: 0.5),
-            SKAction.run { [weak self] in
-                // Create a wave effect across all squares
-                self?.animateSquareWave()
-            },
-            SKAction.wait(forDuration: 3.0),
-            SKAction.run { [weak self] in
-                self?.clearTransient()
-            }
-        ]))
+        // Don't add extra waits or animations - let the ContainerView control timing
+        overlayLayer.run(animation)
     }
     
     private func animateSquareWave() {
@@ -144,13 +153,7 @@ final class AnimationLabScene: SKScene {
         overlayLayer.removeAllChildren()
         // Create squares in wave formation
         TransitionAnimations.squareWavePattern(in: self, layer: overlayLayer, duration: 2.0)
-        
-        overlayLayer.run(SKAction.sequence([
-            SKAction.wait(forDuration: 4.0),
-            SKAction.run { [weak self] in
-                self?.clearTransient()
-            }
-        ]))
+        // Don't add extra waits - let the ContainerView control timing
     }
     
     func runSquareSpiral() {
@@ -336,8 +339,114 @@ final class AnimationLabScene: SKScene {
     
     func runEntrance() {
         guard let assembledNode else { return }
-        // Pieces fly in from edges and assemble
-        TransitionAnimations.assemble(node: assembledNode, within: frame, duration: 1.2)
+        
+        // Pieces start off-screen and fly in to assemble (opposite of disassemble exit)
+        for (index, child) in assembledNode.children.enumerated() {
+            guard let piece = child as? SKShapeNode else { continue }
+            
+            // Store final position
+            let finalPosition = piece.position
+            let finalRotation = piece.zRotation
+            let finalScale = piece.xScale
+            
+            // Determine start position based on entrance direction
+            // ALL pieces should start from the SAME edge, not relative to their final positions
+            let startPosition: CGPoint
+            let spread: CGFloat = 100
+            
+            if currentEntranceDirection == .random {
+                // Random edge for each piece
+                let edge = Int.random(in: 0..<8)
+                switch edge {
+                case 0: // Top
+                    startPosition = CGPoint(x: CGFloat.random(in: -spread...spread), y: size.height/2 + 200)
+                case 1: // Bottom
+                    startPosition = CGPoint(x: CGFloat.random(in: -spread...spread), y: -size.height/2 - 200)
+                case 2: // Left
+                    startPosition = CGPoint(x: -size.width/2 - 200, y: CGFloat.random(in: -spread...spread))
+                case 3: // Right
+                    startPosition = CGPoint(x: size.width/2 + 200, y: CGFloat.random(in: -spread...spread))
+                case 4: // Top-Left
+                    startPosition = CGPoint(x: -size.width/2 - 200, y: size.height/2 + 200)
+                case 5: // Top-Right
+                    startPosition = CGPoint(x: size.width/2 + 200, y: size.height/2 + 200)
+                case 6: // Bottom-Left
+                    startPosition = CGPoint(x: -size.width/2 - 200, y: -size.height/2 - 200)
+                default: // Bottom-Right
+                    startPosition = CGPoint(x: size.width/2 + 200, y: -size.height/2 - 200)
+                }
+            } else {
+                // All pieces from same direction with slight spread
+                switch currentEntranceDirection {
+                case .up:
+                    startPosition = CGPoint(x: CGFloat.random(in: -spread...spread), y: size.height/2 + 200)
+                case .down:
+                    startPosition = CGPoint(x: CGFloat.random(in: -spread...spread), y: -size.height/2 - 200)
+                case .left:
+                    startPosition = CGPoint(x: -size.width/2 - 200, y: CGFloat.random(in: -spread...spread))
+                case .right:
+                    startPosition = CGPoint(x: size.width/2 + 200, y: CGFloat.random(in: -spread...spread))
+                case .upLeft:
+                    startPosition = CGPoint(x: -size.width/2 - 200, y: size.height/2 + 200)
+                case .upRight:
+                    startPosition = CGPoint(x: size.width/2 + 200, y: size.height/2 + 200)
+                case .downLeft:
+                    startPosition = CGPoint(x: -size.width/2 - 200, y: -size.height/2 - 200)
+                case .downRight:
+                    startPosition = CGPoint(x: size.width/2 + 200, y: -size.height/2 - 200)
+                case .random:
+                    startPosition = CGPoint.zero // Already handled above
+                }
+            }
+            
+            // Set initial state - pieces start at absolute edge positions
+            piece.position = startPosition
+            piece.zRotation = CGFloat.random(in: -CGFloat.pi * 2...CGFloat.pi * 2)
+            piece.setScale(0.5)
+            piece.alpha = 0
+            
+            // Stagger the timing for each piece
+            let delay = Double(index) * 0.1
+            
+            // Create entrance animation
+            let entrance = SKAction.sequence([
+                SKAction.wait(forDuration: delay),
+                SKAction.fadeIn(withDuration: 0.3),
+                SKAction.group([
+                    SKAction.move(to: finalPosition, duration: 0.8),
+                    SKAction.rotate(toAngle: finalRotation, duration: 0.8, shortestUnitArc: true),
+                    SKAction.scale(to: finalScale, duration: 0.8)
+                ])
+            ])
+            entrance.timingMode = .easeOut
+            
+            piece.run(entrance)
+        }
+    }
+    
+    // Helper to get entrance vector (opposite of exit)
+    private func getEntranceVector(for direction: EntranceDirection) -> CGVector {
+        let distance: CGFloat = max(size.width, size.height) + 200
+        switch direction {
+        case .up:
+            return CGVector(dx: 0, dy: distance)
+        case .down:
+            return CGVector(dx: 0, dy: -distance)
+        case .left:
+            return CGVector(dx: -distance, dy: 0)
+        case .right:
+            return CGVector(dx: distance, dy: 0)
+        case .upLeft:
+            return CGVector(dx: -distance * 0.7, dy: distance * 0.7)
+        case .upRight:
+            return CGVector(dx: distance * 0.7, dy: distance * 0.7)
+        case .downLeft:
+            return CGVector(dx: -distance * 0.7, dy: -distance * 0.7)
+        case .downRight:
+            return CGVector(dx: distance * 0.7, dy: -distance * 0.7)
+        case .random:
+            return CGVector.zero // Handled separately
+        }
     }
     
     func runExit() {
@@ -357,6 +466,112 @@ final class AnimationLabScene: SKScene {
             SKAction.wait(forDuration: 2.0),
             SKAction.run { [weak self] in
                 self?.overlayLayer.removeAllChildren()
+            }
+        ]))
+    }
+    
+    func runCelebrationExit() {
+        guard let assembledNode else { return }
+        
+        // First run the full celebration (validation + happy jump + confetti)
+        
+        // Step 1: Subtle color lightening for each piece (validation effect)
+        var delay: TimeInterval = 0
+        for (_, child) in assembledNode.children.enumerated() {
+            guard let shape = child as? SKShapeNode else { continue }
+            
+            // Store original color
+            let originalColor = shape.fillColor
+            
+            // Create subtle validation effect - just lighten the color slightly
+            let lighten = SKAction.run {
+                shape.fillColor = originalColor.lighter(by: 15)  // Much subtler lightening
+            }
+            let restore = SKAction.run {
+                shape.fillColor = originalColor
+            }
+            
+            let validationSequence = SKAction.sequence([
+                SKAction.wait(forDuration: delay),
+                lighten,
+                SKAction.wait(forDuration: 0.15),  // Shorter duration
+                restore
+            ])
+            
+            shape.run(validationSequence)
+            delay += 0.1  // Faster stagger
+        }
+        
+        // Step 2: After validation completes, do happy jump
+        let totalValidationTime = delay + 0.15
+        
+        assembledNode.run(SKAction.sequence([
+            SKAction.wait(forDuration: totalValidationTime),
+            CharacterAnimations.happyJump(),
+            SKAction.wait(forDuration: 0.5),  // Wait for jump to complete
+            // Step 3: Then hop/bounce off screen in the selected direction
+            SKAction.run { [weak self] in
+                guard let self = self else { return }
+                let exitVector = self.getExitVector(for: self.currentExitDirection)
+                
+                // Multiple hops getting progressively further
+                var hops: [SKAction] = []
+                let numHops = 4
+                var hopHeight: CGFloat = 40
+                var hopDistance: CGFloat = 0.15
+                
+                for i in 0..<numHops {
+                    // Each hop goes further and slightly lower
+                    let upPhase = SKAction.moveBy(
+                        x: exitVector.dx * hopDistance, 
+                        y: exitVector.dy * hopDistance + hopHeight, 
+                        duration: 0.2
+                    )
+                    upPhase.timingMode = .easeOut
+                    
+                    let downPhase = SKAction.moveBy(
+                        x: exitVector.dx * hopDistance, 
+                        y: exitVector.dy * hopDistance - hopHeight, 
+                        duration: 0.2
+                    )
+                    downPhase.timingMode = .easeIn
+                    
+                    hops.append(SKAction.sequence([upPhase, downPhase]))
+                    
+                    // Each hop gets progressively bigger distance, smaller height
+                    hopDistance *= 1.5
+                    hopHeight *= 0.8
+                    
+                    // Last hop includes fade and scale
+                    if i == numHops - 1 {
+                        let lastHop = SKAction.group([
+                            SKAction.sequence([upPhase, downPhase]),
+                            SKAction.fadeOut(withDuration: 0.4),
+                            SKAction.scale(to: 0.3, duration: 0.4)
+                        ])
+                        hops[hops.count - 1] = lastHop
+                    }
+                }
+                
+                let jumpOff = SKAction.sequence(hops)
+                
+                assembledNode.run(SKAction.sequence([
+                    jumpOff,
+                    SKAction.wait(forDuration: 0.5),
+                    SKAction.run { [weak self] in
+                        self?.rebuildAssembledNode()
+                    }
+                ]))
+            }
+        ]))
+        
+        // Step 4: Fast, intense confetti during the celebration
+        overlayLayer.run(SKAction.sequence([
+            SKAction.wait(forDuration: totalValidationTime),
+            TransitionAnimations.confettiBurst(in: overlayLayer, duration: 2.0, intensity: 2.0),
+            SKAction.wait(forDuration: 3.0),
+            SKAction.run { [weak self] in
+                self?.clearTransient()
             }
         ]))
     }
