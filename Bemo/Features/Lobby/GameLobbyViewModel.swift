@@ -20,6 +20,7 @@ class GameLobbyViewModel {
     var activeProfile: Profile?
     var showProfileSelection = false
     var showProfileModal = false
+    var showProfileDetails = false
     var showAuthenticationError = false
     
     // Returns active profile for display, or nil if no profiles exist
@@ -117,7 +118,16 @@ class GameLobbyViewModel {
         
         setupProfileObserver()
         loadGames()
-        checkAndShowProfileModal()
+        
+        // Check if we need to show profile selection modal
+        // This happens when user has profiles but none selected
+        Task {
+            // Small delay to ensure view is ready
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            await MainActor.run {
+                self.checkAndShowProfileModal()
+            }
+        }
     }
     
     private func setupProfileObserver() {
@@ -144,25 +154,13 @@ class GameLobbyViewModel {
             puzzleManagementService: puzzleManagementService
         )
         
-        // CV-ready version of Tangram for testing
-        let tangramCVGame = TangramCVGame(
-            supabaseService: supabaseService,
-            puzzleManagementService: puzzleManagementService
-        )
-        
-        // Start with regular games
+        // Start with regular games (Tangram is now CV-ready)
         availableGames = [
             GameItem(
                 game: tangramGame,
                 iconName: "square.on.square",
                 color: .blue,
                 badge: nil
-            ),
-            GameItem(
-                game: tangramCVGame,
-                iconName: "camera.viewfinder",
-                color: .green,
-                badge: "CV"
             )
         ]
         
@@ -306,6 +304,20 @@ class GameLobbyViewModel {
         showProfileModal = false
     }
     
+    func showProfileDetailsView() {
+        // Only show details if we have an active profile
+        if profileService.activeProfile != nil {
+            showProfileDetails = true
+        } else if profileService.hasProfiles {
+            // If we have profiles but none selected, show selection modal
+            showProfileModal = true
+        }
+    }
+    
+    func hideProfileDetailsView() {
+        showProfileDetails = false
+    }
+    
     func selectProfile(_ profile: UserProfile) {
         profileService.setActiveProfile(profile)
         hideProfileSelectionModal()
@@ -316,10 +328,26 @@ class GameLobbyViewModel {
         onProfileSetupRequested()
     }
     
+    func switchProfileFromDetails() {
+        showProfileDetails = false
+        showProfileModal = true
+    }
+    
+    // Get the current active profile data
+    var currentUserProfile: UserProfile? {
+        return profileService.activeProfile
+    }
+    
     private func checkAndShowProfileModal() {
         // Show modal if user has profiles but none are selected
-        if profileService.hasProfiles && activeProfile == nil {
-            showProfileModal = true
+        if profileService.hasProfiles && profileService.activeProfile == nil {
+            // Delay slightly to ensure view is ready
+            Task {
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                await MainActor.run {
+                    self.showProfileModal = true
+                }
+            }
         }
     }
     

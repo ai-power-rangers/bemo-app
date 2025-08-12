@@ -74,6 +74,7 @@ class AuthenticationService: NSObject {
     
     override init() {
         super.init()
+        // Check for stored authentication tokens
         checkAuthenticationState()
     }
     
@@ -113,8 +114,9 @@ class AuthenticationService: NSObject {
         deleteToken(key: refreshTokenKey)
         deleteToken(key: userIdKey)
         
-        // Clear all local profile data to prevent cross-user contamination
-        profileService?.clearAllLocalProfiles()
+        // Only clear the active profile selection, keep profiles in storage
+        // They will be available when user signs back in
+        profileService?.clearActiveProfile()
         
         // Update state
         isAuthenticated = false

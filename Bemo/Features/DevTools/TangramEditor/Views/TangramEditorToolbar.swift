@@ -209,7 +209,9 @@ struct TangramEditorToolbar: View {
         if isPendingPiece {
             // Check if it's a parallelogram
             switch viewModel.editorState {
-            case .manipulatingFirstPiece(let type, _, _), .manipulatingPendingPiece(let type, _, _):
+            case .manipulatingFirstPiece(let type, _, _), 
+                 .manipulatingPendingPiece(let type, _, _),
+                 .selectingPendingConnections(let type, _):
                 return type == .parallelogram
             default:
                 return false

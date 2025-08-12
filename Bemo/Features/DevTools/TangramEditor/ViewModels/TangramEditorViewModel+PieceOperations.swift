@@ -66,11 +66,11 @@ extension TangramEditorViewModel {
                 canvasSize: size
             )
             
-            // Apply flip if needed (for parallelogram)
+            // Apply flip if needed (PieceTransformEngine doesn't handle flip for placement)
             var finalTransform = result.transform
             if isFlipped && type == .parallelogram {
-                let flipTransform = CGAffineTransform(scaleX: -1, y: 1)
-                finalTransform = finalTransform.concatenating(flipTransform)
+                // Apply horizontal flip after rotation
+                finalTransform = finalTransform.scaledBy(x: -1, y: 1)
             }
             
             // Create piece with the calculated transform

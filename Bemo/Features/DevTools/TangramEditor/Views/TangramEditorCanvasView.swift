@@ -83,6 +83,7 @@ struct TangramEditorCanvasView: View {
                         viewModel: viewModel,
                         pieceType: type,
                         rotation: viewModel.uiState.pendingPieceRotation,
+                        isFlipped: viewModel.uiState.pendingPieceIsFlipped,
                         isFirstPiece: false,
                         canvasSize: canvasSize
                     )
@@ -96,6 +97,7 @@ struct TangramEditorCanvasView: View {
                         viewModel: viewModel,
                         pieceType: type,
                         rotation: rotation,
+                        isFlipped: viewModel.uiState.pendingPieceIsFlipped,
                         isFirstPiece: false,
                         canvasSize: canvasSize
                     )
@@ -103,11 +105,12 @@ struct TangramEditorCanvasView: View {
                     
                     Spacer()
                 }
-            } else if case .manipulatingFirstPiece(let type, let rotation, _) = viewModel.editorState {
+            } else if case .manipulatingFirstPiece(let type, let rotation, let isFlipped) = viewModel.editorState {
                 PendingPieceOverlay(
                     viewModel: viewModel,
                     pieceType: type,
                     rotation: rotation,
+                    isFlipped: isFlipped,
                     isFirstPiece: true,
                     canvasSize: canvasSize
                 )
@@ -445,6 +448,7 @@ struct PendingPieceOverlay: View {
     let viewModel: TangramEditorViewModel
     let pieceType: PieceType
     let rotation: Double
+    let isFlipped: Bool
     let isFirstPiece: Bool
     let canvasSize: CGSize
     
@@ -453,6 +457,7 @@ struct PendingPieceOverlay: View {
             viewModel: viewModel,
             pieceType: pieceType,
             rotation: rotation,
+            isFlipped: isFlipped,
             isFirstPiece: isFirstPiece,
             canvasSize: canvasSize
         )

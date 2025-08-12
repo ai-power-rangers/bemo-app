@@ -13,6 +13,7 @@ import SwiftUI
 
 struct ParentDashboardView: View {
     @State var viewModel: ParentDashboardViewModel
+    @State private var profileToEdit: UserProfile?
     
     var body: some View {
         NavigationView {
@@ -20,9 +21,18 @@ struct ParentDashboardView: View {
                 // Children profiles section
                 Section(header: Text("Children")) {
                     ForEach(viewModel.childProfiles) { child in
-                        ChildProfileRow(profile: child) {
-                            viewModel.selectChild(child)
-                        }
+                        ChildProfileRow(
+                            profile: child,
+                            onSelect: {
+                                viewModel.selectChild(child)
+                            },
+                            onEdit: {
+                                // Find the UserProfile for editing
+                                if let userProfile = viewModel.getUserProfile(for: child) {
+                                    profileToEdit = userProfile
+                                }
+                            }
+                        )
                     }
                     .onDelete { indexSet in
                         for index in indexSet {
@@ -160,6 +170,18 @@ struct ParentDashboardView: View {
                     }
                 }
             }
+            .sheet(item: $profileToEdit) { profile in
+                ChildProfileEditView(
+                    profile: profile,
+                    profileService: viewModel.getProfileService,
+                    onSave: { updatedProfile in
+                        viewModel.updateChildProfile(updatedProfile)
+                    },
+                    onDelete: {
+                        viewModel.deleteChildProfile(profile.id)
+                    }
+                )
+            }
         }
 
     }
@@ -167,33 +189,54 @@ struct ParentDashboardView: View {
 
 struct ChildProfileRow: View {
     let profile: ParentDashboardViewModel.ChildProfile
-    let action: () -> Void
+    let onSelect: () -> Void
+    let onEdit: () -> Void
     
     var body: some View {
-        Button(action: action) {
-            HStack {
-                Image(systemName: "person.circle.fill")
-                    .font(.largeTitle)
-                    .foregroundColor(.blue)
-                
-                VStack(alignment: .leading) {
-                    Text(profile.name)
-                        .font(.headline)
-                    Text("Level \(profile.level) • \(profile.totalXP) XP")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+        HStack {
+            Button(action: onSelect) {
+                HStack {
+                    // Avatar
+                    if let avatarSymbol = profile.avatarSymbol,
+                       let avatarColor = profile.avatarColor {
+                        AvatarView(
+                            symbol: avatarSymbol,
+                            colorName: avatarColor,
+                            size: 44
+                        )
+                    } else {
+                        Image(systemName: "person.circle.fill")
+                            .font(.largeTitle)
+                            .foregroundColor(.blue)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(profile.name)
+                            .font(.headline)
+                        Text("Level \(profile.level) • \(profile.totalXP) XP")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    if profile.isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                    }
                 }
-                
-                Spacer()
-                
-                if profile.isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                }
+                .padding(.vertical, 4)
             }
-            .padding(.vertical, 4)
+            .buttonStyle(PlainButtonStyle())
+            
+            // Edit button
+            Button(action: onEdit) {
+                Image(systemName: "pencil.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.blue)
+            }
+            .buttonStyle(PlainButtonStyle())
         }
-        .buttonStyle(PlainButtonStyle())
     }
 }
 
