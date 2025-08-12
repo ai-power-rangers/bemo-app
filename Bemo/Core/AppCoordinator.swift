@@ -103,11 +103,10 @@ class AppCoordinator {
         // Only handle profile changes if user is authenticated
         guard authService.isAuthenticated else { return }
         
-        // Only navigate if we're currently in profile setup/add child and profiles now exist
         if profileService.hasProfiles {
+            // When profiles become available while in setup flows, move to lobby
             switch currentState {
             case .profileSetup, .addChildProfile:
-                // Profile was just created, go to lobby
                 currentState = .lobby
                 // Auto-select the profile if it's the only one
                 if profileService.childProfiles.count == 1 && profileService.activeProfile == nil {
@@ -116,8 +115,20 @@ class AppCoordinator {
             default:
                 break
             }
+        } else {
+            // No profiles exist. Ensure we cannot remain in main app surfaces.
+            switch currentState {
+            case .onboarding, .profileSetup, .addChildProfile:
+                // Already in the correct flow
+                break
+            default:
+                if let user = authService.currentUser {
+                    currentState = .profileSetup(user)
+                } else {
+                    currentState = .onboarding
+                }
+            }
         }
-        // Don't automatically navigate to profile setup - let checkAuthenticationAndNavigate handle that
     }
     
     private func checkAuthenticationAndNavigate() {
@@ -337,7 +348,18 @@ class AppCoordinator {
                 apiService: self.dependencyContainer.apiService,
                 authenticationService: self.dependencyContainer.authenticationService,
                 onDismiss: { [weak self] in
-                    self?.currentState = .lobby
+                    guard let self else { return }
+                    let profileService = self.dependencyContainer.profileService
+                    let authService = self.dependencyContainer.authenticationService
+                    if profileService.hasProfiles {
+                        self.currentState = .lobby
+                    } else if let user = authService.currentUser {
+                        // No profiles remain: take user to initial profile setup flow
+                        self.currentState = .profileSetup(user)
+                    } else {
+                        // Not authenticated anymore
+                        self.currentState = .onboarding
+                    }
                 },
                 onAddChildRequested: { [weak self] in
                     if let currentUser = self?.dependencyContainer.authenticationService.currentUser {
