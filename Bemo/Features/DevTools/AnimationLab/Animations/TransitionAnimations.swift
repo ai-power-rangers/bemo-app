@@ -18,75 +18,60 @@ enum TransitionAnimations {
         let container = SKNode()
         container.position = position
         
-        // Create tangram square using the classic 7-piece arrangement
-        // Based on the actual square puzzle formation
-        let scale = size / 100.0  // Normalize to 100 unit square
-        
-        // All pieces for the classic tangram square
-        let pieces: [(type: TangramPieceType, vertices: [CGPoint])] = [
-            // Medium Triangle - top left 
-            (.mediumTriangle, [
-                CGPoint(x: -50, y: 50),
-                CGPoint(x: -50, y: 0),
-                CGPoint(x: 0, y: 50)
-            ]),
-            // Small Triangle 1 - top right
-            (.smallTriangle1, [
-                CGPoint(x: 50, y: 50),
-                CGPoint(x: 25, y: 25),
-                CGPoint(x: 50, y: 0)
-            ]),
-            // Square - top center (as diamond)
-            (.square, [
-                CGPoint(x: 0, y: 50),
-                CGPoint(x: 25, y: 25),
-                CGPoint(x: 0, y: 0),
-                CGPoint(x: -25, y: 25)
-            ]),
-            // Small Triangle 2 - center
-            (.smallTriangle2, [
-                CGPoint(x: 0, y: 0),
-                CGPoint(x: -25, y: -25),
-                CGPoint(x: 0, y: -50)
-            ]),
-            // Parallelogram - bottom center
-            (.parallelogram, [
-                CGPoint(x: -25, y: -25),
-                CGPoint(x: 25, y: -25),
-                CGPoint(x: 0, y: -50),
-                CGPoint(x: -50, y: -50)
-            ]),
-            // Large Triangle 1 - bottom left
-            (.largeTriangle1, [
-                CGPoint(x: -50, y: 0),
-                CGPoint(x: -50, y: -50),
-                CGPoint(x: 0, y: -50)
-            ]),
-            // Large Triangle 2 - bottom right
-            (.largeTriangle2, [
-                CGPoint(x: 50, y: 0),
-                CGPoint(x: 0, y: -50),
-                CGPoint(x: 50, y: -50)
-            ])
+        // Create target pieces exactly like the square puzzle from square.json
+        // These transforms are from the actual square puzzle data
+        let targetPieces: [GamePuzzleData.TargetPiece] = [
+            GamePuzzleData.TargetPiece(id: "1", pieceType: .mediumTriangle, 
+                       transform: CGAffineTransform(a: 1, b: 0, c: 0, d: 1, tx: 125.789, ty: 213.456)),
+            GamePuzzleData.TargetPiece(id: "2", pieceType: .smallTriangle1,
+                       transform: CGAffineTransform(a: -0.7071, b: -0.7071, c: 0.7071, d: -0.7071, tx: 231.855, ty: 248.811)),
+            GamePuzzleData.TargetPiece(id: "3", pieceType: .square,
+                       transform: CGAffineTransform(a: 0.7071, b: 0.7071, c: -0.7071, d: 0.7071, tx: 196.5, ty: 213.456)),
+            GamePuzzleData.TargetPiece(id: "4", pieceType: .smallTriangle2,
+                       transform: CGAffineTransform(a: -0.7071, b: 0.7071, c: -0.7071, d: -0.7071, tx: 196.5, ty: 284.167)),
+            GamePuzzleData.TargetPiece(id: "5", pieceType: .parallelogram,
+                       transform: CGAffineTransform(a: 0, b: -1, c: -1, d: 0, tx: 161.145, ty: 319.522)),
+            GamePuzzleData.TargetPiece(id: "6", pieceType: .largeTriangle1,
+                       transform: CGAffineTransform(a: 0.7071, b: 0.7071, c: -0.7071, d: 0.7071, tx: 196.5, ty: 284.167)),
+            GamePuzzleData.TargetPiece(id: "7", pieceType: .largeTriangle2,
+                       transform: CGAffineTransform(a: 0.7071, b: -0.7071, c: 0.7071, d: 0.7071, tx: 196.5, ty: 284.167))
         ]
         
-        // Create each piece
-        for (pieceType, vertices) in pieces {
-            let path = CGMutablePath()
-            let scaledVertices = vertices.map { CGPoint(x: $0.x * scale, y: $0.y * scale) }
+        // Build exactly like buildAssembledNode does
+        let bounds = TangramBounds.calculatePuzzleBoundsSK(targets: targetPieces)
+        let boundsCenterSK = CGPoint(x: bounds.midX, y: bounds.midY)
+        
+        // Calculate scale to fit desired size
+        let boundsSize = max(bounds.width, bounds.height)
+        let scale = size / boundsSize
+        
+        for target in targetPieces {
+            let normalizedVertices = TangramGameGeometry.normalizedVertices(for: target.pieceType)
+            let scaledVertices = TangramGameGeometry.scaleVertices(normalizedVertices, by: TangramGameConstants.visualScale)
+            let transformedVerticesRaw = TangramGameGeometry.transformVertices(scaledVertices, with: target.transform)
+            let transformedVerticesSK = transformedVerticesRaw.map { TangramPoseMapper.spriteKitPosition(fromRawPosition: $0) }
             
-            if let first = scaledVertices.first {
+            // Simplify the centering calculation
+            var centered: [CGPoint] = []
+            for vertex in transformedVerticesSK {
+                let x = (vertex.x - boundsCenterSK.x) * scale
+                let y = (vertex.y - boundsCenterSK.y) * scale
+                centered.append(CGPoint(x: x, y: y))
+            }
+            
+            let path = CGMutablePath()
+            if let first = centered.first {
                 path.move(to: first)
-                for vertex in scaledVertices.dropFirst() {
-                    path.addLine(to: vertex)
+                for v in centered.dropFirst() { 
+                    path.addLine(to: v) 
                 }
                 path.closeSubpath()
             }
             
             let shape = SKShapeNode(path: path)
-            shape.fillColor = TangramColors.Sprite.uiColor(for: pieceType)
+            shape.fillColor = TangramColors.Sprite.uiColor(for: target.pieceType)
             shape.strokeColor = shape.fillColor.darker(by: 20)
-            shape.lineWidth = 0.5
+            shape.lineWidth = 1
             container.addChild(shape)
         }
         
@@ -95,42 +80,102 @@ enum TransitionAnimations {
     
     // MARK: - Row Slide Animation
     static func squareTakeover(in scene: SKScene, layer: SKNode, duration: TimeInterval) -> SKAction {
-        // Rows of tangram squares sliding in alternating directions
-        let squareSize: CGFloat = 80
-        let spacing: CGFloat = 10
+        // Cover entire screen with tangram squares in brick pattern
+        let squareSize: CGFloat = 200  // 2x bigger
+        let spacing: CGFloat = 0  // No gaps - seamless pattern
         let totalSize = squareSize + spacing
         
-        let cols = Int(scene.size.width / totalSize) + 2
-        let rows = Int(scene.size.height / totalSize) + 1
+        // Calculate how many rows and columns we need to fill the screen
+        let cols = Int(scene.size.width / totalSize) + 3  // Extra for sliding and offset
+        let rows = Int(scene.size.height / totalSize) + 2  // Extra to cover full height
         
+        // Rotation options (0°, 90°, 180°, 270°) 
+        let rotations: [CGFloat] = [0, .pi/2, .pi, .pi * 3/2]
+        
+        // Create all rows to cover the screen
         for row in 0..<rows {
             let rowContainer = SKNode()
             layer.addChild(rowContainer)
             
+            // Brick pattern offset - every other row is offset by half a square
+            let xOffset = (row % 2 == 0) ? 0 : totalSize / 2
+            
+            // Create all squares for this row
             for col in 0..<cols {
+                // Final position for this square
+                let finalX = CGFloat(col) * totalSize + xOffset - totalSize
+                let finalY = CGFloat(row) * totalSize
+                
+                // Each square gets its own random rotation
+                let finalRotation = rotations[Int.random(in: 0..<rotations.count)]
+                
+                // Create the complete tangram square at final position
                 let tangramSquare = createCompleteTangramSquare(size: squareSize, at: CGPoint.zero)
-                let finalX = CGFloat(col) * totalSize + squareSize/2
-                let finalY = CGFloat(row) * totalSize + squareSize/2
                 tangramSquare.position = CGPoint(x: finalX, y: finalY)
+                tangramSquare.zRotation = finalRotation
                 rowContainer.addChild(tangramSquare)
+                
+                // PHASE 1: Disassemble and scatter the individual pieces
+                for (index, piece) in tangramSquare.children.enumerated() {
+                    // Store final position
+                    let finalPiecePos = piece.position
+                    let finalPieceRot = piece.zRotation
+                    
+                    // Scatter pieces randomly
+                    let scatterX = CGFloat.random(in: -scene.size.width...scene.size.width * 2)
+                    let scatterY = CGFloat.random(in: -scene.size.height...scene.size.height * 2)
+                    piece.position = CGPoint(x: scatterX, y: scatterY)
+                    piece.zRotation = CGFloat.random(in: 0...CGFloat.pi * 2)
+                    piece.alpha = 0
+                    piece.setScale(0.3)
+                    
+                    // Animate pieces coming together
+                    let pieceDelay = Double(index) * 0.05 + Double.random(in: 0...0.1)
+                    let assemble = SKAction.sequence([
+                        SKAction.wait(forDuration: pieceDelay),
+                        SKAction.group([
+                            SKAction.move(to: finalPiecePos, duration: 0.4),
+                            SKAction.rotate(toAngle: finalPieceRot, duration: 0.4),
+                            SKAction.fadeIn(withDuration: 0.3),
+                            SKAction.scale(to: 1.0, duration: 0.4)
+                        ])
+                    ])
+                    assemble.timingMode = .easeOut
+                    
+                    piece.run(assemble)
+                }
             }
             
-            // Start position based on row (alternating sides)
-            let startX = (row % 2 == 0) ? -scene.size.width : scene.size.width * 2
-            rowContainer.position = CGPoint(x: startX, y: 0)
-            rowContainer.alpha = 0
+            // PHASE 2: Sliding animation starts IMMEDIATELY
+            // Alternate rows slide in opposite directions
+            let slideDirection: CGFloat = (row % 2 == 0) ? 1 : -1
             
-            // Slide in with delay based on row
-            let slideIn = SKAction.sequence([
-                SKAction.wait(forDuration: Double(row) * 0.2),
-                SKAction.group([
-                    SKAction.moveTo(x: 0, duration: duration),
-                    SKAction.fadeIn(withDuration: duration * 0.5)
+            // Start faster and accelerate more
+            var slideDuration = 0.8  // Much faster start
+            let acceleration = 0.85  // Speed up factor
+            
+            // Create accelerating slide sequence - NO WAIT, start sliding immediately
+            var slideActions: [SKAction] = []
+            
+            for i in 0..<10 {  // 10 cycles of back and forth, getting faster
+                let slideDistance = totalSize  // Slide by 1 square width
+                slideActions.append(SKAction.moveBy(x: slideDistance * slideDirection, y: 0, duration: slideDuration))
+                slideActions.append(SKAction.moveBy(x: -slideDistance * slideDirection, y: 0, duration: slideDuration))
+                slideDuration *= acceleration  // Get faster each cycle
+            }
+            
+            // After acceleration, maintain fast speed
+            slideActions.append(SKAction.repeatForever(
+                SKAction.sequence([
+                    SKAction.moveBy(x: totalSize * 2 * slideDirection, y: 0, duration: slideDuration),
+                    SKAction.moveBy(x: -totalSize * 2 * slideDirection, y: 0, duration: slideDuration)
                 ])
-            ])
-            slideIn.timingMode = .easeOut
+            ))
             
-            rowContainer.run(slideIn)
+            let slideSequence = SKAction.sequence(slideActions)
+            slideSequence.timingMode = .easeInEaseOut
+            
+            rowContainer.run(slideSequence)
         }
         
         return SKAction.sequence([SKAction.wait(forDuration: duration + 1.0)])
@@ -139,108 +184,259 @@ enum TransitionAnimations {
     
     // MARK: - Column Slide Animation
     static func squareWavePattern(in scene: SKScene, layer: SKNode, duration: TimeInterval) {
-        // Columns of tangram squares sliding in alternating directions
-        let squareSize: CGFloat = 80
-        let spacing: CGFloat = 10
+        // Cover entire screen with tangram squares in vertical brick pattern
+        let squareSize: CGFloat = 200  // Same size as row animation
+        let spacing: CGFloat = 0  // No gaps - seamless pattern
         let totalSize = squareSize + spacing
-        let cols = Int(scene.size.width / totalSize) + 1
-        let rows = Int(scene.size.height / totalSize) + 2
         
+        // Calculate how many columns and rows we need to fill the screen
+        let cols = Int(scene.size.width / totalSize) + 2  // Extra to cover full width
+        let rows = Int(scene.size.height / totalSize) + 3  // Extra for sliding and offset
+        
+        // Rotation options (0°, 90°, 180°, 270°)
+        let rotations: [CGFloat] = [0, .pi/2, .pi, .pi * 3/2]
+        
+        // Create all columns to cover the screen
         for col in 0..<cols {
             let colContainer = SKNode()
             layer.addChild(colContainer)
             
+            // Vertical brick pattern offset - every other column is offset by half a square
+            let yOffset = (col % 2 == 0) ? 0 : totalSize / 2
+            
+            // Create all squares for this column
             for row in 0..<rows {
+                // Final position for this square
+                let finalX = CGFloat(col) * totalSize
+                let finalY = CGFloat(row) * totalSize + yOffset - totalSize
+                
+                // Each square gets its own random rotation
+                let finalRotation = rotations[Int.random(in: 0..<rotations.count)]
+                
+                // Create the complete tangram square at final position
                 let tangramSquare = createCompleteTangramSquare(size: squareSize, at: CGPoint.zero)
-                let finalX = CGFloat(col) * totalSize + squareSize/2
-                let finalY = CGFloat(row) * totalSize + squareSize/2
                 tangramSquare.position = CGPoint(x: finalX, y: finalY)
+                tangramSquare.zRotation = finalRotation
                 colContainer.addChild(tangramSquare)
+                
+                // PHASE 1: Disassemble and scatter the individual pieces
+                for (index, piece) in tangramSquare.children.enumerated() {
+                    // Store final position
+                    let finalPiecePos = piece.position
+                    let finalPieceRot = piece.zRotation
+                    
+                    // Scatter pieces randomly
+                    let scatterX = CGFloat.random(in: -scene.size.width...scene.size.width * 2)
+                    let scatterY = CGFloat.random(in: -scene.size.height...scene.size.height * 2)
+                    piece.position = CGPoint(x: scatterX, y: scatterY)
+                    piece.zRotation = CGFloat.random(in: 0...CGFloat.pi * 2)
+                    piece.alpha = 0
+                    piece.setScale(0.3)
+                    
+                    // Animate pieces coming together
+                    let pieceDelay = Double(index) * 0.05 + Double.random(in: 0...0.1)
+                    let assemble = SKAction.sequence([
+                        SKAction.wait(forDuration: pieceDelay),
+                        SKAction.group([
+                            SKAction.move(to: finalPiecePos, duration: 0.4),
+                            SKAction.rotate(toAngle: finalPieceRot, duration: 0.4),
+                            SKAction.fadeIn(withDuration: 0.3),
+                            SKAction.scale(to: 1.0, duration: 0.4)
+                        ])
+                    ])
+                    assemble.timingMode = .easeOut
+                    
+                    piece.run(assemble)
+                }
             }
             
-            // Start position based on column (alternating top/bottom)
-            let startY = (col % 2 == 0) ? -scene.size.height : scene.size.height * 2
-            colContainer.position = CGPoint(x: 0, y: startY)
-            colContainer.alpha = 0
+            // PHASE 2: Sliding animation starts IMMEDIATELY
+            // Alternate columns slide in opposite directions (up/down)
+            let slideDirection: CGFloat = (col % 2 == 0) ? 1 : -1
             
-            // Slide in with delay based on column
-            let slideIn = SKAction.sequence([
-                SKAction.wait(forDuration: Double(col) * 0.2),
-                SKAction.group([
-                    SKAction.moveTo(y: 0, duration: duration),
-                    SKAction.fadeIn(withDuration: duration * 0.5)
+            // Start faster and accelerate more (same as row animation)
+            var slideDuration = 0.8  // Much faster start - matches row animation
+            let acceleration = 0.85  // Same acceleration as rows
+            
+            // Create accelerating slide sequence - NO WAIT
+            var slideActions: [SKAction] = []
+            
+            for i in 0..<10 {  // 10 cycles of up and down, getting faster
+                let slideDistance = totalSize  // Slide by 1 square height
+                slideActions.append(SKAction.moveBy(x: 0, y: slideDistance * slideDirection, duration: slideDuration))
+                slideActions.append(SKAction.moveBy(x: 0, y: -slideDistance * slideDirection, duration: slideDuration))
+                slideDuration *= acceleration  // Get faster each cycle
+            }
+            
+            // After acceleration, maintain fast speed
+            slideActions.append(SKAction.repeatForever(
+                SKAction.sequence([
+                    SKAction.moveBy(x: 0, y: totalSize * slideDirection, duration: slideDuration),
+                    SKAction.moveBy(x: 0, y: -totalSize * slideDirection, duration: slideDuration)
                 ])
-            ])
-            slideIn.timingMode = .easeOut
+            ))
             
-            colContainer.run(slideIn)
+            let slideSequence = SKAction.sequence(slideActions)
+            slideSequence.timingMode = .easeInEaseOut
+            
+            colContainer.run(slideSequence)
         }
     }
     
     // MARK: - Shatter Animation
     static func squareSpiralPattern(in scene: SKScene, layer: SKNode, duration: TimeInterval) {
-        // Full grid that shatters piece by piece
-        let squareSize: CGFloat = 80
-        let spacing: CGFloat = 10
+        // Create brick pattern like row animation, then shatter like glass
+        let squareSize: CGFloat = 200
+        let spacing: CGFloat = 0
         let totalSize = squareSize + spacing
-        let sceneWidth = scene.size.width
-        let sceneHeight = scene.size.height
-        let cols = Int(sceneWidth / totalSize) + 1
-        let rows = Int(sceneHeight / totalSize) + 1
         
-        var allSquares: [SKNode] = []
+        // Calculate grid dimensions
+        let cols = Int(scene.size.width / totalSize) + 2
+        let rows = Int(scene.size.height / totalSize) + 2
         
-        // Create full grid first
+        // Rotation options
+        let rotations: [CGFloat] = [0, .pi/2, .pi, .pi * 3/2]
+        
+        // Store all pieces for shatter effect
+        var allPieces: [(piece: SKNode, position: CGPoint, square: SKNode)] = []
+        
+        // Create full grid with brick pattern
         for row in 0..<rows {
+            // Brick pattern offset
+            let xOffset = (row % 2 == 0) ? 0 : totalSize / 2
+            
             for col in 0..<cols {
+                let x = CGFloat(col) * totalSize + xOffset
+                let y = CGFloat(row) * totalSize
+                let rotation = rotations[Int.random(in: 0..<rotations.count)]
+                
                 let tangramSquare = createCompleteTangramSquare(size: squareSize, at: CGPoint.zero)
-                let x = CGFloat(col) * totalSize + squareSize/2
-                let y = CGFloat(row) * totalSize + squareSize/2
                 tangramSquare.position = CGPoint(x: x, y: y)
+                tangramSquare.zRotation = rotation
                 layer.addChild(tangramSquare)
-                allSquares.append(tangramSquare)
+                
+                // Store each piece with its world position and parent square
+                for piece in tangramSquare.children {
+                    let worldPos = tangramSquare.convert(piece.position, to: layer)
+                    allPieces.append((piece: piece, position: worldPos, square: tangramSquare))
+                }
             }
         }
         
-        // Capture scene height for use in closure
-        let fallHeight = sceneHeight + 200
+        // Random impact point in upper portion of screen (like something was thrown)
+        let impactPoint = CGPoint(
+            x: scene.size.width * CGFloat.random(in: 0.3...0.7),
+            y: scene.size.height * CGFloat.random(in: 0.6...0.8)
+        )
         
-        // Wait a moment then shatter
+        // Create impact visual (optional - a small flash or crack effect)
+        let impactNode = SKShapeNode(circleOfRadius: 10)
+        impactNode.position = impactPoint
+        impactNode.fillColor = .white
+        impactNode.alpha = 0
+        impactNode.zPosition = 1000
+        layer.addChild(impactNode)
+        
+        // Show impact
+        impactNode.run(SKAction.sequence([
+            SKAction.fadeIn(withDuration: 0.1),
+            SKAction.scale(to: 3, duration: 0.2),
+            SKAction.fadeOut(withDuration: 0.2),
+            SKAction.removeFromParent()
+        ]))
+        
+        // PHASE 1: Impact and initial cracks (a few pieces fall immediately)
         layer.run(SKAction.sequence([
-            SKAction.wait(forDuration: 1.0),
-            SKAction.run { [weak layer] in
-                guard layer != nil else { return }
+            SKAction.wait(forDuration: 0.3),  // Impact happens
+            SKAction.run {
+                // Sort pieces by distance from impact
+                let sortedPieces = allPieces.sorted { piece1, piece2 in
+                    let dist1 = hypot(piece1.position.x - impactPoint.x, piece1.position.y - impactPoint.y)
+                    let dist2 = hypot(piece2.position.x - impactPoint.x, piece2.position.y - impactPoint.y)
+                    return dist1 < dist2
+                }
                 
-                // Shatter each square's pieces individually
-                var pieceDelay: TimeInterval = 0
-                let acceleration: TimeInterval = 0.95  // Speed up factor
+                // PHASE 1: First few pieces at impact point fall immediately
+                let impactRadius: CGFloat = 150
+                var crackedPieces = 0
                 
-                for square in allSquares.shuffled() {
-                    // Make each piece in the square fall
-                    for (index, piece) in square.children.enumerated() {
-                        let fallDelay = pieceDelay + Double(index) * 0.02
+                for (piece, worldPos, square) in sortedPieces {
+                    let distance = hypot(worldPos.x - impactPoint.x, worldPos.y - impactPoint.y)
+                    
+                    if distance < impactRadius && crackedPieces < 10 {
+                        // These pieces fall immediately from impact
+                        crackedPieces += 1
                         
-                        // Random fall direction and rotation
-                        let fallX = CGFloat.random(in: -100...100)
-                        let fallY = CGFloat.random(in: -fallHeight...(-fallHeight - 200))
-                        let rotation = CGFloat.random(in: -CGFloat.pi * 4...CGFloat.pi * 4)
+                        // Small jiggle first (crack forming)
+                        let jiggle = SKAction.sequence([
+                            SKAction.moveBy(x: CGFloat.random(in: -2...2), y: CGFloat.random(in: -2...2), duration: 0.05),
+                            SKAction.moveBy(x: CGFloat.random(in: -2...2), y: CGFloat.random(in: -2...2), duration: 0.05)
+                        ])
+                        
+                        // Then fall STRAIGHT DOWN with gravity
+                        let fallX = CGFloat.random(in: -10...10)  // Very minimal sideways drift
+                        let fallY = -scene.size.height - 500  // Fall all the way down
+                        let rotation = CGFloat.random(in: -CGFloat.pi/4...CGFloat.pi/4)  // Slight rotation
+                        
+                        let fall = SKAction.sequence([
+                            jiggle,
+                            SKAction.wait(forDuration: Double.random(in: 0...0.1)),  // Tiny variance
+                            SKAction.group([
+                                SKAction.moveBy(x: fallX, y: fallY, duration: 1.2),
+                                SKAction.rotate(byAngle: rotation, duration: 1.2),
+                                SKAction.fadeOut(withDuration: 1.2)
+                            ])
+                        ])
+                        fall.timingMode = .easeIn  // Accelerate as it falls
+                        
+                        piece.run(fall)
+                    }
+                }
+                
+                // PHASE 2: Crack spreads and rest of glass falls
+                var delay: TimeInterval = 0.8  // Wait for initial pieces to fall
+                let crackSpeed: TimeInterval = 0.003  // How fast crack spreads
+                
+                // Remaining pieces fall in waves based on distance
+                for (piece, worldPos, square) in sortedPieces {
+                    let distance = hypot(worldPos.x - impactPoint.x, worldPos.y - impactPoint.y)
+                    
+                    if distance >= impactRadius {  // Skip already fallen pieces
+                        // Calculate delay based on distance (crack spreading)
+                        let waveDelay = delay + (distance / scene.size.width) * 0.5
+                        
+                        // Pieces fall mostly straight down with slight variation
+                        let fallX = CGFloat.random(in: -50...50)
+                        let fallY = -scene.size.height - 300
+                        let rotation = CGFloat.random(in: -CGFloat.pi * 2...CGFloat.pi * 2)
                         
                         let shatter = SKAction.sequence([
-                            SKAction.wait(forDuration: fallDelay),
+                            SKAction.wait(forDuration: waveDelay),
+                            // Small shake as crack reaches this piece
+                            SKAction.repeat(
+                                SKAction.sequence([
+                                    SKAction.moveBy(x: CGFloat.random(in: -1...1), y: CGFloat.random(in: -1...1), duration: 0.02),
+                                    SKAction.moveBy(x: CGFloat.random(in: -1...1), y: CGFloat.random(in: -1...1), duration: 0.02)
+                                ]), count: 2
+                            ),
+                            // Then fall
                             SKAction.group([
-                                SKAction.moveBy(x: fallX, y: fallY, duration: 1.5),
-                                SKAction.rotate(byAngle: rotation, duration: 1.5),
-                                SKAction.fadeOut(withDuration: 1.5)
+                                SKAction.moveBy(x: fallX, y: fallY, duration: 1.8),
+                                SKAction.rotate(byAngle: rotation, duration: 1.8),
+                                SKAction.sequence([
+                                    SKAction.wait(forDuration: 0.3),
+                                    SKAction.fadeOut(withDuration: 1.5)
+                                ])
                             ])
                         ])
                         shatter.timingMode = .easeIn
                         
                         piece.run(shatter)
+                        
+                        // Accelerate the cascade effect
+                        delay += crackSpeed
+                        if delay > 2.0 { delay = 2.0 }  // Cap maximum delay
                     }
-                    
-                    // Accelerate the delay (pieces fall faster and faster)
-                    pieceDelay *= acceleration
-                    if pieceDelay < 0.001 { pieceDelay = 0.001 }  // Minimum delay
                 }
             }
         ]))

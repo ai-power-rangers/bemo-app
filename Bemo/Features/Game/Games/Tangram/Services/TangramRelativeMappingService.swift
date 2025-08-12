@@ -55,7 +55,12 @@ final class TangramRelativeMappingService {
 
         guard let bestMatch = best else { return nil }
 
-        let rotationDelta = bestMatch.expectedZ - anchor.anchorRotation
+        // Compute rotation delta in FEATURE-ANGLE space so triangles align correctly (45° target vs 135° piece)
+        let canonicalTarget: CGFloat = anchor.anchorPieceType.isTriangle ? (.pi/4) : 0
+        let canonicalPiece: CGFloat  = anchor.anchorPieceType.isTriangle ? (3 * .pi/4) : 0
+        let anchorFeature = TangramRotationValidator.normalizeAngle(anchor.anchorRotation + (anchor.anchorIsFlipped ? -canonicalPiece : canonicalPiece))
+        let targetFeature = TangramRotationValidator.normalizeAngle(bestMatch.expectedZ + canonicalTarget)
+        let rotationDelta = TangramRotationValidator.normalizeAngle(targetFeature - anchorFeature)
         let parity = bestMatch.isFlipped != anchor.anchorIsFlipped
         let mapping = AnchorMapping(
             translationOffset: CGPoint(x: bestMatch.centroid.x - anchor.anchorPositionScene.x,
@@ -68,7 +73,9 @@ final class TangramRelativeMappingService {
             pairCount: 1
         )
         groupAnchorMappings[groupId] = mapping
-        groupValidatedTargets[groupId, default: []].insert(bestMatch.target.id)
+        // Do NOT consume/validate anchor target here. Only consume when a piece actually validates.
+        let deg = rotationDelta * 180 / .pi
+        print("[MAPPING] Established group=\(groupId) anchorPiece=\(anchor.anchorPieceId) → anchorTarget=\(bestMatch.target.id) rotDelta=\(String(format: "%.1f", deg))° (feature) trans=(\(Int(mapping.translationOffset.x)),\(Int(mapping.translationOffset.y))) flipParity=\(parity)")
         return mapping
     }
 

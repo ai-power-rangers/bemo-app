@@ -79,7 +79,6 @@ class AnimationLabViewModel {
         // Exit animations - for puzzle transitions
         let exitAnims = [
             AnimationItem(name: "Explosion", group: .transitional, category: .exit, type: .explosion, requiresPuzzle: true),
-            AnimationItem(name: "Wobble Away", group: .character, category: .exit, type: .wobble, requiresPuzzle: true),
             AnimationItem(name: "Disassemble", group: .transitional, category: .exit, type: .disassemble, requiresPuzzle: true)
         ]
         

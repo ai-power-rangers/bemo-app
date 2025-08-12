@@ -566,9 +566,8 @@ class TangramPuzzleScene: SKScene {
             let piece = PuzzlePieceNode(pieceType: target.pieceType)
             piece.name = "piece_\(target.pieceType)"
             
-            // CRITICAL: Bind this piece to its specific target ID
+            // Initialize piece metadata (do NOT pre-bind to a specific target; bind on first valid match)
             piece.userData = piece.userData ?? [:]
-            piece.userData!["assignedTargetId"] = target.id
             piece.userData!["pieceType"] = target.pieceType.rawValue
             
             // Scale piece to match display requirements
@@ -919,6 +918,8 @@ class TangramPuzzleScene: SKScene {
         
         // Get piece's current position in scene coordinates
         let pieceScenePos = physicalWorldSection.convert(piece.position, to: self)
+        let degZ = piece.zRotation * 180 / .pi
+        print("[PIECE] Validate request id=\(pieceId) type=\(pieceType.rawValue) pos=(\(Int(pieceScenePos.x)),\(Int(pieceScenePos.y))) rot=\(Int(degZ))° flipped=\(piece.isFlipped) assigned=\(piece.userData?["assignedTargetId"] as? String ?? "nil")")
         
         // Calculate feature angles for validation
         let localFeatureAngle = piece.userData?["localFeatureAngleSK"] as? CGFloat ?? 0
@@ -927,6 +928,8 @@ class TangramPuzzleScene: SKScene {
         // ANCHOR-BASED VALIDATION
         // Establish or refresh per-group anchor mapping
         if let group = pieceGroup {
+            // Anchor lock: if we already have a mapping for this group, do not re-establish with a new anchor
+            if mappingService.mapping(for: group.id) == nil {
             // Select anchor (prefer validated > largest stable > most central)
             // Use all pieces in the group (no spatial zone filtering)
             let groupNodes = availablePieces.filter { node in
@@ -957,7 +960,7 @@ class TangramPuzzleScene: SKScene {
             // If no mapping exists or anchor changed, create mapping
             if mappingService.mapping(for: group.id)?.anchorPieceId != rankedAnchor.name {
                 let anchorType = rankedAnchor.pieceType ?? pieceType
-                let anchorScenePos = physicalWorldSection.convert(rankedAnchor.position, to: self)
+            let anchorScenePos = physicalWorldSection.convert(rankedAnchor.position, to: self)
                 let mapping = mappingService.establishOrUpdateMapping(
                     groupId: group.id,
                     groupPieceIds: group.pieces,
@@ -976,21 +979,25 @@ class TangramPuzzleScene: SKScene {
                                 let flipped = (tNode.userData?["isFlipped"] as? Bool) ?? false
                                 return (t, tScene, z, flipped)
                             }
-                    }
+                }
                 )
-                if let m = mapping {
-                    // Update anchor assignment and visuals
+            if let m = mapping {
+                    // Update anchor assignment only; do NOT visually validate anchor yet
                     rankedAnchor.userData?["assignedTargetId"] = m.anchorTargetId
-                    if let tN = targetSilhouettes[m.anchorTargetId] { applyValidatedFill(to: tN, for: anchorType) }
-                    eventBus.emit(.validationChanged(pieceId: m.anchorTargetId, isValid: true))
                     // Store the anchor pair so refinement can occur when the next piece validates
                     mappingService.appendPair(groupId: group.id, pieceId: rankedAnchor.name ?? "", targetId: m.anchorTargetId)
                 }
+            }
             }
         }
         
         // For non-anchor pieces, use per-group mapping if available
         if let group = pieceGroup, let mapping = mappingService.mapping(for: group.id) {
+            // Do not validate the anchor itself via mapped path
+            if piece.name == mapping.anchorPieceId {
+                print("[MAP] Skipping anchor piece mapped-validation id=\(pieceId)")
+                // Anchor validation occurs when a second piece validates in relation to it
+            } else {
             // Apply anchor transformation to get expected target position
             // mappedPosition = anchorTarget + R(delta) * (piece - anchorPiece)
             guard let anchorNode = availablePieces.first(where: { $0.name == mapping.anchorPieceId }) else { return }
@@ -1004,14 +1011,18 @@ class TangramPuzzleScene: SKScene {
             let mappedRotation = piece.zRotation + mapping.rotationDelta
             let mappedFlipped = mapping.flipParity ? !piece.isFlipped : piece.isFlipped
             
-                // Enforce instance-based binding: use assignedTargetId only
-                let assignedId = piece.userData?["assignedTargetId"] as? String
-                let availableTargets = puzzle.targetPieces.filter { target in
-                    target.id == assignedId && !mappingService.consumedTargets(groupId: group.id).contains(target.id)
-                }
+            // Instance binding: if assignedTargetId exists, restrict to it; otherwise consider all unconsumed targets of same type
+            let assignedId = piece.userData?["assignedTargetId"] as? String
+            let availableTargets: [GamePuzzleData.TargetPiece]
+            if let assignedId = assignedId {
+                availableTargets = puzzle.targetPieces.filter { $0.id == assignedId && !mappingService.consumedTargets(groupId: group.id).contains($0.id) }
+            } else {
+                availableTargets = puzzle.targetPieces.filter { $0.pieceType == pieceType && !mappingService.consumedTargets(groupId: group.id).contains($0.id) }
+            }
             
             var bestMatch: (target: GamePuzzleData.TargetPiece, distance: CGFloat)?
             
+            print("[MAP] Candidates for piece id=\(pieceId): \(availableTargets.map{ $0.id }.joined(separator: ","))")
             for target in availableTargets {
                 guard targetSilhouettes[target.id] != nil else { continue }
                 
@@ -1025,6 +1036,7 @@ class TangramPuzzleScene: SKScene {
                     targetCentroidScene: targetScenePos,
                     validator: validator
                 )
+                print("[MAP] Check target=\(target.id) dist=\(Int(distance)) valid=\(isValid)")
                 if isValid {
                     if bestMatch == nil || distance < bestMatch!.distance {
                         bestMatch = (target, distance)
@@ -1043,7 +1055,18 @@ class TangramPuzzleScene: SKScene {
                     // keep validating state; do not mark valid
                     // fall through to failure handling
                 } else {
+                    // If not yet bound, bind now to the matched target id (first binding)
+                    if piece.userData?["assignedTargetId"] as? String == nil {
+                        piece.userData?["assignedTargetId"] = match.target.id
+                        print("[BIND] Assigned piece id=\(pieceId) → target=\(match.target.id)")
+                    }
+                    // Enforce instance-binding: piece must be bound to this match target id after potential first bind
+                    if piece.userData?["assignedTargetId"] as? String != match.target.id {
+                        print("[VALIDATION] ❌ assignedTargetId mismatch for \(pieceId). expected=\(String(describing: piece.userData?["assignedTargetId"])) got=\(match.target.id)")
+                        // prevent accidental cross-validation
+                    } else {
                 // Validation successful with anchor-based mapping!
+                print("[VALIDATION] ✅ MAPPED piece=\(pieceId) type=\(pieceType.rawValue) → target=\(match.target.id)")
                 mappingService.markTargetConsumed(groupId: group.id, targetId: match.target.id)
                 validatedTargets.insert(match.target.id)
                 onValidatedTargetsChanged?(validatedTargets)
@@ -1100,6 +1123,7 @@ class TangramPuzzleScene: SKScene {
                     if case .validated = aState.state {
                         // already validated, no-op
                     } else {
+                        print("[VALIDATION] ✅ ANCHOR piece=\(anchorId) type=\(anchorType.rawValue) → target=\(mapping.anchorTargetId)")
                         aState.markAsValidated(connections: [])
                         pieceStates[anchorId] = aState
                         anchorNode.pieceState = aState
@@ -1135,7 +1159,9 @@ class TangramPuzzleScene: SKScene {
                 
                 print("[VALIDATION] ✅ Validated: \(pieceType.rawValue) → target \(match.target.id)")
                 return
+                    }
                 }
+            }
             }
         }
         
@@ -1153,6 +1179,7 @@ class TangramPuzzleScene: SKScene {
             target.id == assignedId && !groupTargetsConsumed.contains(target.id)
         }
         
+        print("[DIRECT] Candidates for piece id=\(pieceId): \(availableTargets.map{ $0.id }.joined(separator: ","))")
         for target in availableTargets {
             guard let targetNode = targetSilhouettes[target.id] else { continue }
             
@@ -1176,8 +1203,15 @@ class TangramPuzzleScene: SKScene {
             
             // Additional gating: must be within connection distance
             let centerDistance = hypot(pieceScenePos.x - targetScenePos.x, pieceScenePos.y - targetScenePos.y)
+            print("[DIRECT] Check target=\(target.id) dist=\(Int(centerDistance)) valid=\(isValid)")
             if isValid && centerDistance <= TangramGameConstants.Validation.connectionDistance {
+                // Enforce instance binding even for direct validation
+                if piece.userData?["assignedTargetId"] as? String != target.id {
+                    print("[DIRECT] ❌ assignedTargetId mismatch id=\(pieceId) expected=\(String(describing: piece.userData?["assignedTargetId"])) got=\(target.id)")
+                    continue
+                }
                 // Direct validation successful (piece placed directly on silhouette)
+                print("[VALIDATION] ✅ DIRECT piece=\(pieceId) type=\(pieceType.rawValue) → target=\(target.id)")
                 validatedTargets.insert(target.id)
                 completedPieces.insert(target.id)
                 eventBus.emit(.validationChanged(pieceId: target.id, isValid: true))
@@ -1429,109 +1463,15 @@ class TangramPuzzleScene: SKScene {
     }
     
     private func updateCVPieceVisualState(_ cvPiece: PuzzlePieceNode, state: PieceState) {
-        // Update CV piece appearance based on validation state
-        switch state.state {
-        case .validated:
-            // Use piece-type color for validated
-            if let pt = cvPiece.pieceType {
-                let ui = TangramColors.Sprite.uiColor(for: pt)
-                cvPiece.shapeNode?.strokeColor = ui
-            } else {
-                cvPiece.shapeNode?.strokeColor = .white
-            }
-            cvPiece.shapeNode?.lineWidth = 2
-            cvPiece.alpha = 1.0
-        case .invalid:
-            // Red highlight for invalid pieces
-            cvPiece.shapeNode?.strokeColor = .systemRed
-            cvPiece.shapeNode?.lineWidth = 2
-            cvPiece.alpha = 0.8
-        case .validating:
-            // Yellow for validating
-            cvPiece.shapeNode?.strokeColor = .systemYellow
-            cvPiece.shapeNode?.lineWidth = 1
-            cvPiece.alpha = 0.9
-        case .placed:
-            // Blue for placed pieces
-            cvPiece.shapeNode?.strokeColor = .systemBlue
-            cvPiece.shapeNode?.lineWidth = 1
-            cvPiece.alpha = 0.9
-        default:
-            // Default appearance
-            cvPiece.shapeNode?.strokeColor = .white
-            cvPiece.shapeNode?.lineWidth = 1
-            cvPiece.alpha = 0.7
-        }
+        // CV mini viewer: neutral appearance only
+        cvPiece.shapeNode?.strokeColor = .white
+        cvPiece.shapeNode?.lineWidth = 1
+        cvPiece.alpha = 0.8
     }
     
     private func showCVValidationFeedback(pieceId: String, isValid: Bool) {
-        guard let cvPiece = cvPieces[pieceId] else { return }
-        
-        if isValid {
-            // Success animation - pulse and sparkle
-            let pulse = SKAction.sequence([
-                SKAction.scale(to: 1.3, duration: 0.15),
-                SKAction.scale(to: 1.0, duration: 0.15)
-            ])
-            
-            // Create sparkle effect
-            let sparkle = SKEmitterNode()
-            sparkle.particleTexture = SKTexture(imageNamed: "spark")
-            sparkle.particleBirthRate = 100
-            sparkle.numParticlesToEmit = 20
-            sparkle.particleLifetime = 0.5
-            sparkle.particleScale = 0.1
-            sparkle.particleScaleSpeed = -0.2
-            // Use piece color for sparkles if available
-            if let pieceNode = cvPiece as? PuzzlePieceNode, let pt = pieceNode.pieceType {
-                sparkle.particleColor = TangramColors.Sprite.uiColor(for: pt)
-            } else {
-                sparkle.particleColor = .systemGreen
-            }
-            sparkle.particleColorBlendFactor = 1.0
-            sparkle.particleAlpha = 0.8
-            sparkle.particleAlphaSpeed = -1.6
-            sparkle.position = .zero
-            sparkle.zPosition = 100
-            
-            cvPiece.addChild(sparkle)
-            cvPiece.run(pulse)
-            
-            // Remove sparkle after animation
-            sparkle.run(SKAction.sequence([
-                SKAction.wait(forDuration: 1.0),
-                SKAction.removeFromParent()
-            ]))
-            
-            // Add checkmark
-            let checkmark = SKLabelNode(text: "✓")
-            checkmark.fontSize = 12
-            if let pieceNode = cvPiece as? PuzzlePieceNode, let pt = pieceNode.pieceType {
-                checkmark.fontColor = TangramColors.Sprite.uiColor(for: pt)
-            } else {
-                checkmark.fontColor = .systemGreen
-            }
-            checkmark.position = CGPoint(x: 0, y: -20)
-            checkmark.zPosition = 101
-            cvPiece.addChild(checkmark)
-            
-            checkmark.setScale(0)
-            checkmark.run(SKAction.sequence([
-                SKAction.scale(to: 1.0, duration: 0.2),
-                SKAction.wait(forDuration: 1.5),
-                SKAction.fadeOut(withDuration: 0.3),
-                SKAction.removeFromParent()
-            ]))
-        } else {
-            // Failure feedback - shake
-            let shake = SKAction.sequence([
-                SKAction.moveBy(x: -3, y: 0, duration: 0.05),
-                SKAction.moveBy(x: 6, y: 0, duration: 0.1),
-                SKAction.moveBy(x: -6, y: 0, duration: 0.1),
-                SKAction.moveBy(x: 3, y: 0, duration: 0.05)
-            ])
-            cvPiece.run(shake)
-        }
+        // CV mini viewer should not show validation-specific effects
+        return
     }
     
     private func showPieceCelebration(_ piece: PuzzlePieceNode) {
