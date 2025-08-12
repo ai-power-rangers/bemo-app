@@ -87,8 +87,8 @@ class TangramHintEngine {
     // MARK: - Constants
     
     private let stuckThreshold: TimeInterval = 30.0  // 30 seconds without progress
-    private let rotationTolerance: Double = 15.0      // Degrees
-    private let positionTolerance: CGFloat = 50.0     // Points
+    private let rotationTolerance: Double = 15.0      // Degrees (will be superseded by difficulty when available)
+    private let positionTolerance: CGFloat = 50.0     // Points (will be superseded by difficulty when available)
     
     // MARK: - Public Interface
     
@@ -99,7 +99,8 @@ class TangramHintEngine {
         lastMovedPiece: TangramPieceType?,
         timeSinceLastProgress: TimeInterval,
         previousHints: [HintData] = [],
-        validatedTargetIds: Set<String> = []
+        validatedTargetIds: Set<String> = [],
+        difficultySetting: UserPreferences.DifficultySetting? = nil
     ) -> HintData? {
         
         // Priority 1: Last moved piece was incorrect
@@ -161,7 +162,10 @@ class TangramHintEngine {
         }
         
         // Adjacent if min edge distance < tolerance and edges roughly parallel
-        let edgeTolerance: CGFloat = 14  // Slightly more generous to ensure adjacency is detected
+        let edgeTolerance: CGFloat = {
+            if let d = difficultySetting { return TangramGameConstants.Validation.tolerances(for: d).edgeContact }
+            return 14
+        }()  // Slightly more generous to ensure adjacency is detected
         var adj: [String: Set<String>] = [:]
         let ids = puzzle.targetPieces.map { $0.id }
         for i in 0..<ids.count {

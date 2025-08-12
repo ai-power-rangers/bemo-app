@@ -47,6 +47,8 @@ class TangramPuzzleScene: SKScene {
     private var completedPieces: Set<String> = []
     // Notify VM when validated set changes (to drive connection-aware hints)
     var onValidatedTargetsChanged: ((Set<String>) -> Void)?
+    // Difficulty setting from host for consistent tolerances/visuals
+    var difficultySetting: UserPreferences.DifficultySetting = .normal
     
     // MARK: - Services
     
@@ -77,6 +79,8 @@ class TangramPuzzleScene: SKScene {
     // Legacy single mapping fields (kept for backward compatibility but unused in new per-group flow)
     private var anchorPieceId: String?
     private var validatedTargets: Set<String> = []
+    // Hysteresis support: remember last valid pose per piece
+    private var lastValidPose: [String: (position: CGPoint, rotation: CGFloat, targetId: String)] = [:]
     
     // MARK: - State Tracking
     
@@ -552,6 +556,12 @@ class TangramPuzzleScene: SKScene {
         silhouette.userData!["isFlipped"] = target.transform.a * target.transform.d - target.transform.b * target.transform.c < 0
         
         return silhouette
+    }
+
+    // Current validation tolerances from difficulty setting
+    private func currentValidationTolerances() -> (pos: CGFloat, rotDeg: CGFloat, edge: CGFloat) {
+        let t = TangramGameConstants.Validation.tolerances(for: difficultySetting)
+        return (pos: t.position, rotDeg: t.rotationDeg, edge: t.edgeContact)
     }
     
     private func createPhysicalPieces(_ puzzle: GamePuzzleData) {
@@ -1076,7 +1086,13 @@ class TangramPuzzleScene: SKScene {
                 let canonicalPiece: CGFloat = pieceType.isTriangle ? (3 * .pi/4) : 0
                 let targetFeatureAngle = TangramRotationValidator.normalizeAngle(targetPose.zRotationSK + canonicalTarget)
                 let pieceFeatureAngle = TangramRotationValidator.normalizeAngle(mappedRotation + (mappedFlipped ? -canonicalPiece : canonicalPiece))
-                let res = validator.validateForSpriteKitWithFeatures(
+                let tolVals = currentValidationTolerances()
+                let difficultyValidator = TangramPieceValidator(
+                    positionTolerance: tolVals.pos,
+                    rotationTolerance: tolVals.rotDeg,
+                    edgeContactTolerance: tolVals.edge
+                )
+                let res = difficultyValidator.validateForSpriteKitWithFeatures(
                     piecePosition: mappedPosition,
                     pieceFeatureAngle: pieceFeatureAngle,
                     targetFeatureAngle: targetFeatureAngle,
@@ -1087,7 +1103,7 @@ class TangramPuzzleScene: SKScene {
                 )
                 // Polygon contact override for position
                 var effectiveDistance = distance
-                if effectiveDistance > TangramGameConstants.Validation.positionTolerance {
+                if effectiveDistance > tolVals.pos {
                     let piecePoly = TangramGeometryUtilities.transformedVertices(
                         for: pieceType,
                         isFlipped: mappedFlipped,
@@ -1096,10 +1112,10 @@ class TangramPuzzleScene: SKScene {
                     )
                     let targetPoly = TangramBounds.computeSKTransformedVertices(for: target)
                     let polyDist = TangramGeometryUtilities.minimumDistanceBetweenPolygons(piecePoly, targetPoly)
-                    if polyDist <= 12 { effectiveDistance = TangramGameConstants.Validation.positionTolerance - 1 }
+                    if polyDist <= tolVals.edge { effectiveDistance = tolVals.pos - 1 }
                     print("[MAP] polyDist=\(Int(polyDist)) effDist=\(Int(effectiveDistance)) rot=\(res.rotationValid) flip=\(res.flipValid)")
                 }
-                let isValid = res.rotationValid && res.flipValid && (effectiveDistance <= TangramGameConstants.Validation.positionTolerance)
+                let isValid = res.rotationValid && res.flipValid && (effectiveDistance <= tolVals.pos)
                 print("[MAP] Check target=\(target.id) dist=\(Int(distance)) valid=\(isValid)")
                 if isValid {
                     if bestMatch == nil || distance < bestMatch!.distance {
@@ -1159,6 +1175,8 @@ class TangramPuzzleScene: SKScene {
                 
                 // Store which target this piece validated against
                 piece.userData!["validatedTargetId"] = match.target.id
+                // Remember last valid pose for hysteresis (store feature-angle rotation consistently)
+                lastValidPose[pieceId] = (position: mappedPosition, rotation: pieceFeatureAngle, targetId: match.target.id)
                 mappingService.appendPair(groupId: group.id, pieceId: pieceId, targetId: match.target.id)
                 if mappingService.pairs(groupId: group.id).count >= 2,
                    let anchorId = mapping.anchorPieceId as String?,
@@ -1267,7 +1285,13 @@ class TangramPuzzleScene: SKScene {
             let targetLocalFeature = pieceType.isTriangle ? (3 * CGFloat.pi / 4) : 0
             let targetFeatureAngle = targetRotation + targetLocalFeature
             
-            let result = validator.validateForSpriteKitWithFeatures(
+            let tolVals = currentValidationTolerances()
+            let difficultyValidator = TangramPieceValidator(
+                positionTolerance: tolVals.pos,
+                rotationTolerance: tolVals.rotDeg,
+                edgeContactTolerance: tolVals.edge
+            )
+            let result = difficultyValidator.validateForSpriteKitWithFeatures(
                 piecePosition: pieceScenePos,
                 pieceFeatureAngle: pieceFeatureAngle,
                 targetFeatureAngle: targetFeatureAngle,
@@ -1280,7 +1304,7 @@ class TangramPuzzleScene: SKScene {
             // Position gating for vertex-to-vertex connections: allow a smaller effective distance when polygons touch
             var isValid = result.rotationValid && result.flipValid
             var effectiveDistance = hypot(pieceScenePos.x - targetScenePos.x, pieceScenePos.y - targetScenePos.y)
-            if effectiveDistance > TangramGameConstants.Validation.positionTolerance {
+            if effectiveDistance > tolVals.pos {
                 // Check polygon contact using current piece pose vs target polygon
                 let piecePoly = TangramGeometryUtilities.transformedVertices(
                     for: pieceType,
@@ -1291,9 +1315,9 @@ class TangramPuzzleScene: SKScene {
                 let targetPoly = TangramBounds.computeSKTransformedVertices(for: target)
                 let polyDist = TangramGeometryUtilities.minimumDistanceBetweenPolygons(piecePoly, targetPoly)
                 // If edges/vertices are within contact tolerance, treat position as valid
-                if polyDist <= 12 { effectiveDistance = TangramGameConstants.Validation.positionTolerance - 1 }
+                if polyDist <= tolVals.edge { effectiveDistance = tolVals.pos - 1 }
             }
-            isValid = isValid && (effectiveDistance <= TangramGameConstants.Validation.positionTolerance)
+            isValid = isValid && (effectiveDistance <= tolVals.pos)
             
             // Additional gating: must be within connection distance
             let centerDistance = hypot(pieceScenePos.x - targetScenePos.x, pieceScenePos.y - targetScenePos.y)
@@ -1322,6 +1346,8 @@ class TangramPuzzleScene: SKScene {
                 
                 // Store which target this piece validated against
                 piece.userData!["validatedTargetId"] = target.id
+                // Remember last valid pose for hysteresis (feature-angle rotation)
+                lastValidPose[pieceId] = (position: pieceScenePos, rotation: pieceFeatureAngle, targetId: target.id)
                 if let group = pieceGroup {
                     mappingService.markTargetConsumed(groupId: group.id, targetId: target.id)
                 }
@@ -1361,6 +1387,21 @@ class TangramPuzzleScene: SKScene {
         }
         
         // Validation failed - apply hysteresis before marking invalid
+        // If this piece was previously validated, allow a relaxed drop-out (1.5x) before invalidating
+        if let last = lastValidPose[pieceId] {
+            let tol = currentValidationTolerances()
+            let posDelta = hypot(pieceScenePos.x - last.position.x, pieceScenePos.y - last.position.y)
+            let rotDelta = abs(TangramRotationValidator.normalizeAngle(pieceFeatureAngle - last.rotation)) * 180 / .pi
+            let relaxedPos = tol.pos * 1.5
+            let relaxedRot = tol.rotDeg * 1.5
+            if posDelta <= relaxedPos && rotDelta <= relaxedRot {
+                // Within relaxed window; keep validated state and skip invalidation path
+                // Light-touch: do not increment invalid streak; just return after emitting state unchanged
+                eventBus.emit(.validationChanged(pieceId: pieceId, isValid: true))
+                return
+            }
+        }
+
         let current = pieceInvalidStreak[pieceId] ?? 0
         let next = current + 1
         pieceInvalidStreak[pieceId] = next
@@ -1391,6 +1432,8 @@ class TangramPuzzleScene: SKScene {
                 piece.userData?["assignedTargetId"] = nil
                 // Remove pair from mapping refinement bookkeeping
                 mappingService.removePair(groupId: group.id, pieceId: pieceId, targetId: validatedId)
+                // Clear last valid pose
+                lastValidPose.removeValue(forKey: pieceId)
             }
         } else {
             // Keep in validating state, do not penalize yet
@@ -1430,22 +1473,16 @@ class TangramPuzzleScene: SKScene {
                     let canonicalPiece: CGFloat = pieceType.isTriangle ? (3 * .pi/4) : 0
                     let desiredZ = TangramRotationValidator.normalizeAngle(targetRotation + canonicalTarget - canonicalPiece)
 
-                    // Compute detailed failure reason using feature-angle validator
-                    let result = validator.validateForSpriteKitWithFeatures(
-                        piecePosition: pieceScenePos,
-                        pieceFeatureAngle: pieceFeatureAngle,
-                        targetFeatureAngle: targetRotation + canonicalTarget,
+                    // Compute detailed failure reason using unified validator via mapping service when possible
+                    let detailed = mappingService.validateMappedDetailed(
+                        mappedPose: (pos: pieceScenePos, rot: pieceFeatureAngle, isFlipped: piece.isFlipped),
                         pieceType: pieceType,
-                        isFlipped: piece.isFlipped,
-                        targetTransform: target.transform,
-                        targetWorldPos: targetScenePos
+                        target: target,
+                        targetCentroidScene: targetScenePos,
+                        validator: validator
                     )
                     let centerDistance = hypot(pieceScenePos.x - targetScenePos.x, pieceScenePos.y - targetScenePos.y)
-                    let failureReason: ValidationFailure = {
-                        if pieceType == .parallelogram && !result.flipValid { return .needsFlip }
-                        if !result.rotationValid { return .wrongRotation(degreesOff: 45) }
-                        return .wrongPosition(offset: centerDistance)
-                    }()
+                    let failureReason: ValidationFailure = detailed.failure ?? .wrongPosition(offset: centerDistance)
 
                     // Escalate to specific level for rotation/flip feedback
                     let effectiveLevel: NudgeLevel = {

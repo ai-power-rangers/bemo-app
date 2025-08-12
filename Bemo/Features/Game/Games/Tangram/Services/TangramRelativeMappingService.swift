@@ -118,6 +118,45 @@ final class TangramRelativeMappingService {
         return result.positionValid && result.rotationValid && result.flipValid
     }
 
+    /// Detailed validation that also yields a primary failure reason for nudges
+    func validateMappedDetailed(
+        mappedPose: (pos: CGPoint, rot: CGFloat, isFlipped: Bool),
+        pieceType: TangramPieceType,
+        target: GamePuzzleData.TargetPiece,
+        targetCentroidScene: CGPoint,
+        validator: TangramPieceValidator
+    ) -> (isValid: Bool, failure: ValidationFailure?) {
+        let canonicalTarget: CGFloat = pieceType.isTriangle ? (.pi/4) : 0
+        let canonicalPiece: CGFloat = pieceType.isTriangle ? (3 * .pi/4) : 0
+        let targetRawAngle = TangramPoseMapper.rawAngle(from: target.transform)
+        let targetZ = TangramPoseMapper.spriteKitAngle(fromRawAngle: targetRawAngle)
+        let targetFeatureAngle = targetZ + canonicalTarget
+        let pieceFeatureAngle = mappedPose.rot + (mappedPose.isFlipped ? -canonicalPiece : canonicalPiece)
+        let result = validator.validateForSpriteKitWithFeatures(
+            piecePosition: mappedPose.pos,
+            pieceFeatureAngle: pieceFeatureAngle,
+            targetFeatureAngle: targetFeatureAngle,
+            pieceType: pieceType,
+            isFlipped: mappedPose.isFlipped,
+            targetTransform: target.transform,
+            targetWorldPos: targetCentroidScene
+        )
+        let isValid = result.positionValid && result.rotationValid && result.flipValid
+        if isValid { return (true, nil) }
+        // Determine primary blocker – prefer flip > position > rotation for clarity
+        if !result.flipValid { return (false, .needsFlip) }
+        if !result.positionValid {
+            let offset = hypot(mappedPose.pos.x - targetCentroidScene.x, mappedPose.pos.y - targetCentroidScene.y)
+            return (false, .wrongPosition(offset: offset))
+        }
+        if !result.rotationValid {
+            // Rough rotation delta for messaging
+            let delta = TangramRotationValidator.normalizeAngle(pieceFeatureAngle - targetFeatureAngle)
+            return (false, .wrongRotation(degreesOff: abs(delta) * 180 / .pi))
+        }
+        return (false, .wrongPiece)
+    }
+
     // MARK: - Refinement
     func refineMapping(groupId: UUID,
                        pairs: [(pieceId: String, targetId: String)],

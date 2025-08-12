@@ -14,6 +14,7 @@ import SpriteKit
 
 struct TangramSpriteView: View {
     let puzzle: GamePuzzleData
+    let difficultySetting: UserPreferences.DifficultySetting
     @Binding var placedPieces: [PlacedPiece]
     let timerStarted: Bool
     let formattedTime: String
@@ -53,6 +54,11 @@ struct TangramSpriteView: View {
                 tangramScene.loadPuzzle(newValue)
             }
         }
+        .onChange(of: difficultySetting) { _, newValue in
+            if let tangramScene = scene as? TangramPuzzleScene {
+                tangramScene.difficultySetting = newValue
+            }
+        }
         // Propagate difficulty changes via puzzle reloads or view updates if needed later
         .onChange(of: isPuzzleComplete) { oldValue, newValue in
             if let tangramScene = scene as? TangramPuzzleScene {
@@ -86,6 +92,7 @@ struct TangramSpriteView: View {
         tangramScene.scaleMode = .resizeFill
         tangramScene.safeAreaTop = safeAreaTop  // Pass safe area to scene
         tangramScene.puzzle = puzzle
+        tangramScene.difficultySetting = difficultySetting
         tangramScene.onPieceCompleted = onPieceCompleted
         tangramScene.onPuzzleCompleted = onPuzzleCompleted
         tangramScene.onBackPressed = onBackPressed

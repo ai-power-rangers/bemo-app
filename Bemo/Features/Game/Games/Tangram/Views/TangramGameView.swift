@@ -241,6 +241,7 @@ struct TangramGameView: View {
             if let puzzle = viewModel.selectedPuzzle {
                 TangramSpriteView(
                     puzzle: puzzle,
+                    difficultySetting: viewModel.effectiveDifficulty,
                     placedPieces: $viewModel.placedPieces,
                     timerStarted: viewModel.timerStarted,
                     formattedTime: viewModel.formattedTime,

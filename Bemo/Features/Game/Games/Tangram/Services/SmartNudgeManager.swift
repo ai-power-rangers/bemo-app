@@ -153,8 +153,14 @@ class SmartNudgeManager {
                     visualHint = .pulse(intensity: 0.7)
                 }
             case .wrongPosition:
-                message = "Move closer to other pieces"
-                visualHint = .colorChange(color: .systemBlue, alpha: 0.5)
+                message = "Move closer to the target"
+                if let target = targetInfo {
+                    // Directional arrow towards target centroid
+                    let angle = atan2(target.position.y, target.position.x)
+                    visualHint = .arrow(direction: angle)
+                } else {
+                    visualHint = .colorChange(color: .systemBlue, alpha: 0.5)
+                }
             default:
                 message = "This piece needs adjustment"
                 visualHint = .pulse(intensity: 0.5)

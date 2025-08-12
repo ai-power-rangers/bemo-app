@@ -256,7 +256,8 @@ class TangramGameViewModel {
             lastMovedPiece: lastMovedPiece,
             timeSinceLastProgress: timeSinceProgress,
             previousHints: hintHistory,
-            validatedTargetIds: validatedTargetIds()
+            validatedTargetIds: validatedTargetIds(),
+            difficultySetting: effectiveDifficulty
         )
         
         if let hint = hint {
