@@ -157,7 +157,7 @@ enum TransitionAnimations {
             // Create accelerating slide sequence - NO WAIT, start sliding immediately
             var slideActions: [SKAction] = []
             
-            for i in 0..<10 {  // 10 cycles of back and forth, getting faster
+            for _ in 0..<10 {  // 10 cycles of back and forth, getting faster
                 let slideDistance = totalSize  // Slide by 1 square width
                 slideActions.append(SKAction.moveBy(x: slideDistance * slideDirection, y: 0, duration: slideDuration))
                 slideActions.append(SKAction.moveBy(x: -slideDistance * slideDirection, y: 0, duration: slideDuration))
@@ -261,7 +261,7 @@ enum TransitionAnimations {
             // Create accelerating slide sequence - NO WAIT
             var slideActions: [SKAction] = []
             
-            for i in 0..<10 {  // 10 cycles of up and down, getting faster
+            for _ in 0..<10 {  // 10 cycles of up and down, getting faster
                 let slideDistance = totalSize  // Slide by 1 square height
                 slideActions.append(SKAction.moveBy(x: 0, y: slideDistance * slideDirection, duration: slideDuration))
                 slideActions.append(SKAction.moveBy(x: 0, y: -slideDistance * slideDirection, duration: slideDuration))
@@ -360,7 +360,7 @@ enum TransitionAnimations {
                 let impactRadius: CGFloat = 150
                 var crackedPieces = 0
                 
-                for (piece, worldPos, square) in sortedPieces {
+                for (piece, worldPos, _) in sortedPieces {
                     let distance = hypot(worldPos.x - impactPoint.x, worldPos.y - impactPoint.y)
                     
                     if distance < impactRadius && crackedPieces < 10 {
@@ -398,7 +398,7 @@ enum TransitionAnimations {
                 let crackSpeed: TimeInterval = 0.003  // How fast crack spreads
                 
                 // Remaining pieces fall in waves based on distance
-                for (piece, worldPos, square) in sortedPieces {
+                for (piece, worldPos, _) in sortedPieces {
                     let distance = hypot(worldPos.x - impactPoint.x, worldPos.y - impactPoint.y)
                     
                     if distance >= impactRadius {  // Skip already fallen pieces

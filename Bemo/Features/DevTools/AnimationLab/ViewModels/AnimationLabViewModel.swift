@@ -62,8 +62,7 @@ class AnimationLabViewModel {
         // Generic animations (not puzzle-specific)
         let genericAnims = [
             AnimationItem(name: "Row Slide", group: .transitional, category: .generic, type: .squareTakeover, requiresPuzzle: false),
-            AnimationItem(name: "Column Slide", group: .transitional, category: .generic, type: .squareWave, requiresPuzzle: false),
-            AnimationItem(name: "Shatter Grid", group: .transitional, category: .generic, type: .squareSpiral, requiresPuzzle: false)
+            AnimationItem(name: "Column Slide", group: .transitional, category: .generic, type: .squareWave, requiresPuzzle: false)
         ]
         
         // Celebration animations - for puzzle completion

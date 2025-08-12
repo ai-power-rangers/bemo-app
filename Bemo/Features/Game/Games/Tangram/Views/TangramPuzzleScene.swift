@@ -986,6 +986,8 @@ class TangramPuzzleScene: SKScene {
                     rankedAnchor.userData?["assignedTargetId"] = m.anchorTargetId
                     // Store the anchor pair so refinement can occur when the next piece validates
                     mappingService.appendPair(groupId: group.id, pieceId: rankedAnchor.name ?? "", targetId: m.anchorTargetId)
+                    // New mapping established → revalidate other placed, unvalidated pieces in this group
+                    revalidateUnvalidatedPieces(in: group, excluding: rankedAnchor.name)
                 }
             }
             }
@@ -1111,6 +1113,8 @@ class TangramPuzzleScene: SKScene {
                             }
                         }
                     )
+                    // Mapping refined → revalidate other placed, unvalidated pieces in this group
+                    revalidateUnvalidatedPieces(in: group, excluding: pieceId)
                 }
                 
                 // Also validate the anchor piece now that the first relation is established
@@ -1158,6 +1162,8 @@ class TangramPuzzleScene: SKScene {
                 }
                 
                 print("[VALIDATION] ✅ Validated: \(pieceType.rawValue) → target \(match.target.id)")
+                // After a piece validates via mapping, try revalidating any other placed pieces in this group
+                revalidateUnvalidatedPieces(in: group, excluding: pieceId)
                 return
                     }
                 }
@@ -1813,6 +1819,22 @@ class TangramPuzzleScene: SKScene {
     func showStructuredHint(_ hint: TangramHintEngine.HintData) {
         // Delegate to showHint
         showHint(for: hint)
+    }
+
+    // Revalidate all placed, unvalidated pieces in a group (used after mapping establish/refine and after a mapped validation)
+    private func revalidateUnvalidatedPieces(in group: ConstructionGroup, excluding excludedId: String?) {
+        let candidates = availablePieces.filter { node in
+            guard let id = node.name, group.pieces.contains(id), id != excludedId,
+                  let st = pieceStates[id] else { return false }
+            let alreadyValidated: Bool = {
+                if case .validated = st.state { return true } else { return false }
+            }()
+            return st.state.canValidate && !alreadyValidated
+        }
+        if !candidates.isEmpty {
+            print("[REVALIDATE] Group=\(group.id) retry pieces=\(candidates.compactMap{ $0.name }.joined(separator: ","))")
+        }
+        for p in candidates { validatePlacedPiece(p) }
     }
     
     // MARK: - CV Frame Updates

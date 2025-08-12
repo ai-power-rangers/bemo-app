@@ -13,6 +13,8 @@ struct AnimationLabContainerView: View {
     @State private var scene: AnimationLabScene
     @State private var selectedSection: AnimationSection = .generic
     @State private var selectedExitDirection: AnimationLabScene.ExitDirection = .up
+    @State private var showFullscreenAnimation = false
+    @State private var fullscreenScene: AnimationLabScene? = nil
     
     enum AnimationSection: String, CaseIterable {
         case generic = "Generic"
@@ -51,17 +53,19 @@ struct AnimationLabContainerView: View {
                 GeometryReader { geometry in
                     VStack(spacing: 0) {
                         // SpriteKit preview area (60% of height)
-                        SpriteView(scene: scene, options: [.allowsTransparency])
-                            .frame(height: geometry.size.height * 0.6)
-                            .background(Color(.systemBackground))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color(.separator), lineWidth: 1)
-                            )
-                            .padding()
-                            .onAppear {
-                                scene.scaleMode = .resizeFill
-                            }
+                        ZStack {
+                            SpriteView(scene: scene, options: [.allowsTransparency])
+                                .frame(height: geometry.size.height * 0.6)
+                                .background(Color(.systemBackground))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color(.separator), lineWidth: 1)
+                                )
+                                .padding()
+                                .onAppear {
+                                    scene.scaleMode = .resizeFill
+                                }
+                        }
                         
                         Divider()
                         
@@ -90,6 +94,31 @@ struct AnimationLabContainerView: View {
                     }
                 }
             }
+            .overlay(
+                // Fullscreen animation overlay
+                Group {
+                    if showFullscreenAnimation, let fullscreenScene = fullscreenScene {
+                        ZStack {
+                            Color.black.opacity(0.01) // Invisible but interactive background
+                                .ignoresSafeArea()
+                                .onTapGesture {
+                                    withAnimation(.easeOut(duration: 0.3)) {
+                                        showFullscreenAnimation = false
+                                    }
+                                    // Clean up after a delay
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                        self.fullscreenScene = nil
+                                    }
+                                }
+                            
+                            SpriteView(scene: fullscreenScene, options: [.allowsTransparency])
+                                .ignoresSafeArea()
+                                .transition(.opacity)
+                        }
+                        .zIndex(1000)
+                    }
+                }
+            )
             .navigationTitle("Animation Lab")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -310,9 +339,55 @@ struct AnimationLabContainerView: View {
         
         switch animation.type {
         case .squareTakeover:
-            scene.runSquareTakeover()
+            // Create fullscreen scene for Row Slide
+            let screenSize = UIScreen.main.bounds.size
+            let fullScene = AnimationLabScene(size: screenSize)
+            fullScene.scaleMode = .resizeFill
+            fullScene.backgroundColor = SKColor(named: "GameBackground") ?? .black
+            self.fullscreenScene = fullScene
+            
+            withAnimation(.easeIn(duration: 0.3)) {
+                showFullscreenAnimation = true
+            }
+            
+            // Start animation after scene is visible
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                fullScene.runSquareTakeover()
+                // Auto-hide after animation duration
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        self.showFullscreenAnimation = false
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        self.fullscreenScene = nil
+                    }
+                }
+            }
         case .squareWave:
-            scene.runSquareWave()
+            // Create fullscreen scene for Column Slide
+            let screenSize = UIScreen.main.bounds.size
+            let fullScene = AnimationLabScene(size: screenSize)
+            fullScene.scaleMode = .resizeFill
+            fullScene.backgroundColor = SKColor(named: "GameBackground") ?? .black
+            self.fullscreenScene = fullScene
+            
+            withAnimation(.easeIn(duration: 0.3)) {
+                showFullscreenAnimation = true
+            }
+            
+            // Start animation after scene is visible
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                fullScene.runSquareWave()
+                // Auto-hide after animation duration
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        self.showFullscreenAnimation = false
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        self.fullscreenScene = nil
+                    }
+                }
+            }
         case .squareSpiral:
             scene.runSquareSpiral()
         case .assemble:
