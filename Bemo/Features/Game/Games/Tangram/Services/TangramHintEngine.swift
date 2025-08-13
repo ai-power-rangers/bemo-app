@@ -121,7 +121,8 @@ class TangramHintEngine {
                 puzzle: puzzle,
                 validated: validatedTargetIds,
                 placedPieces: placedPieces,
-                previousHints: previousHints
+                previousHints: previousHints,
+                difficultySetting: difficultySetting
             ) {
                 return createHintForPiece(pieceType, puzzle, reason: .userRequested)
             }
@@ -150,7 +151,7 @@ class TangramHintEngine {
     }
     // MARK: - Connection-aware selection
     
-    private func buildAdjacency(for puzzle: GamePuzzleData) -> [String: Set<String>] {
+    private func buildAdjacency(for puzzle: GamePuzzleData, difficultySetting: UserPreferences.DifficultySetting? = nil) -> [String: Set<String>] {
         // Build polygon per target id in SK space
         var idToPolygon: [String: [CGPoint]] = [:]
         for t in puzzle.targetPieces {
@@ -238,8 +239,9 @@ class TangramHintEngine {
     private func selectFrontierConnectedPiece(puzzle: GamePuzzleData,
                                               validated: Set<String>,
                                               placedPieces: [PlacedPiece],
-                                              previousHints: [HintData]) -> TangramPieceType? {
-        let adj = buildAdjacency(for: puzzle)
+                                              previousHints: [HintData],
+                                              difficultySetting: UserPreferences.DifficultySetting? = nil) -> TangramPieceType? {
+        let adj = buildAdjacency(for: puzzle, difficultySetting: difficultySetting)
         let allIds = Set(puzzle.targetPieces.map { $0.id })
         let unvalidatedIds = allIds.subtracting(validated)
 

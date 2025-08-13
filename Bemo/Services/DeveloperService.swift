@@ -161,6 +161,8 @@ enum DevToolType {
         switch self {
         case .tangramEditor:
             return "Create and edit tangram puzzles"
+        case .animationLab:
+            return "Test and debug animations"
         }
     }
 }
