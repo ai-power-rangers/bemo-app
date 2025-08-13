@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>particleType</key><integer>1</integer>
+    <key>particleTexture</key><string></string>
+    <key>emissionAngle</key><real>0.0</real>
+    <key>emissionAngleRange</key><real>6.28318</real>
+    <key>particleBirthRate</key><real>300.0</real>
+    <key>numParticlesToEmit</key><integer>200</integer>
+    <key>particleLifetime</key><real>0.6</real>
+    <key>particleLifetimeRange</key><real>0.2</real>
+    <key>particlePositionRange</key>
+    <string>{0,0}</string>
+    <key>particleSpeed</key><real>120.0</real>
+    <key>particleSpeedRange</key><real>40.0</real>
+    <key>particleSize</key><real>24.0</real>
+    <key>particleSizeRange</key><real>8.0</real>
+    <key>particleScale</key><real>0.6</real>
+    <key>particleScaleRange</key><real>0.2</real>
+    <key>particleScaleSpeed</key><real>-0.8</real>
+    <key>particleAlpha</key><real>0.5</real>
+    <key>particleAlphaRange</key><real>0.2</real>
+    <key>particleAlphaSpeed</key><real>-0.8</real>
+    <key>particleColor</key>
+    <string>0.8 0.8 0.8 1.0</string>
+    <key>particleColorBlendFactor</key><real>1.0</real>
+    <key>particleColorBlendFactorRange</key><real>0.0</real>
+    <key>particleRotation</key><real>0.0</real>
+    <key>particleRotationRange</key><real>6.28318</real>
+    <key>particleRotationSpeed</key><real>3.0</real>
+    <key>yAcceleration</key><real>-60.0</real>
+</dict>
+</plist>
+

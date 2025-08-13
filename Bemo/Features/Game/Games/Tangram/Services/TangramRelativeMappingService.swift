@@ -39,7 +39,9 @@ final class TangramRelativeMappingService {
         groupId: UUID,
         groupPieceIds: Set<String>,
         pickAnchor: () -> (anchorPieceId: String, anchorPositionScene: CGPoint, anchorRotation: CGFloat, anchorIsFlipped: Bool, anchorPieceType: TangramPieceType),
-        candidateTargets: () -> [(target: GamePuzzleData.TargetPiece, centroidScene: CGPoint, expectedZ: CGFloat, isFlipped: Bool)]
+        candidateTargets: () -> [(target: GamePuzzleData.TargetPiece, centroidScene: CGPoint, expectedZ: CGFloat, isFlipped: Bool)],
+        minFeatureAgreementDeg: CGFloat? = nil,
+        hasAnchorEdgeContact: (() -> Bool)? = nil
     ) -> AnchorMapping? {
         if let existing = groupAnchorMappings[groupId] { return existing }
 
@@ -55,7 +57,12 @@ final class TangramRelativeMappingService {
 
         guard let bestMatch = best else { return nil }
 
-        let rotationDelta = bestMatch.expectedZ - anchor.anchorRotation
+        // Compute rotation delta in FEATURE-ANGLE space so triangles align correctly (45° target vs 135° piece)
+        let canonicalTarget: CGFloat = anchor.anchorPieceType.isTriangle ? (.pi/4) : 0
+        let canonicalPiece: CGFloat  = anchor.anchorPieceType.isTriangle ? (3 * .pi/4) : 0
+        let anchorFeature = TangramRotationValidator.normalizeAngle(anchor.anchorRotation + (anchor.anchorIsFlipped ? -canonicalPiece : canonicalPiece))
+        let targetFeature = TangramRotationValidator.normalizeAngle(bestMatch.expectedZ + canonicalTarget)
+        let rotationDelta = TangramRotationValidator.normalizeAngle(targetFeature - anchorFeature)
         let parity = bestMatch.isFlipped != anchor.anchorIsFlipped
         let mapping = AnchorMapping(
             translationOffset: CGPoint(x: bestMatch.centroid.x - anchor.anchorPositionScene.x,
@@ -67,8 +74,19 @@ final class TangramRelativeMappingService {
             version: 1,
             pairCount: 1
         )
+        // Optional gating: require minimum feature-angle agreement
+        let deg = abs(rotationDelta) * 180 / .pi
+        if let minAgree = minFeatureAgreementDeg, deg > minAgree {
+            return nil
+        }
+        // Optional gating: require anchor to have an edge contact to some neighbor
+        if let contactCheck = hasAnchorEdgeContact, contactCheck() == false {
+            return nil
+        }
         groupAnchorMappings[groupId] = mapping
-        groupValidatedTargets[groupId, default: []].insert(bestMatch.target.id)
+        // Do NOT consume/validate anchor target here. Only consume when a non-anchor piece validates,
+        // then validate the anchor afterwards.
+        print("[MAPPING] Established group=\(groupId) anchorPiece=\(anchor.anchorPieceId) → anchorTarget=\(bestMatch.target.id) rotDelta=\(String(format: "%.1f", deg))° (feature) trans=(\(Int(mapping.translationOffset.x)),\(Int(mapping.translationOffset.y))) flipParity=\(parity)")
         return mapping
     }
 
@@ -109,6 +127,45 @@ final class TangramRelativeMappingService {
             targetWorldPos: targetCentroidScene
         )
         return result.positionValid && result.rotationValid && result.flipValid
+    }
+
+    /// Detailed validation that also yields a primary failure reason for nudges
+    func validateMappedDetailed(
+        mappedPose: (pos: CGPoint, rot: CGFloat, isFlipped: Bool),
+        pieceType: TangramPieceType,
+        target: GamePuzzleData.TargetPiece,
+        targetCentroidScene: CGPoint,
+        validator: TangramPieceValidator
+    ) -> (isValid: Bool, failure: ValidationFailure?) {
+        let canonicalTarget: CGFloat = pieceType.isTriangle ? (.pi/4) : 0
+        let canonicalPiece: CGFloat = pieceType.isTriangle ? (3 * .pi/4) : 0
+        let targetRawAngle = TangramPoseMapper.rawAngle(from: target.transform)
+        let targetZ = TangramPoseMapper.spriteKitAngle(fromRawAngle: targetRawAngle)
+        let targetFeatureAngle = targetZ + canonicalTarget
+        let pieceFeatureAngle = mappedPose.rot + (mappedPose.isFlipped ? -canonicalPiece : canonicalPiece)
+        let result = validator.validateForSpriteKitWithFeatures(
+            piecePosition: mappedPose.pos,
+            pieceFeatureAngle: pieceFeatureAngle,
+            targetFeatureAngle: targetFeatureAngle,
+            pieceType: pieceType,
+            isFlipped: mappedPose.isFlipped,
+            targetTransform: target.transform,
+            targetWorldPos: targetCentroidScene
+        )
+        let isValid = result.positionValid && result.rotationValid && result.flipValid
+        if isValid { return (true, nil) }
+        // Determine primary blocker – prefer flip > position > rotation for clarity
+        if !result.flipValid { return (false, .needsFlip) }
+        if !result.positionValid {
+            let offset = hypot(mappedPose.pos.x - targetCentroidScene.x, mappedPose.pos.y - targetCentroidScene.y)
+            return (false, .wrongPosition(offset: offset))
+        }
+        if !result.rotationValid {
+            // Rough rotation delta for messaging
+            let delta = TangramRotationValidator.normalizeAngle(pieceFeatureAngle - targetFeatureAngle)
+            return (false, .wrongRotation(degreesOff: abs(delta) * 180 / .pi))
+        }
+        return (false, .wrongPiece)
     }
 
     // MARK: - Refinement
@@ -176,6 +233,20 @@ final class TangramRelativeMappingService {
     func consumedTargets(groupId: UUID) -> Set<String> { groupValidatedTargets[groupId] ?? [] }
     func appendPair(groupId: UUID, pieceId: String, targetId: String) { groupValidatedPairs[groupId, default: []].append((pieceId, targetId)) }
     func pairs(groupId: UUID) -> [(pieceId: String, targetId: String)] { groupValidatedPairs[groupId] ?? [] }
+
+    // Unconsume a target when a previously validated piece is moved out of valid position
+    func unmarkTargetConsumed(groupId: UUID, targetId: String) {
+        var set = groupValidatedTargets[groupId] ?? []
+        set.remove(targetId)
+        groupValidatedTargets[groupId] = set
+    }
+
+    // Remove an established pair for refinement bookkeeping
+    func removePair(groupId: UUID, pieceId: String, targetId: String) {
+        guard var list = groupValidatedPairs[groupId] else { return }
+        list.removeAll { $0.pieceId == pieceId && $0.targetId == targetId }
+        groupValidatedPairs[groupId] = list
+    }
 }
 
 

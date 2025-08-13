@@ -56,7 +56,7 @@ struct PuzzleSelectionView: View {
         HStack {
             // Title
             VStack(alignment: .leading, spacing: 4) {
-                Text("Puzzle Library")
+                Text("Tangram")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                 
@@ -104,6 +104,34 @@ struct PuzzleSelectionView: View {
                         .foregroundColor(.secondary)
                 }
             }
+            
+            Divider()
+                .frame(height: 20)
+            
+            // Difficulty selector
+            Menu {
+                Button(action: { viewModel.childDifficultyMode = .default }) {
+                    Label("Default", systemImage: viewModel.childDifficultyMode == .default ? "checkmark" : "")
+                }
+                Button(action: { viewModel.childDifficultyMode = .easy }) {
+                    Label("Easy", systemImage: viewModel.childDifficultyMode == .easy ? "checkmark" : "")
+                }
+                Button(action: { viewModel.childDifficultyMode = .medium }) {
+                    Label("Medium", systemImage: viewModel.childDifficultyMode == .medium ? "checkmark" : "")
+                }
+                Button(action: { viewModel.childDifficultyMode = .hard }) {
+                    Label("Hard", systemImage: viewModel.childDifficultyMode == .hard ? "checkmark" : "")
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: difficultyModeIcon(viewModel.childDifficultyMode))
+                        .foregroundColor(difficultyModeColor(viewModel.childDifficultyMode))
+                    Image(systemName: "chevron.down")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
         }
         .padding(8)
         .background(Color(UIColor.secondarySystemBackground))
@@ -111,67 +139,83 @@ struct PuzzleSelectionView: View {
     }
     
     private var filterChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                // Category filter
-                Menu {
-                    Button("All Categories") {
-                        viewModel.selectedCategory = nil
+        HStack(spacing: 8) {
+            // Filter button
+            Menu {
+                Section("Category") {
+                    Button(action: { viewModel.selectedCategory = nil }) {
+                        Label("All Categories", systemImage: viewModel.selectedCategory == nil ? "checkmark" : "")
                     }
                     Divider()
                     ForEach(viewModel.availableCategories, id: \.self) { category in
                         Button(action: { viewModel.selectedCategory = category }) {
-                            Label(category.capitalized, systemImage: viewModel.categoryIcon(category))
+                            Label(category.capitalized, systemImage: viewModel.selectedCategory == category ? "checkmark" : "")
                         }
                     }
-                } label: {
-                    filterChip(
-                        title: viewModel.selectedCategory?.capitalized ?? "Category",
-                        isSelected: viewModel.selectedCategory != nil
-                    )
                 }
                 
-                // Difficulty filter
-                Menu {
-                    Button("All Difficulties") {
-                        viewModel.selectedDifficulty = nil
+                Section("Difficulty") {
+                    Button(action: { viewModel.selectedDifficulty = nil }) {
+                        Label("All Difficulties", systemImage: viewModel.selectedDifficulty == nil ? "checkmark" : "")
                     }
                     Divider()
                     ForEach(viewModel.availableDifficulties, id: \.self) { difficulty in
                         Button(action: { viewModel.selectedDifficulty = difficulty }) {
-                            Label(difficultyDisplayName(difficulty), systemImage: viewModel.difficultyIcon(difficulty))
+                            HStack {
+                                Text(difficultyStars(difficulty))
+                                Text(difficultyDisplayName(difficulty))
+                                Spacer()
+                                if viewModel.selectedDifficulty == difficulty {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
                         }
                     }
-                } label: {
-                    filterChip(
-                        title: viewModel.selectedDifficulty.map { difficultyDisplayName($0) } ?? "Difficulty",
-                        isSelected: viewModel.selectedDifficulty != nil
-                    )
                 }
-                
-                if viewModel.selectedCategory != nil || viewModel.selectedDifficulty != nil {
-                    Button(action: viewModel.clearFilters) {
-                        Label("Clear", systemImage: "xmark")
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                    Text("Filter")
+                    if viewModel.hasActiveFilters {
+                        Text("(\(viewModel.activeFilterCount))")
                             .font(.caption)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(viewModel.hasActiveFilters ? Color.accentColor : Color(UIColor.secondarySystemBackground))
+                .foregroundColor(viewModel.hasActiveFilters ? .white : .primary)
+                .cornerRadius(15)
             }
+            
+            // Show active filter chips
+            if let category = viewModel.selectedCategory {
+                activeFilterChip(title: category.capitalized, action: { viewModel.selectedCategory = nil })
+            }
+            
+            if let difficulty = viewModel.selectedDifficulty {
+                activeFilterChip(title: difficultyStars(difficulty), action: { viewModel.selectedDifficulty = nil })
+            }
+            
+            Spacer()
         }
     }
     
-    private func filterChip(title: String, isSelected: Bool) -> some View {
-        HStack(spacing: 4) {
-            Text(title)
-            Image(systemName: "chevron.down")
-                .font(.caption)
+    private func activeFilterChip(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Text(title)
+                    .font(.caption)
+                Image(systemName: "xmark.circle.fill")
+                    .font(.caption)
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(isSelected ? Color.accentColor : Color(UIColor.secondarySystemBackground))
-        .foregroundColor(isSelected ? .white : .primary)
-        .cornerRadius(15)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(Color.accentColor.opacity(0.2))
+        .foregroundColor(.accentColor)
+        .cornerRadius(12)
+        .buttonStyle(.plain)
     }
     
     // MARK: - Content Views
@@ -250,6 +294,36 @@ struct PuzzleSelectionView: View {
         case 4: return "Hard"
         case 5: return "Expert"
         default: return "Level \(difficulty)"
+        }
+    }
+    
+    private func difficultyStars(_ difficulty: Int) -> String {
+        String(repeating: "★", count: difficulty)
+    }
+    
+    private func difficultyModeIcon(_ mode: ChildDifficultyMode) -> String {
+        switch mode {
+        case .default:
+            return "sparkle"
+        case .easy:
+            return "tortoise.fill"
+        case .medium:
+            return "hare.fill"
+        case .hard:
+            return "bolt.fill"
+        }
+    }
+    
+    private func difficultyModeColor(_ mode: ChildDifficultyMode) -> Color {
+        switch mode {
+        case .default:
+            return .blue
+        case .easy:
+            return .green
+        case .medium:
+            return .orange
+        case .hard:
+            return .red
         }
     }
 }

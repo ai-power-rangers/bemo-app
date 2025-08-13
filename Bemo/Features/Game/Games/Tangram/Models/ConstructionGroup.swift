@@ -102,41 +102,18 @@ struct ConstructionGroup: Identifiable {
         let pieceCount = pieces.count
         let connectionCount = validatedConnections.count
         let completionRatio = Float(connectionCount) / 6.0 // Max 6 connections in tangram
-        let timeSinceCreation = Date().timeIntervalSince(createdAt)
-        let avgAttemptsPerPiece = attemptHistory.values.reduce(0, +) / max(1, attemptHistory.count)
         
-        // Single piece is always scattered
         if pieceCount <= 1 {
             validationState = GroupValidationState.scattered
-            return
-        }
-        
-        // Two pieces with no connections and recent creation = exploring
-        if pieceCount == 2 && connectionCount == 0 && timeSinceCreation < 10 {
+        } else if pieceCount == 2 && connectionCount == 0 {
             validationState = GroupValidationState.exploring
-            return
-        }
-        
-        // Multiple pieces or validated connections = active construction
-        if pieceCount >= 2 {
-            // High completion ratio = completing phase
-            if completionRatio > 0.6 || (pieceCount >= 5 && connectionCount >= 3) {
+        } else if pieceCount >= 3 || connectionCount >= 1 {
+            if completionRatio > 0.6 {
                 validationState = GroupValidationState.completing
-            }
-            // Good progress = building phase
-            else if (pieceCount >= 4 && connectionCount >= 2) || 
-                    (pieceCount >= 3 && connectionCount >= 1 && confidence > 0.6) {
+            } else if pieceCount >= 4 || connectionCount >= 2 {
                 validationState = GroupValidationState.building
-            }
-            // Early construction with clear intent
-            else if (pieceCount >= 3) || 
-                    (pieceCount >= 2 && connectionCount >= 1) ||
-                    (pieceCount >= 2 && confidence > 0.5 && avgAttemptsPerPiece >= 2) {
+            } else {
                 validationState = GroupValidationState.constructing
-            }
-            // Default to exploring for 2 pieces
-            else {
-                validationState = GroupValidationState.exploring
             }
         }
     }

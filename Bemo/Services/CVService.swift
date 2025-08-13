@@ -50,8 +50,7 @@ class CVService {
         // 2. Initialize Alan CV Kit
         // 3. Begin processing frames
         
-        // Simulate piece detection for testing
-        simulatePieceDetection()
+        // Real CV would start here. Disable simulator in Tangram mock gameplay.
     }
     
     func stopSession() {
@@ -102,32 +101,7 @@ class CVService {
     
     // MARK: - Helper Methods
     
-    private func simulatePieceDetection() {
-        // Simulate periodic piece detection for testing
-        Timer.publish(every: 3.0, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                guard let self = self, self.isSessionActive else { return }
-                
-                // Create mock recognized pieces with updated structure
-                let mockPieces = [
-                    RecognizedPiece(
-                        id: "mock_piece_\(UUID().uuidString.prefix(8))",
-                        pieceTypeId: "largeTriangle1",
-                        position: CGPoint(x: 200, y: 150),
-                        rotation: 0,
-                        velocity: CGVector(dx: 0, dy: 0),
-                        isMoving: false,
-                        confidence: 0.95,
-                        timestamp: Date(),
-                        frameNumber: Int.random(in: 1000...9999)
-                    )
-                ]
-                
-                self.recognizedPiecesSubject.send(mockPieces)
-            }
-            .store(in: &cancellables)
-    }
+    // Simulator removed for Tangram mock gameplay
 }
 
 // MARK: - Supporting Types

@@ -12,6 +12,13 @@
 import SwiftUI
 import Observation
 
+enum ChildDifficultyMode {
+    case `default`
+    case easy
+    case medium
+    case hard
+}
+
 @Observable
 class PuzzleSelectionViewModel {
     
@@ -21,6 +28,7 @@ class PuzzleSelectionViewModel {
     var selectedDifficulty: Int?
     var searchText: String = ""
     var isGridView: Bool = true
+    var childDifficultyMode: ChildDifficultyMode = .default
     
     // MARK: - Dependencies
     
@@ -52,6 +60,17 @@ class PuzzleSelectionViewModel {
     
     var hasNoPuzzles: Bool {
         !isLoading && filteredPuzzles.isEmpty
+    }
+    
+    var hasActiveFilters: Bool {
+        selectedCategory != nil || selectedDifficulty != nil
+    }
+    
+    var activeFilterCount: Int {
+        var count = 0
+        if selectedCategory != nil { count += 1 }
+        if selectedDifficulty != nil { count += 1 }
+        return count
     }
     
     // MARK: - Initialization

@@ -14,6 +14,7 @@ import SpriteKit
 
 struct TangramSpriteView: View {
     let puzzle: GamePuzzleData
+    let difficultySetting: UserPreferences.DifficultySetting
     @Binding var placedPieces: [PlacedPiece]
     let timerStarted: Bool
     let formattedTime: String
@@ -27,6 +28,7 @@ struct TangramSpriteView: View {
     let onNextPressed: () -> Void
     let onStartTimer: () -> Void
     let onToggleHints: () -> Void
+    let onValidatedTargetsChanged: (Set<String>) -> Void
     
     // Scene is created once and reused
     @State private var scene: SKScene = {
@@ -52,6 +54,12 @@ struct TangramSpriteView: View {
                 tangramScene.loadPuzzle(newValue)
             }
         }
+        .onChange(of: difficultySetting) { _, newValue in
+            if let tangramScene = scene as? TangramPuzzleScene {
+                tangramScene.difficultySetting = newValue
+            }
+        }
+        // Propagate difficulty changes via puzzle reloads or view updates if needed later
         .onChange(of: isPuzzleComplete) { oldValue, newValue in
             if let tangramScene = scene as? TangramPuzzleScene {
                 // Convert bool to set of completed pieces (empty if not complete)
@@ -84,12 +92,14 @@ struct TangramSpriteView: View {
         tangramScene.scaleMode = .resizeFill
         tangramScene.safeAreaTop = safeAreaTop  // Pass safe area to scene
         tangramScene.puzzle = puzzle
+        tangramScene.difficultySetting = difficultySetting
         tangramScene.onPieceCompleted = onPieceCompleted
         tangramScene.onPuzzleCompleted = onPuzzleCompleted
         tangramScene.onBackPressed = onBackPressed
         tangramScene.onNextPressed = onNextPressed
         tangramScene.onStartTimer = onStartTimer
         tangramScene.onToggleHints = onToggleHints
+        tangramScene.onValidatedTargetsChanged = onValidatedTargetsChanged
         
         // Load the puzzle (no UI elements needed - handled by SwiftUI)
         tangramScene.loadPuzzle(puzzle)

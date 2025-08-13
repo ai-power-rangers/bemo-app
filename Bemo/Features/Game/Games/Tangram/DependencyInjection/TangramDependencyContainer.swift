@@ -16,11 +16,7 @@ class TangramDependencyContainer {
     
     // MARK: - Services
     
-    /// Core gameplay service handling game logic and state
-    let gameplayService: TangramGameplayService
-    
-    /// Service for piece positioning and layout calculations
-    let positioningService: TangramPiecePositioningService
+    // Removed gameplayService and positioningService (snapping/preview/grid not used)
     
     /// Piece validation service
     let pieceValidator: TangramPieceValidator
@@ -63,12 +59,9 @@ class TangramDependencyContainer {
         self.geometryUtilities = TangramGeometryUtilities.self
         self.dataConverter = PuzzleDataConverter.self
         
-        // Initialize core services
+        // Initialize core services with default tolerances; scene/viewmodel can replace if difficulty override applies
         self.pieceValidator = TangramPieceValidator()
-        self.gameplayService = TangramGameplayService(
-            pieceValidator: pieceValidator
-        )
-        self.positioningService = TangramPiecePositioningService()
+        // gameplayService and positioningService removed
         self.hintEngine = TangramHintEngine()
         self.mappingService = TangramRelativeMappingService()
         

@@ -51,16 +51,26 @@ enum TangramGameConstants {
     
     enum Validation {
         /// Distance tolerance for piece center position matching (in pixels)
-        static let positionTolerance: CGFloat = 35.0  // Increased for better touch interaction with triangles
+        static let positionTolerance: CGFloat = 35.0
         
         /// Rotation tolerance for piece angle matching (in degrees)
-        static let rotationTolerance: CGFloat = 25.0  // More forgiving tolerance for touch interaction
+        static let rotationTolerance: CGFloat = 18.0
+
+        /// Minimum center-to-center distance for two pieces to be considered "connected"
+        /// This gates early validation to ensure the first relations are built physically next to each other
+        static let connectionDistance: CGFloat = 100.0
+
+        /// Per-difficulty tolerance presets
+        static func tolerances(for difficulty: UserPreferences.DifficultySetting) -> (position: CGFloat, rotationDeg: CGFloat, connection: CGFloat, edgeContact: CGFloat) {
+            // For testing: use the same tolerances across all difficulties
+            // This can be restored to difficulty-specific values later
+            return (position: 40, rotationDeg: 18, connection: 130, edgeContact: 14)
+        }
     }
     
     // MARK: - Animation
     
-    /// Duration for snap animations
-    static let snapAnimationDuration: TimeInterval = 0.2
+    // Snap animation duration removed (snapping disabled)
     
     /// Duration for rotation animations
     static let rotationAnimationDuration: TimeInterval = 0.2
@@ -79,7 +89,20 @@ enum TangramGameConstants {
     /// Alpha value for target piece silhouettes
     static let targetPieceAlpha: CGFloat = 0.3
     
-    /// Alpha value for snap preview
-    static let snapPreviewAlpha: CGFloat = 0.5
+    // Snap preview alpha removed (snapping disabled)
+
+    enum VisualDifficultyStyle {
+        case easyColoredOutlines
+        case mediumStandard
+        case hardAllBlack
+        
+        static func style(for difficulty: UserPreferences.DifficultySetting) -> VisualDifficultyStyle {
+            switch difficulty {
+            case .easy: return .easyColoredOutlines
+            case .normal: return .mediumStandard
+            case .hard: return .hardAllBlack
+            }
+        }
+    }
 }
 
