@@ -12,32 +12,8 @@
 import Foundation
 import CoreGraphics
 
-// MARK: - Piece Validation
-
-protocol PieceValidating {
-    /// Validates if a placed piece matches a target position
-    func validate(placed: PlacedPiece, target: GamePuzzleData.TargetPiece) -> Bool
-    
-    /// Validates placement for SpriteKit scene
-    func validateForSpriteKit(
-        piecePosition: CGPoint,
-        pieceRotation: CGFloat,
-        pieceType: TangramPieceType,
-        isFlipped: Bool,
-        targetTransform: CGAffineTransform,
-        targetWorldPos: CGPoint
-    ) -> TangramPieceValidator.ValidationResult
-}
-
-// MARK: - Gameplay Service
-
-protocol TangramGameplayProviding {
-    /// Checks if a piece is close enough to snap to target
-    func shouldShowSnapPreview(piecePosition: CGPoint, targetPosition: CGPoint) -> Bool
-    
-    /// Determines snap preview strength based on distance
-    func getSnapPreviewStrength(piecePosition: CGPoint, targetPosition: CGPoint) -> TangramGameplayService.SnapPreviewStrength
-}
+// MARK: - Piece Validation (feature-angle path only)
+// Keep protocol surface minimal; rely on TangramPieceValidator directly
 
 // MARK: - Hint Engine
 
@@ -73,14 +49,7 @@ protocol TangramDatabaseLoading {
 }
 
 // MARK: - Piece Positioning
-
-protocol PiecePositioning {
-    /// Calculates optimal piece layout for a puzzle
-    func calculateLayout(for pieces: [TangramPieceType], in bounds: CGRect) -> [TangramPieceType: CGPoint]
-    
-    /// Adjusts piece position to grid if enabled
-    func snapToGrid(_ position: CGPoint, gridSize: CGFloat) -> CGPoint
-}
+// Removed grid/snap interfaces to avoid snapping-related tech debt
 
 // MARK: - Data Conversion
 
@@ -93,16 +62,13 @@ protocol PuzzleDataConverting {
 }
 
 // MARK: - Make existing services conform to protocols
-
-extension TangramPieceValidator: PieceValidating {}
-
-extension TangramGameplayService: TangramGameplayProviding {}
+// Use TangramPieceValidator directly (no protocol indirection)
 
 extension TangramHintEngine: HintProviding {}
 
 extension TangramDatabaseLoader: TangramDatabaseLoading {}
 
-extension TangramPiecePositioningService: PiecePositioning {}
+// Removed PiecePositioning conformance
 
 // Note: PuzzleDataConverter is an enum with static methods, 
 // so we'd need to create a wrapper class to conform to the protocol

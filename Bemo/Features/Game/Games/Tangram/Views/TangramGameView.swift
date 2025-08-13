@@ -17,6 +17,7 @@ struct TangramGameView: View {
     @State private var searchText = ""
     @State private var selectedCategory: String? = nil
     @State private var selectedDifficulty: Int? = nil
+    @State private var difficultyOverride: UserPreferences.DifficultySetting? = nil
     
     #if DEBUG
     // Debug-only properties for CV mocking
@@ -71,25 +72,49 @@ struct TangramGameView: View {
                 .padding(8)
                 .background(Color(.systemGray6))
                 .cornerRadius(8)
-                
-                // Category filter dropdown - matching Editor
+
+                // Student difficulty (Default/Easy/Medium/Hard) as icon-only menu
                 Menu {
-                    Button("All Categories", action: { selectedCategory = nil })
+                    Button("Default", action: { difficultyOverride = nil; viewModel.applyDifficultyOverride(nil) })
                     Divider()
-                    ForEach(availableCategories, id: \.self) { category in
-                        Button(category.capitalized) {
-                            selectedCategory = category
+                    Button("Easy", action: { difficultyOverride = .easy; viewModel.applyDifficultyOverride(.easy) })
+                    Button("Medium", action: { difficultyOverride = .normal; viewModel.applyDifficultyOverride(.normal) })
+                    Button("Hard", action: { difficultyOverride = .hard; viewModel.applyDifficultyOverride(.hard) })
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(8)
+                }
+
+                // Combined filter (icon-only): top section difficulty (stars), next section categories
+                Menu {
+                    // Difficulty by stars
+                    Menu("Difficulty (stars)") {
+                        Button("All", action: { selectedDifficulty = nil })
+                        Divider()
+                        Button(action: { selectedDifficulty = 1 }) { Label("", systemImage: "star.fill").labelStyle(.iconOnly); Text("1 Star") }
+                        Button(action: { selectedDifficulty = 2 }) { HStack(spacing: 2) { Image(systemName: "star.fill"); Image(systemName: "star.fill") }; Text("2 Stars") }
+                        Button(action: { selectedDifficulty = 3 }) { HStack(spacing: 2) { Image(systemName: "star.fill"); Image(systemName: "star.fill"); Image(systemName: "star.fill") }; Text("3 Stars") }
+                        Button(action: { selectedDifficulty = 4 }) { HStack(spacing: 2) { Image(systemName: "star.fill"); Image(systemName: "star.fill"); Image(systemName: "star.fill"); Image(systemName: "star.fill") }; Text("4 Stars") }
+                        Button(action: { selectedDifficulty = 5 }) { HStack(spacing: 2) { Image(systemName: "star.fill"); Image(systemName: "star.fill"); Image(systemName: "star.fill"); Image(systemName: "star.fill"); Image(systemName: "star.fill") }; Text("5 Stars") }
+                    }
+                    Divider()
+                    // Categories
+                    Menu("Category") {
+                        Button("All Categories", action: { selectedCategory = nil })
+                        Divider()
+                        ForEach(availableCategories, id: \.self) { category in
+                            Button(category.capitalized) { selectedCategory = category }
                         }
                     }
                 } label: {
-                    HStack {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                        Text(selectedCategory?.capitalized ?? "All")
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(8)
                 }
             }
             .padding(.horizontal, 16)
@@ -148,6 +173,7 @@ struct TangramGameView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            // Difficulty override control (per-game)
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: {
                     viewModel.requestQuit()
@@ -162,7 +188,7 @@ struct TangramGameView: View {
             }
             
             ToolbarItem(placement: .principal) {
-                Text("Puzzle Library")
+                Text("Tangram")
                     .font(.system(size: 18, weight: .semibold))
             }
         }
@@ -221,6 +247,7 @@ struct TangramGameView: View {
             if let puzzle = viewModel.selectedPuzzle {
                 TangramSpriteView(
                     puzzle: puzzle,
+                    difficultySetting: viewModel.effectiveDifficulty,
                     placedPieces: $viewModel.placedPieces,
                     timerStarted: viewModel.timerStarted,
                     formattedTime: viewModel.formattedTime,
@@ -243,8 +270,9 @@ struct TangramGameView: View {
                     onStartTimer: {
                         viewModel.startTimer()
                     },
-                    onToggleHints: {
-                        viewModel.toggleHints()
+                    onToggleHints: { viewModel.toggleHints() },
+                    onValidatedTargetsChanged: { ids in
+                        viewModel.syncValidatedTargetIds(ids)
                     }
                 )
                 .ignoresSafeArea(edges: .bottom) // Only ignore bottom
@@ -482,6 +510,17 @@ struct TangramGameView: View {
                 .shadow(radius: 10)
         )
         .padding()
+    }
+}
+
+extension TangramGameView {
+    private var difficultyOverrideLabel: String {
+        guard let d = difficultyOverride else { return "Child Default" }
+        switch d {
+        case .easy: return "Easy"
+        case .normal: return "Medium"
+        case .hard: return "Hard"
+        }
     }
 }
 

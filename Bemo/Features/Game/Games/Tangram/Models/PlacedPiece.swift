@@ -64,6 +64,30 @@ struct PlacedPiece: Identifiable, Codable {
         }
     }
     
+    /// Convenience initializer for creating a manual placed piece (non-CV path)
+    init(id: String = UUID().uuidString,
+         pieceType: TangramPieceType,
+         position: CGPoint,
+         rotation: Double,
+         isFlipped: Bool) {
+        self.id = id
+        self.pieceType = pieceType
+        self.position = position
+        self.rotation = rotation
+        self.velocity = CGVector(dx: 0, dy: 0)
+        self.isMoving = false
+        self.confidence = 1.0
+        self.timestamp = Date()
+        self.frameNumber = 0
+        self.validationState = .pending
+        self.relativePosition = nil
+        self.relativeRotation = nil
+        self.isPlaced = true
+        self.lastStationaryTime = self.timestamp
+        self.isFlipped = isFlipped
+        self.assignedTargetId = nil
+    }
+    
     // MARK: - Movement Analysis
     
     var isStationary: Bool {

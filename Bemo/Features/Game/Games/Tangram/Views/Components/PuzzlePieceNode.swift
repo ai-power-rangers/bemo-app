@@ -213,10 +213,12 @@ class PuzzlePieceNode: SKNode {
             self.alpha = state.displayOpacity
             
         case .validated:
-            // Don't show indicator - validation is shown in target section
+            // Validation visuals are shown in the target (silhouette) only. Keep piece visuals neutral.
             indicator.isHidden = true
             self.alpha = 1.0
-            shapeNode?.strokeColor = .systemGreen
+            if let fill = shapeNode?.fillColor {
+                shapeNode?.strokeColor = fill.darker(by: 20)
+            }
             shapeNode?.lineWidth = 2
             shapeNode?.glowWidth = 0
             
@@ -329,5 +331,20 @@ class PuzzlePieceNode: SKNode {
         default:
             return (state.currentPosition, state.currentRotation)
         }
+    }
+}
+
+// MARK: - Precision Hit Testing
+
+extension PuzzlePieceNode {
+    /// Perform polygon-accurate hit testing using the piece's path (not just its bounding box).
+    /// The point is expected in this node's coordinate space.
+    override func contains(_ p: CGPoint) -> Bool {
+        guard let path = shapeNode?.path else {
+            return super.contains(p)
+        }
+        // SKShapeNode is centered at origin with path vertices centered as well,
+        // so we can test directly in local coordinates.
+        return path.contains(p, using: .winding, transform: .identity)
     }
 }

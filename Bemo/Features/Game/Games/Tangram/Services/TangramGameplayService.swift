@@ -2,7 +2,7 @@
 //  TangramGameplayService.swift
 //  Bemo
 //
-//  Core game logic service for Tangram puzzle gameplay
+//  Core game logic service for Tangram puzzle gameplay (snapping removed)
 //
 
 // WHAT: Business logic for Tangram game mechanics, validation, and state management
@@ -28,30 +28,7 @@ class TangramGameplayService {
     
     // MARK: - Validation Logic
     
-    /// Checks if a piece is close enough to snap to target
-    func shouldShowSnapPreview(piecePosition: CGPoint, targetPosition: CGPoint) -> Bool {
-        let distance = hypot(piecePosition.x - targetPosition.x, piecePosition.y - targetPosition.y)
-        return distance < TangramGameConstants.Validation.positionTolerance * 2.5
-    }
-    
-    /// Determines snap preview strength based on distance
-    func getSnapPreviewStrength(piecePosition: CGPoint, targetPosition: CGPoint) -> SnapPreviewStrength {
-        let distance = hypot(piecePosition.x - targetPosition.x, piecePosition.y - targetPosition.y)
-        
-        if distance < TangramGameConstants.Validation.positionTolerance {
-            return .strong
-        } else if distance < TangramGameConstants.Validation.positionTolerance * 2.5 {
-            return .weak
-        } else {
-            return .none
-        }
-    }
-    
-    enum SnapPreviewStrength {
-        case none
-        case weak
-        case strong
-    }
+    // Snapping and snap preview removed for realism
     
     // MARK: - State Management
     

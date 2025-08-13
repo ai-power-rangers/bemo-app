@@ -50,6 +50,39 @@ class TangramGameViewModel {
     var lastProgressTime = Date()
     var isShowingHintAnimation: Bool = false
     private var hintDismissTask: Task<Void, Never>?
+    // Cache scene-validated target ids for adjacency-aware hints
+    private var validatedTargetIdsCache: Set<String> = []
+    // MARK: - Validated targets tracking for hints
+    private func validatedTargetIds() -> Set<String> {
+        // Build from placedPieces with .correct state where we know assigned target
+        var ids: Set<String> = []
+        for p in placedPieces where p.validationState == .correct {
+            if let assigned = p.assignedTargetId { ids.insert(assigned) }
+        }
+        return ids
+    }
+
+    // Sync from SpriteKit scene validated targets → update placedPieces and internal state
+    func syncValidatedTargetIds(_ ids: Set<String>) {
+        // Ensure placedPieces entries exist for each validated target id and assign them
+        guard let puzzle = selectedPuzzle else { return }
+        validatedTargetIdsCache = ids
+        for tid in ids {
+            if let target = puzzle.targetPieces.first(where: { $0.id == tid }) {
+                // Ensure a placed piece entry exists (create a lightweight entry if missing)
+                if let idx = placedPieces.firstIndex(where: { $0.pieceType == target.pieceType }) {
+                    placedPieces[idx].assignedTargetId = tid
+                    placedPieces[idx].validationState = PlacedPiece.ValidationState.correct
+                } else {
+                    // Create a minimal PlacedPiece so hints can treat it as validated
+                    var p = PlacedPiece(pieceType: target.pieceType, position: CGPoint(x: 0, y: 0), rotation: 0, isFlipped: false)
+                    p.assignedTargetId = tid
+                    p.validationState = PlacedPiece.ValidationState.correct
+                    placedPieces.append(p)
+                }
+            }
+        }
+    }
 
     // Persist instance-binding (pieceId -> assignedTargetId) across frames for CV path
     private var pieceAssignments: [String: String] = [:]
@@ -61,6 +94,12 @@ class TangramGameViewModel {
     private let container: TangramDependencyContainer
     private let supabaseService: SupabaseService?
     var availablePuzzles: [GamePuzzleData] = []
+
+    // MARK: - Difficulty
+    private(set) var effectiveDifficulty: UserPreferences.DifficultySetting = .normal
+    func setEffectiveDifficulty(_ difficulty: UserPreferences.DifficultySetting) {
+        effectiveDifficulty = difficulty
+    }
     
     
     // MARK: - Metrics Tracking
@@ -93,6 +132,20 @@ class TangramGameViewModel {
                 }
             }
         }
+    }
+
+    // MARK: - Difficulty Override API (from View)
+    func applyDifficultyOverride(_ difficulty: UserPreferences.DifficultySetting?) {
+        if let d = difficulty {
+            setEffectiveDifficulty(d)
+        } else {
+            // Ask delegate for child default
+            let base = delegate?.getChildDifficultySetting() ?? .normal
+            setEffectiveDifficulty(base)
+        }
+        // Notify scene if already running
+        // The scene is created in TangramSpriteView; we propagate via a lightweight notification in placedPieces change
+        // Actual consumption occurs in TangramPuzzleScene by reading viewModel when binding or via per-call parameters
     }
     
     // Alternative init for backward compatibility
@@ -205,7 +258,9 @@ class TangramGameViewModel {
             placedPieces: placedPieces,
             lastMovedPiece: lastMovedPiece,
             timeSinceLastProgress: timeSinceProgress,
-            previousHints: hintHistory
+            previousHints: hintHistory,
+            validatedTargetIds: validatedTargetIdsCache.isEmpty ? validatedTargetIds() : validatedTargetIdsCache,
+            difficultySetting: effectiveDifficulty
         )
         
         if let hint = hint {
@@ -479,7 +534,7 @@ class TangramGameViewModel {
             }
         }
         
-        // Validate piece placements
+        // Validate piece placements using mapping-only (realistic physical-world flow)
         validatePieces()
         
         // Update game state
@@ -543,7 +598,26 @@ class TangramGameViewModel {
             }
         )
         
+        // Resolve difficulty tolerances
+        let tol = TangramGameConstants.Validation.tolerances(for: effectiveDifficulty)
+
+        // Swap in a difficulty-configured validator for this pass
+        let difficultyValidator = TangramPieceValidator(
+            positionTolerance: tol.position,
+            rotationTolerance: tol.rotationDeg,
+            edgeContactTolerance: tol.edgeContact
+        )
+
         // Validate non-anchor pieces using mapped pose and instance-binding
+        // Require at least 2 pieces in the CV group before allowing any validations
+        guard placedPieces.count >= 2 else {
+            for i in 0..<placedPieces.count {
+                var piece = placedPieces[i]
+                if piece.id != anchor.id { piece.validationState = .pending }
+                placedPieces[i] = piece
+            }
+            return
+        }
         for i in 0..<placedPieces.count {
             var piece = placedPieces[i]
             
@@ -593,7 +667,7 @@ class TangramGameViewModel {
                     pieceType: piece.pieceType,
                     target: target,
                     targetCentroidScene: centroid,
-                    validator: container.pieceValidator
+                    validator: difficultyValidator
                 )
                 if isValid {
                     piece.validationState = .correct
@@ -613,7 +687,7 @@ class TangramGameViewModel {
                         pieceType: piece.pieceType,
                         target: t,
                         targetCentroidScene: centroid,
-                        validator: container.pieceValidator
+                        validator: difficultyValidator
                     )
                     if isValid {
                         if best == nil || d < best!.dist { best = (t.id, d) }
@@ -676,6 +750,8 @@ class TangramGameViewModel {
     }
     
     private func completePuzzle() {
+        // Ensure timer stops so the displayed time is the final completion time
+        stopTimer()
         currentPhase = .puzzleComplete
         
         // Track completion metrics

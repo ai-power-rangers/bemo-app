@@ -33,4 +33,13 @@ protocol GameDelegate: AnyObject {
     /// Called when the game detects frustration (via CV or game logic)
     /// - Parameter level: The frustration level (0.0 to 1.0)
     func gameDidDetectFrustration(level: Float)
+
+    /// Provides the active child's default gameplay difficulty as set by the parent
+    /// Games can use this as a baseline and optionally allow in-game overrides
+    func getChildDifficultySetting() -> UserPreferences.DifficultySetting
+}
+
+// Default implementations for optional behaviors
+extension GameDelegate {
+    func getChildDifficultySetting() -> UserPreferences.DifficultySetting { .normal }
 }
