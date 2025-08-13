@@ -26,16 +26,16 @@ extension TangramPuzzleScene {
         
         // Find this piece's group
         var pieceGroup = constructionGroups.first { $0.pieces.contains(pieceId) }
-        // Fallback: attach to nearest mapped group within relaxed radius
+        // Fallback: attach to nearest mapped group within dynamic radius (more robust for large pieces)
         if pieceGroup == nil {
-            let attachRadius: CGFloat = 160
-            var best: (group: ConstructionGroup, dist: CGFloat)?
+            var best: (group: ConstructionGroup, dist: CGFloat, radius: CGFloat)?
             for g in constructionGroups {
-                if mappingService.mapping(for: g.id) == nil { continue }
+                guard mappingService.mapping(for: g.id) != nil else { continue }
                 let d = hypot(piece.position.x - g.centerOfMass.x, piece.position.y - g.centerOfMass.y)
-                if best == nil || d < best!.dist { best = (g, d) }
+                let dynRadius: CGFloat = max(160, g.boundingRadius + 120)
+                if best == nil || d < best!.dist { best = (g, d, dynRadius) }
             }
-            if let best = best, best.dist <= attachRadius {
+            if let best = best, best.dist <= best.radius {
                 pieceGroup = best.group
             }
         }
@@ -65,20 +65,13 @@ extension TangramPuzzleScene {
         let localFeatureAngle = piece.userData?["localFeatureAngleSK"] as? CGFloat ?? 0
         let pieceFeatureAngle = piece.zRotation + localFeatureAngle
         
-        // Try anchor-based validation first
+        // Mapping-based validation only (preferred realistic flow)
         if let group = pieceGroup {
-            if tryAnchorBasedValidation(piece: piece, pieceType: pieceType, pieceId: pieceId, 
-                                       pieceScenePos: pieceScenePos, pieceFeatureAngle: pieceFeatureAngle,
-                                       group: group, state: state, puzzle: puzzle) {
+            if tryAnchorBasedValidation(piece: piece, pieceType: pieceType, pieceId: pieceId,
+                                        pieceScenePos: pieceScenePos, pieceFeatureAngle: pieceFeatureAngle,
+                                        group: group, state: state, puzzle: puzzle) {
                 return
             }
-        }
-        
-        // Try direct validation as fallback
-        if tryDirectValidation(piece: piece, pieceType: pieceType, pieceId: pieceId,
-                              pieceScenePos: pieceScenePos, pieceFeatureAngle: pieceFeatureAngle,
-                              pieceGroup: pieceGroup, state: state, puzzle: puzzle) {
-            return
         }
         
         // Validation failed - handle failure
@@ -123,16 +116,6 @@ extension TangramPuzzleScene {
                                           mappedFlipped: mappedFlipped, group: group, puzzle: puzzle)
         
         if let match = match {
-            // Additional gating: ensure piece is physically close to its mapped target
-            let targetPose = resolvePose(for: match.target)
-            let targetScenePos = targetPose.map { targetSection.convert($0.centroidInContainer, to: self) } ?? .zero
-            let centerDistance = hypot(mappedPosition.x - targetScenePos.x, mappedPosition.y - targetScenePos.y)
-            
-            if centerDistance > dynamicConnectionThreshold() {
-                print("[VALIDATION] ❌ Too far for connection: \(Int(centerDistance))px")
-                return false
-            }
-            
             // Bind piece to target if not already bound
             if piece.userData?["assignedTargetId"] as? String == nil {
                 piece.userData?["assignedTargetId"] = match.target.id
@@ -498,12 +481,29 @@ extension TangramPuzzleScene {
                             let flipped = (tNode.userData?["isFlipped"] as? Bool) ?? false
                             return (t, tScene, z, flipped)
                         }
+                },
+                minFeatureAgreementDeg: 30, // require feature-angle agreement ≤ 30° for initial mapping
+                hasAnchorEdgeContact: { () -> Bool in
+                    // Require the anchor to have at least one edge/vertex contact with any piece in the same group
+                    let nodes = self.availablePieces.filter { n in
+                        guard let id = n.name else { return false }
+                        return group.pieces.contains(id)
+                    }
+                    guard let anchor = nodes.first(where: { $0.name == rankedAnchor.name }) else { return false }
+                    for n in nodes where n !== anchor {
+                        let d = self.groupManager.minimumPolygonDistance(between: anchor, and: n)
+                        if d <= 16 { return true }
+                    }
+                    return false
                 }
             )
             
             if let m = mapping {
                 rankedAnchor.userData?["assignedTargetId"] = m.anchorTargetId
+                // Record the anchor→target pair for future refinement, but do NOT auto-validate the anchor yet.
+                // We only validate the anchor after at least one additional piece validates via mapping.
                 mappingService.appendPair(groupId: group.id, pieceId: rankedAnchor.name ?? "", targetId: m.anchorTargetId)
+                // Revalidate the rest of the unvalidated pieces in this group using the new mapping
                 revalidateUnvalidatedPieces(in: group, excluding: rankedAnchor.name)
             }
         }
@@ -589,6 +589,12 @@ extension TangramPuzzleScene {
             return // Already validated
         }
         
+        // Guard: only validate anchor if there's at least one additional validated pair in this group
+        let pairs = mappingService.pairs(groupId: group.id)
+        if pairs.filter({ $0.pieceId != anchorId && $0.targetId != mapping.anchorTargetId }).isEmpty {
+            // Defer anchor validation until another piece validates via mapping
+            return
+        }
         print("[VALIDATION] ✅ ANCHOR piece=\(anchorId) type=\(anchorType.rawValue) → target=\(mapping.anchorTargetId)")
         aState.markAsValidated(connections: [])
         pieceStates[anchorId] = aState
@@ -600,6 +606,15 @@ extension TangramPuzzleScene {
         
         if let tNode = targetSilhouettes[mapping.anchorTargetId] {
             applyValidatedFill(to: tNode, for: anchorType)
+            // Defensive: remove any lingering red/outline styles and hint overlays
+            tNode.strokeColor = TangramColors.Sprite.uiColor(for: anchorType)
+            tNode.lineWidth = 2
+            // Remove any nudge overlays for this target
+            let nudgeName = "nudge_\(tNode.name ?? "")"
+            targetSection.childNode(withName: nudgeName)?.removeFromParent()
+            if let container = targetSection.childNode(withName: "puzzleContainer") {
+                container.childNode(withName: nudgeName)?.removeFromParent()
+            }
             let pulse = SKAction.sequence([
                 SKAction.scale(to: 1.1, duration: 0.1),
                 SKAction.scale(to: 1.0, duration: 0.1)
@@ -614,8 +629,31 @@ extension TangramPuzzleScene {
     private func showSmartNudgeIfNeeded(piece: PuzzlePieceNode, pieceType: TangramPieceType, pieceId: String,
                                        pieceScenePos: CGPoint, pieceFeatureAngle: CGFloat,
                                        group: ConstructionGroup, puzzle: GamePuzzleData) {
-        let shouldNudge = nudgeManager.shouldShowNudge(for: piece, in: group)
+        var shouldNudge = nudgeManager.shouldShowNudge(for: piece, in: group)
         
+        // If parallelogram and near-correct except flip, force a flip-specific nudge even on first attempt
+        if pieceType == .parallelogram {
+            let tol = currentValidationTolerances()
+            // Try to derive failure reason even if not validated yet
+            if let target = puzzle.targetPieces.first(where: { $0.pieceType == pieceType && !validatedTargets.contains($0.id) }) {
+                let tPose = resolvePose(for: target)
+                let targetScenePos = tPose.map { targetSection.convert($0.centroidInContainer, to: self) } ?? .zero
+                let detailed = mappingService.validateMappedDetailed(
+                    mappedPose: (pos: pieceScenePos, rot: pieceFeatureAngle, isFlipped: piece.isFlipped),
+                    pieceType: pieceType,
+                    target: target,
+                    targetCentroidScene: targetScenePos,
+                    validator: TangramPieceValidator(
+                        positionTolerance: tol.pos,
+                        rotationTolerance: tol.rotDeg,
+                        edgeContactTolerance: tol.edge
+                    )
+                )
+                if detailed.failure == .needsFlip {
+                    shouldNudge = true
+                }
+            }
+        }
         guard shouldNudge else { return }
         
         let nudgeLevel = nudgeManager.determineNudgeLevel(
@@ -656,7 +694,11 @@ extension TangramPuzzleScene {
             }()
             
             let promoteDirected = (centerDistance < 140) && (failureReason == .wrongPosition(offset: centerDistance))
-            let levelToUse: NudgeLevel = promoteDirected ? max(effectiveLevel, .directed) : effectiveLevel
+            var levelToUse: NudgeLevel = promoteDirected ? max(effectiveLevel, .directed) : effectiveLevel
+            // Elevate flip-needed nudges to specific for clarity
+            if failureReason == .needsFlip {
+                levelToUse = max(levelToUse, .specific)
+            }
             
             let nudgeContent = nudgeManager.generateNudge(
                 level: levelToUse,
@@ -687,10 +729,14 @@ extension TangramPuzzleScene {
                   let piece = availablePieces.first(where: { $0.name == pieceId }),
                   let state = pieceStates[pieceId] else { continue }
             
-            if case .placed = state.state {
+            switch state.state {
+            case .placed, .validating:
                 validatePlacedPiece(piece)
-            } else if case .validating = state.state {
+            case .invalid:
+                // After mapping creation/refinement or another piece validation, retry invalid pieces in the group
                 validatePlacedPiece(piece)
+            default:
+                break
             }
         }
     }

@@ -53,15 +53,22 @@ class SmartNudgeManager {
         // Check confidence threshold - intent-based, not zone-based
         if group.confidence < 0.3 { return false }  // Lower threshold for intent detection
         
-        // Check attempt count
+        // Attempts and cooldown
         let attempts = group.attemptHistory[pieceId] ?? 0
-        if attempts < 2 { return false } // Need at least 2 attempts
-        
-        // Check nudge cooldown
         let history = nudgeHistories[pieceId] ?? NudgeHistory()
-        if !history.shouldShowNudge(baseInterval: baseNudgeInterval) {
-            return false
+        let canShowNow = history.shouldShowNudge(baseInterval: baseNudgeInterval)
+        
+        // Parallelogram flip-friendly bypass: allow early nudge even on first attempt
+        // if construction intent is present and cooldown allows
+        if piece.pieceType == .parallelogram {
+            if group.confidence > 0.25 && canShowNow {
+                return true
+            }
         }
+        
+        // Default gating by attempts and cooldown
+        if attempts < 2 { return false }
+        if !canShowNow { return false }
         
         // Intent-based checks (confidence and attempts)
         // Higher confidence = more likely to nudge

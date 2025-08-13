@@ -60,6 +60,11 @@ class ConstructionGroupManager {
     // MARK: - Properties
     
     private var groups: [UUID: ConstructionGroup] = [:]
+    // Persisted motion state for intent detection (no zones)
+    private var lastPiecePose: [String: (pos: CGPoint, rot: CGFloat, t: TimeInterval)] = [:]
+    private var lastGroupCentroid: [UUID: (pos: CGPoint, t: TimeInterval)] = [:]
+    private var groupDwellStart: [UUID: TimeInterval] = [:]
+    private var groupValidationGate: [UUID: Bool] = [:]
     
     // MARK: - Public Interface
     
@@ -101,6 +106,8 @@ class ConstructionGroupManager {
             groups[id]?.updateState()
             if let group = groups[id] {
                 groups[id]?.confidence = calculateConfidence(for: group, pieces: pieces)
+                // Update validation intent gate (relocating vs constructing with dwell)
+                groupValidationGate[id] = computeValidationGate(for: group, pieces: pieces)
             }
         }
         
@@ -154,7 +161,9 @@ class ConstructionGroupManager {
         
         // Check minimum group size
         guard group.pieces.count >= Config.minPiecesForValidation else { return false }
-        
+        // Intent gate: only validate when not relocating and dwell + constructing evidence are present
+        if groupValidationGate[group.id] != true { return false }
+
         // Intent-based thresholds based on validation state (no zones)
         switch group.validationState {
         case .constructing:
@@ -271,8 +280,100 @@ class ConstructionGroupManager {
         return proximityMap
     }
 
+    // MARK: - Intent Gating (no zones)
+    private func computeValidationGate(for group: ConstructionGroup, pieces: [PuzzlePieceNode]) -> Bool {
+        let now = CACurrentMediaTime()
+        // Extract group nodes
+        let groupNodes: [PuzzlePieceNode] = pieces.filter { node in
+            guard let id = node.name else { return false }
+            return group.pieces.contains(id)
+        }
+        guard groupNodes.count >= Config.minPiecesForValidation else { return false }
+
+        // Compute velocities for cohesive relocation check
+        var velocities: [CGVector] = []
+        for node in groupNodes {
+            guard let id = node.name else { continue }
+            let prev = lastPiecePose[id]
+            let dt = max(0.016, now - (prev?.t ?? now))
+            let vx = (node.position.x - (prev?.pos.x ?? node.position.x)) / dt
+            let vy = (node.position.y - (prev?.pos.y ?? node.position.y)) / dt
+            velocities.append(CGVector(dx: vx, dy: vy))
+            lastPiecePose[id] = (node.position, node.zRotation, now)
+        }
+        // Average velocity
+        let avg = velocities.reduce(CGVector(dx: 0, dy: 0)) { CGVector(dx: $0.dx + $1.dx, dy: $0.dy + $1.dy) }
+        let n = max(1, velocities.count)
+        let vAvg = CGVector(dx: avg.dx / CGFloat(n), dy: avg.dy / CGFloat(n))
+        let avgSpeed = hypot(vAvg.dx, vAvg.dy)
+        // Angular coherence
+        func angle(_ v: CGVector) -> CGFloat { atan2(v.dy, v.dx) }
+        let avgAngle = angle(vAvg)
+        let meanAngleDiff = velocities.map { abs(wrapAngle(angle($0) - avgAngle)) }.reduce(0, +) / CGFloat(n)
+        let relocating = (avgSpeed > 20) && (meanAngleDiff < Config.angleThreshold)
+
+        // Dwell detection based on centroid speed
+        let centroid = group.centerOfMass
+        let prevCentroid = lastGroupCentroid[group.id]
+        let dtc = max(0.016, now - (prevCentroid?.t ?? now))
+        let centroidSpeed = hypot(centroid.x - (prevCentroid?.pos.x ?? centroid.x), centroid.y - (prevCentroid?.pos.y ?? centroid.y)) / dtc
+        lastGroupCentroid[group.id] = (centroid, now)
+        let dwellThresholdSpeed: CGFloat = 5
+        let dwellRequired: TimeInterval = 0.35
+        if centroidSpeed < dwellThresholdSpeed {
+            if groupDwellStart[group.id] == nil { groupDwellStart[group.id] = now }
+        } else {
+            groupDwellStart[group.id] = nil
+        }
+        let hasDwell = (now - (groupDwellStart[group.id] ?? now)) >= dwellRequired
+
+        // Constructing evidence: edge contacts or fine adjustments
+        let contactCount = countEdgeContacts(for: group, pieces: pieces)
+        let fineAdjustmentsRatio = estimateFineAdjustmentsRatio(for: groupNodes, now: now)
+        let constructingEvidence = (contactCount > 0) || (fineAdjustmentsRatio > 0.3)
+
+        // Gate: not relocating AND has dwell AND constructing evidence
+        return (!relocating) && hasDwell && constructingEvidence
+    }
+
+    private func countEdgeContacts(for group: ConstructionGroup, pieces: [PuzzlePieceNode]) -> Int {
+        let nodes = pieces.filter { node in group.pieces.contains(node.name ?? "") }
+        var count = 0
+        for i in 0..<nodes.count {
+            for j in (i+1)..<nodes.count {
+                let d = minimumPolygonDistance(between: nodes[i], and: nodes[j])
+                if d <= Config.edgeAdjacencyTolerance { count += 1 }
+            }
+        }
+        return count
+    }
+
+    private func estimateFineAdjustmentsRatio(for nodes: [PuzzlePieceNode], now: TimeInterval) -> CGFloat {
+        var fineCount: CGFloat = 0
+        for node in nodes {
+            guard let id = node.name, let prev = lastPiecePose[id] else { continue }
+            // removed unused dt calculation
+            let dp = hypot(node.position.x - prev.pos.x, node.position.y - prev.pos.y)
+            let drot = abs(wrapAngle(node.zRotation - prev.rot))
+            // Small but non-zero adjustments within this tick
+            if (dp > 0.5 && dp < 8) || (drot > 0.02 && drot < 0.17) { // ~1°–10°
+                fineCount += 1
+            }
+        }
+        let total = CGFloat(max(1, nodes.count))
+        return fineCount / total
+    }
+
+    private func wrapAngle(_ a: CGFloat) -> CGFloat {
+        var x = a.truncatingRemainder(dividingBy: .pi * 2)
+        if x > .pi { x -= 2 * .pi }
+        if x < -.pi { x += 2 * .pi }
+        return x
+    }
+
     // Compute minimum distance between two piece polygons in the current coordinate space
-    private func minimumPolygonDistance(between a: PuzzlePieceNode, and b: PuzzlePieceNode) -> CGFloat {
+    // Expose for validator usage
+    func minimumPolygonDistance(between a: PuzzlePieceNode, and b: PuzzlePieceNode) -> CGFloat {
         func transformedVertices(for piece: PuzzlePieceNode) -> [CGPoint] {
             guard let type = piece.pieceType else { return [] }
             // 1) Base vertices in local piece space

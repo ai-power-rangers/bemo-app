@@ -50,6 +50,8 @@ class TangramGameViewModel {
     var lastProgressTime = Date()
     var isShowingHintAnimation: Bool = false
     private var hintDismissTask: Task<Void, Never>?
+    // Cache scene-validated target ids for adjacency-aware hints
+    private var validatedTargetIdsCache: Set<String> = []
     // MARK: - Validated targets tracking for hints
     private func validatedTargetIds() -> Set<String> {
         // Build from placedPieces with .correct state where we know assigned target
@@ -64,6 +66,7 @@ class TangramGameViewModel {
     func syncValidatedTargetIds(_ ids: Set<String>) {
         // Ensure placedPieces entries exist for each validated target id and assign them
         guard let puzzle = selectedPuzzle else { return }
+        validatedTargetIdsCache = ids
         for tid in ids {
             if let target = puzzle.targetPieces.first(where: { $0.id == tid }) {
                 // Ensure a placed piece entry exists (create a lightweight entry if missing)
@@ -256,7 +259,7 @@ class TangramGameViewModel {
             lastMovedPiece: lastMovedPiece,
             timeSinceLastProgress: timeSinceProgress,
             previousHints: hintHistory,
-            validatedTargetIds: validatedTargetIds(),
+            validatedTargetIds: validatedTargetIdsCache.isEmpty ? validatedTargetIds() : validatedTargetIdsCache,
             difficultySetting: effectiveDifficulty
         )
         
@@ -531,7 +534,7 @@ class TangramGameViewModel {
             }
         }
         
-        // Validate piece placements
+        // Validate piece placements using mapping-only (realistic physical-world flow)
         validatePieces()
         
         // Update game state

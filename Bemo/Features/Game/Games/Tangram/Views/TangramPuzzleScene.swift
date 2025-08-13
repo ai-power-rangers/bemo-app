@@ -473,14 +473,10 @@ class TangramPuzzleScene: SKScene {
         
         // Snapping removed
         
-        // Update state to PLACED only if the piece truly moved less than a small threshold since last update
+        // Mark state to PLACED at touch end (we already use a short placement delay to confirm)
         if let pieceId = selected.name {
             if var state = pieceStates[pieceId] {
-                // Only mark placed if minimal movement in the last few frames to avoid rapid pick/drop misclassification
-                let distance = hypot(selected.position.x - (state.currentPosition.x), selected.position.y - (state.currentPosition.y))
-                if distance < 3.0 {
-                    state.markAsPlaced()
-                }
+                state.markAsPlaced()
                 pieceStates[pieceId] = state
                 selected.pieceState = state
                 selected.updateStateIndicator()

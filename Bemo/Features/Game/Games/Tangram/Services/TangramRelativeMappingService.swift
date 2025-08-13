@@ -39,7 +39,9 @@ final class TangramRelativeMappingService {
         groupId: UUID,
         groupPieceIds: Set<String>,
         pickAnchor: () -> (anchorPieceId: String, anchorPositionScene: CGPoint, anchorRotation: CGFloat, anchorIsFlipped: Bool, anchorPieceType: TangramPieceType),
-        candidateTargets: () -> [(target: GamePuzzleData.TargetPiece, centroidScene: CGPoint, expectedZ: CGFloat, isFlipped: Bool)]
+        candidateTargets: () -> [(target: GamePuzzleData.TargetPiece, centroidScene: CGPoint, expectedZ: CGFloat, isFlipped: Bool)],
+        minFeatureAgreementDeg: CGFloat? = nil,
+        hasAnchorEdgeContact: (() -> Bool)? = nil
     ) -> AnchorMapping? {
         if let existing = groupAnchorMappings[groupId] { return existing }
 
@@ -72,9 +74,18 @@ final class TangramRelativeMappingService {
             version: 1,
             pairCount: 1
         )
+        // Optional gating: require minimum feature-angle agreement
+        let deg = abs(rotationDelta) * 180 / .pi
+        if let minAgree = minFeatureAgreementDeg, deg > minAgree {
+            return nil
+        }
+        // Optional gating: require anchor to have an edge contact to some neighbor
+        if let contactCheck = hasAnchorEdgeContact, contactCheck() == false {
+            return nil
+        }
         groupAnchorMappings[groupId] = mapping
-        // Do NOT consume/validate anchor target here. Only consume when a piece actually validates.
-        let deg = rotationDelta * 180 / .pi
+        // Do NOT consume/validate anchor target here. Only consume when a non-anchor piece validates,
+        // then validate the anchor afterwards.
         print("[MAPPING] Established group=\(groupId) anchorPiece=\(anchor.anchorPieceId) → anchorTarget=\(bestMatch.target.id) rotDelta=\(String(format: "%.1f", deg))° (feature) trans=(\(Int(mapping.translationOffset.x)),\(Int(mapping.translationOffset.y))) flipParity=\(parity)")
         return mapping
     }
