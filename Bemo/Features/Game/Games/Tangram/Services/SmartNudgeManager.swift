@@ -33,7 +33,7 @@ class SmartNudgeManager {
     
     private var nudgeHistories: [String: NudgeHistory] = [:]
     private var pieceAttempts: [String: [(date: Date, position: CGPoint)]] = [:]
-    private let baseNudgeInterval: TimeInterval = 5.0
+    private let baseNudgeInterval: TimeInterval = 3.0
     private let maxNudgeLevel: NudgeLevel = .solution
     
     // MARK: - Public Interface
@@ -51,24 +51,31 @@ class SmartNudgeManager {
         guard group.validationState.shouldValidate else { return false }
         
         // Check confidence threshold - intent-based, not zone-based
-        if group.confidence < 0.5 { return false }  // Moderate threshold for clear intent
+        if group.confidence < 0.3 { return false }  // Lower threshold for intent detection
         
-        // Check attempt count
+        // Attempts and cooldown
         let attempts = group.attemptHistory[pieceId] ?? 0
-        if attempts < 3 { return false } // Need at least 3 attempts
-        
-        // Check nudge cooldown
         let history = nudgeHistories[pieceId] ?? NudgeHistory()
-        if !history.shouldShowNudge(baseInterval: baseNudgeInterval) {
-            return false
+        let canShowNow = history.shouldShowNudge(baseInterval: baseNudgeInterval)
+        
+        // Parallelogram flip-friendly bypass: allow early nudge even on first attempt
+        // if construction intent is present and cooldown allows
+        if piece.pieceType == .parallelogram {
+            if group.confidence > 0.25 && canShowNow {
+                return true
+            }
         }
+        
+        // Default gating by attempts and cooldown
+        if attempts < 2 { return false }
+        if !canShowNow { return false }
         
         // Intent-based checks (confidence and attempts)
         // Higher confidence = more likely to nudge
         // More attempts = more likely to nudge
-        return (attempts >= 3 && group.confidence > 0.6) ||
-               (attempts >= 5 && group.confidence > 0.5) ||
-               (attempts >= 7)
+        return (attempts >= 2 && group.confidence > 0.25) ||
+               (attempts >= 3 && group.confidence > 0.45) ||
+               (attempts >= 5)
     }
     
     /// Determine appropriate nudge level
@@ -83,9 +90,9 @@ class SmartNudgeManager {
         case .scattered, .exploring:
             level = .none
         case .constructing:
-            level = confidence > 0.7 ? .gentle : .visual
+            level = confidence > 0.6 ? .gentle : .visual
         case .building:
-            level = confidence > 0.7 ? .specific : .gentle
+            level = confidence > 0.6 ? .specific : .gentle
         case .completing:
             level = .directed
         }
@@ -124,21 +131,43 @@ class SmartNudgeManager {
             duration = 2.0
             
         case .gentle:
-            message = failure?.nudgeMessage ?? "Try adjusting this piece"
+            // If there's a specific failure (rotation/flip), escalate message but keep subtle visual
+            switch failure {
+            case .wrongRotation:
+                message = "Try rotating"
+            case .needsFlip:
+                message = "Try flipping"
+            default:
+                message = failure?.nudgeMessage ?? "Try adjusting this piece"
+            }
             visualHint = .pulse(intensity: 0.5)
             duration = 3.0
             
         case .specific:
             switch failure {
             case .wrongRotation(let degrees):
-                message = degrees > 45 ? "Rotate significantly" : "Fine-tune rotation"
-                visualHint = .colorChange(color: .systemYellow, alpha: 0.5)
+                message = degrees > 45 ? "Rotate significantly" : "Slight rotation needed"
+                if let target = targetInfo {
+                    visualHint = .ghostPiece(position: target.position, rotation: target.rotation)
+                } else {
+                    visualHint = .colorChange(color: .systemYellow, alpha: 0.5)
+                }
             case .needsFlip:
-                message = "Try flipping this piece"
-                visualHint = .pulse(intensity: 0.7)
+                message = "Flip the piece"
+                if let target = targetInfo {
+                    visualHint = .ghostPiece(position: target.position, rotation: target.rotation)
+                } else {
+                    visualHint = .pulse(intensity: 0.7)
+                }
             case .wrongPosition:
-                message = "Move closer to other pieces"
-                visualHint = .colorChange(color: .systemBlue, alpha: 0.5)
+                message = "Move closer to the target"
+                if let target = targetInfo {
+                    // Directional arrow towards target centroid
+                    let angle = atan2(target.position.y, target.position.x)
+                    visualHint = .arrow(direction: angle)
+                } else {
+                    visualHint = .colorChange(color: .systemBlue, alpha: 0.5)
+                }
             default:
                 message = "This piece needs adjustment"
                 visualHint = .pulse(intensity: 0.5)

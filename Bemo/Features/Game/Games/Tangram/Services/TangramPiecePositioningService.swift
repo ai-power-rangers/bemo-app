@@ -5,7 +5,7 @@
 //  Service for handling piece positioning and alignment logic
 //
 
-// WHAT: Business logic for piece positioning, snapping, and alignment
+// WHAT: Business logic for piece positioning and layout (snapping removed)
 // ARCHITECTURE: Service in MVVM-S pattern, stateless positioning calculations
 // USAGE: Used by scene and gameplay service for piece positioning operations
 
@@ -20,61 +20,8 @@ class TangramPiecePositioningService {
     
     private let geometryUtilities: TangramGeometryUtilities.Type = TangramGeometryUtilities.self
     
-    // MARK: - Snap Detection
-    
-    /// Determines if a piece should snap to target position
-    func shouldSnapToTarget(piecePosition: CGPoint, targetPosition: CGPoint) -> Bool {
-        let distance = geometryUtilities.calculateDistance(from: piecePosition, to: targetPosition)
-        return distance <= Double(TangramGameConstants.Validation.positionTolerance)
-    }
-    
-    /// Calculates snap strength for visual feedback
-    func calculateSnapStrength(piecePosition: CGPoint, targetPosition: CGPoint) -> SnapStrength {
-        let distance = geometryUtilities.calculateDistance(from: piecePosition, to: targetPosition)
-        let tolerance = Double(TangramGameConstants.Validation.positionTolerance)
-        
-        if distance <= tolerance {
-            return .strong
-        } else if distance <= tolerance * 2.5 {
-            return .medium
-        } else if distance <= tolerance * 4.0 {
-            return .weak
-        } else {
-            return .none
-        }
-    }
-    
-    enum SnapStrength {
-        case none
-        case weak
-        case medium
-        case strong
-        
-        var alpha: CGFloat {
-            switch self {
-            case .none: return 0.3
-            case .weak: return 0.4
-            case .medium: return 0.5
-            case .strong: return 0.7
-            }
-        }
-        
-        var lineWidth: CGFloat {
-            switch self {
-            case .none: return 1.0
-            case .weak: return 1.5
-            case .medium: return 2.0
-            case .strong: return 3.0
-            }
-        }
-        
-        var color: SKColor {
-            switch self {
-            case .none: return SKColor.darkGray
-            case .weak, .medium, .strong: return SKColor.systemGreen
-            }
-        }
-    }
+    // MARK: - Snap Detection (removed)
+    // All snap-related logic removed for realism
     
     // MARK: - Piece Layout
     
@@ -118,32 +65,9 @@ class TangramPiecePositioningService {
     
     // MARK: - Alignment Helpers
     
-    /// Finds the nearest valid rotation for a piece
-    func nearestValidRotation(currentRotation: Double, validRotations: [Double]) -> Double {
-        guard !validRotations.isEmpty else { return currentRotation }
-        
-        let normalized = geometryUtilities.normalizeAngle(currentRotation)
-        
-        var nearestRotation = validRotations[0]
-        var minDifference = Double.greatestFiniteMagnitude
-        
-        for rotation in validRotations {
-            let diff = abs(geometryUtilities.normalizeAngle(normalized - rotation))
-            if diff < minDifference {
-                minDifference = diff
-                nearestRotation = rotation
-            }
-        }
-        
-        return nearestRotation
-    }
+    // Removed nearestValidRotation: no auto-rotation alignment
     
-    /// Aligns a position to grid if within threshold
-    func alignToGrid(position: CGPoint, gridSize: CGFloat = 10) -> CGPoint {
-        let x = round(position.x / gridSize) * gridSize
-        let y = round(position.y / gridSize) * gridSize
-        return CGPoint(x: x, y: y)
-    }
+    // Removed alignToGrid / snapToGrid: no grid alignment
     
     // MARK: - Bounds Calculations
     
@@ -234,8 +158,5 @@ extension TangramPiecePositioningService {
         return result
     }
     
-    func snapToGrid(_ position: CGPoint, gridSize: CGFloat) -> CGPoint {
-        // Use existing alignToGrid method
-        return alignToGrid(position: position, gridSize: gridSize)
-    }
+    // snapToGrid removed
 }

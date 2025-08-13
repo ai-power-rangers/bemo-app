@@ -177,6 +177,17 @@ class GameLobbyViewModel {
                 )
             )
             
+            // Add Animation Lab
+            let animationLabTool = AnimationLabTool()
+            availableGames.append(
+                GameItem(
+                    devTool: animationLabTool,
+                    iconName: "wand.and.stars",
+                    color: .indigo,
+                    badge: "Dev Tool"
+                )
+            )
+            
             // Add TgramViewer as a developer tool
             let tgramViewerGame = TgramViewerGame()
             availableGames.append(

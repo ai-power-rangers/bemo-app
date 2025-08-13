@@ -19,18 +19,19 @@ class ConstructionGroupManager {
     
     private enum Config {
         // Proximity & Grouping
-        static let proximityThreshold: CGFloat = 100       // Pixels between edges
+        static let proximityThreshold: CGFloat = 60        // Centroid proximity fallback
+        static let edgeAdjacencyTolerance: CGFloat = 16    // Pixel tolerance for edge/vertex contact
         static let angleThreshold: CGFloat = 0.26          // ~15 degrees
         static let groupTimeout: TimeInterval = 30         // Seconds before group expires
         
         // Intent-based validation thresholds (no spatial zones)
-        static let constructingThreshold: Float = 0.60 // Moderate - clear intent needed
-        static let buildingThreshold: Float = 0.50     // Active construction with purpose
+        static let constructingThreshold: Float = 0.45 // Higher to avoid premature validation
+        static let buildingThreshold: Float = 0.40     // Higher to avoid premature validation
         
         // Confidence Score Weights
-        static let spatialWeight: Float = 0.35
-        static let temporalWeight: Float = 0.35
-        static let behavioralWeight: Float = 0.30
+        static let spatialWeight: Float = 0.4
+        static let temporalWeight: Float = 0.2
+        static let behavioralWeight: Float = 0.4
         
         // Spatial Signal Weights
         static let edgeProximityWeight: Float = 0.3
@@ -59,6 +60,11 @@ class ConstructionGroupManager {
     // MARK: - Properties
     
     private var groups: [UUID: ConstructionGroup] = [:]
+    // Persisted motion state for intent detection (no zones)
+    private var lastPiecePose: [String: (pos: CGPoint, rot: CGFloat, t: TimeInterval)] = [:]
+    private var lastGroupCentroid: [UUID: (pos: CGPoint, t: TimeInterval)] = [:]
+    private var groupDwellStart: [UUID: TimeInterval] = [:]
+    private var groupValidationGate: [UUID: Bool] = [:]
     
     // MARK: - Public Interface
     
@@ -100,10 +106,19 @@ class ConstructionGroupManager {
             groups[id]?.updateState()
             if let group = groups[id] {
                 groups[id]?.confidence = calculateConfidence(for: group, pieces: pieces)
+                // Update validation intent gate (relocating vs constructing with dwell)
+                groupValidationGate[id] = computeValidationGate(for: group, pieces: pieces)
             }
         }
         
         return Array(groups.values)
+    }
+
+    /// Record an attempt for a specific piece inside a group to drive nudge logic
+    func recordAttempt(in groupId: UUID, pieceId: String) {
+        guard var group = groups[groupId] else { return }
+        group.recordAttempt(for: pieceId)
+        groups[groupId] = group
     }
     
     /// Calculate confidence score for a group
@@ -146,7 +161,9 @@ class ConstructionGroupManager {
         
         // Check minimum group size
         guard group.pieces.count >= Config.minPiecesForValidation else { return false }
-        
+        // Intent gate: only validate when not relocating and dwell + constructing evidence are present
+        if groupValidationGate[group.id] != true { return false }
+
         // Intent-based thresholds based on validation state (no zones)
         switch group.validationState {
         case .constructing:
@@ -226,13 +243,6 @@ class ConstructionGroupManager {
         groups[groupId] = group
     }
     
-    /// Record an attempt for a piece in a group
-    func recordAttempt(for pieceId: String, in groupId: UUID) {
-        guard var group = groups[groupId] else { return }
-        group.recordAttempt(for: pieceId)
-        groups[groupId] = group
-    }
-    
     // MARK: - Private Helpers
     
     private func cleanStaleGroups() {
@@ -251,12 +261,16 @@ class ConstructionGroupManager {
             for j in (i+1)..<pieces.count {
                 guard let id2 = pieces[j].name else { continue }
                 
-                let distance = hypot(
+                // Centroid distance fallback
+                let centerDistance = hypot(
                     pieces[i].position.x - pieces[j].position.x,
                     pieces[i].position.y - pieces[j].position.y
                 )
                 
-                if distance < Config.proximityThreshold {
+                // Polygon edge/vertex adjacency detection (physical realism: touching pieces are connected)
+                let polyDistance = minimumPolygonDistance(between: pieces[i], and: pieces[j])
+                
+                if centerDistance < Config.proximityThreshold || polyDistance <= Config.edgeAdjacencyTolerance {
                     proximityMap[id1]?.insert(id2)
                     proximityMap[id2, default: []].insert(id1)
                 }
@@ -264,6 +278,167 @@ class ConstructionGroupManager {
         }
         
         return proximityMap
+    }
+
+    // MARK: - Intent Gating (no zones)
+    private func computeValidationGate(for group: ConstructionGroup, pieces: [PuzzlePieceNode]) -> Bool {
+        let now = CACurrentMediaTime()
+        // Extract group nodes
+        let groupNodes: [PuzzlePieceNode] = pieces.filter { node in
+            guard let id = node.name else { return false }
+            return group.pieces.contains(id)
+        }
+        guard groupNodes.count >= Config.minPiecesForValidation else { return false }
+
+        // Compute velocities for cohesive relocation check
+        var velocities: [CGVector] = []
+        for node in groupNodes {
+            guard let id = node.name else { continue }
+            let prev = lastPiecePose[id]
+            let dt = max(0.016, now - (prev?.t ?? now))
+            let vx = (node.position.x - (prev?.pos.x ?? node.position.x)) / dt
+            let vy = (node.position.y - (prev?.pos.y ?? node.position.y)) / dt
+            velocities.append(CGVector(dx: vx, dy: vy))
+            lastPiecePose[id] = (node.position, node.zRotation, now)
+        }
+        // Average velocity
+        let avg = velocities.reduce(CGVector(dx: 0, dy: 0)) { CGVector(dx: $0.dx + $1.dx, dy: $0.dy + $1.dy) }
+        let n = max(1, velocities.count)
+        let vAvg = CGVector(dx: avg.dx / CGFloat(n), dy: avg.dy / CGFloat(n))
+        let avgSpeed = hypot(vAvg.dx, vAvg.dy)
+        // Angular coherence
+        func angle(_ v: CGVector) -> CGFloat { atan2(v.dy, v.dx) }
+        let avgAngle = angle(vAvg)
+        let meanAngleDiff = velocities.map { abs(wrapAngle(angle($0) - avgAngle)) }.reduce(0, +) / CGFloat(n)
+        let relocating = (avgSpeed > 20) && (meanAngleDiff < Config.angleThreshold)
+
+        // Dwell detection based on centroid speed
+        let centroid = group.centerOfMass
+        let prevCentroid = lastGroupCentroid[group.id]
+        let dtc = max(0.016, now - (prevCentroid?.t ?? now))
+        let centroidSpeed = hypot(centroid.x - (prevCentroid?.pos.x ?? centroid.x), centroid.y - (prevCentroid?.pos.y ?? centroid.y)) / dtc
+        lastGroupCentroid[group.id] = (centroid, now)
+        let dwellThresholdSpeed: CGFloat = 5
+        let dwellRequired: TimeInterval = 0.35
+        if centroidSpeed < dwellThresholdSpeed {
+            if groupDwellStart[group.id] == nil { groupDwellStart[group.id] = now }
+        } else {
+            groupDwellStart[group.id] = nil
+        }
+        let hasDwell = (now - (groupDwellStart[group.id] ?? now)) >= dwellRequired
+
+        // Constructing evidence: edge contacts or fine adjustments
+        let contactCount = countEdgeContacts(for: group, pieces: pieces)
+        let fineAdjustmentsRatio = estimateFineAdjustmentsRatio(for: groupNodes, now: now)
+        let constructingEvidence = (contactCount > 0) || (fineAdjustmentsRatio > 0.3)
+
+        // Gate: not relocating AND has dwell AND constructing evidence
+        return (!relocating) && hasDwell && constructingEvidence
+    }
+
+    private func countEdgeContacts(for group: ConstructionGroup, pieces: [PuzzlePieceNode]) -> Int {
+        let nodes = pieces.filter { node in group.pieces.contains(node.name ?? "") }
+        var count = 0
+        for i in 0..<nodes.count {
+            for j in (i+1)..<nodes.count {
+                let d = minimumPolygonDistance(between: nodes[i], and: nodes[j])
+                if d <= Config.edgeAdjacencyTolerance { count += 1 }
+            }
+        }
+        return count
+    }
+
+    private func estimateFineAdjustmentsRatio(for nodes: [PuzzlePieceNode], now: TimeInterval) -> CGFloat {
+        var fineCount: CGFloat = 0
+        for node in nodes {
+            guard let id = node.name, let prev = lastPiecePose[id] else { continue }
+            // removed unused dt calculation
+            let dp = hypot(node.position.x - prev.pos.x, node.position.y - prev.pos.y)
+            let drot = abs(wrapAngle(node.zRotation - prev.rot))
+            // Small but non-zero adjustments within this tick
+            if (dp > 0.5 && dp < 8) || (drot > 0.02 && drot < 0.17) { // ~1°–10°
+                fineCount += 1
+            }
+        }
+        let total = CGFloat(max(1, nodes.count))
+        return fineCount / total
+    }
+
+    private func wrapAngle(_ a: CGFloat) -> CGFloat {
+        var x = a.truncatingRemainder(dividingBy: .pi * 2)
+        if x > .pi { x -= 2 * .pi }
+        if x < -.pi { x += 2 * .pi }
+        return x
+    }
+
+    // Compute minimum distance between two piece polygons in the current coordinate space
+    // Expose for validator usage
+    func minimumPolygonDistance(between a: PuzzlePieceNode, and b: PuzzlePieceNode) -> CGFloat {
+        func transformedVertices(for piece: PuzzlePieceNode) -> [CGPoint] {
+            guard let type = piece.pieceType else { return [] }
+            // 1) Base vertices in local piece space
+            let base = TangramGameGeometry.scaleVertices(
+                TangramGameGeometry.normalizedVertices(for: type),
+                by: TangramGameConstants.visualScale
+            )
+            // 2) Apply flip
+            let flipped: [CGPoint]
+            if piece.isFlipped {
+                flipped = base.map { CGPoint(x: -$0.x, y: $0.y) }
+            } else {
+                flipped = base
+            }
+            // 3) Apply rotation around origin (piece path is centered at 0,0)
+            let cosA = cos(piece.zRotation)
+            let sinA = sin(piece.zRotation)
+            let rotated = flipped.map { v in CGPoint(x: v.x * cosA - v.y * sinA, y: v.x * sinA + v.y * cosA) }
+            // 4) Translate to piece.position
+            let translated = rotated.map { CGPoint(x: $0.x + piece.position.x, y: $0.y + piece.position.y) }
+            return translated
+        }
+        func edges(_ poly: [CGPoint]) -> [(CGPoint, CGPoint)] {
+            guard poly.count >= 2 else { return [] }
+            return (0..<poly.count).map { i in (poly[i], poly[(i+1) % poly.count]) }
+        }
+        func segmentDistance(_ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint, _ p4: CGPoint) -> CGFloat {
+            // Standard segment-segment distance
+            let u = CGVector(dx: p2.x - p1.x, dy: p2.y - p1.y)
+            let v = CGVector(dx: p4.x - p3.x, dy: p4.y - p3.y)
+            let w = CGVector(dx: p1.x - p3.x, dy: p1.y - p3.y)
+            let a = u.dx*u.dx + u.dy*u.dy
+            let b = u.dx*v.dx + u.dy*v.dy
+            let c = v.dx*v.dx + v.dy*v.dy
+            let d = u.dx*w.dx + u.dy*w.dy
+            let e = v.dx*w.dx + v.dy*w.dy
+            let denom = a*c - b*b
+            var sc: CGFloat = 0
+            var tc: CGFloat = 0
+            func clamp(_ x: CGFloat, _ lo: CGFloat, _ hi: CGFloat) -> CGFloat { max(lo, min(hi, x)) }
+            if denom < 1e-6 {
+                sc = 0
+                tc = clamp(e/c, 0, 1)
+            } else {
+                sc = clamp((b*e - c*d)/denom, 0, 1)
+                tc = clamp((a*e - b*d)/denom, 0, 1)
+            }
+            let dpx = w.dx + sc*u.dx - tc*v.dx
+            let dpy = w.dy + sc*u.dy - tc*v.dy
+            return hypot(dpx, dpy)
+        }
+        let pa = transformedVertices(for: a)
+        let pb = transformedVertices(for: b)
+        if pa.isEmpty || pb.isEmpty { return .greatestFiniteMagnitude }
+        let ea = edges(pa)
+        let eb = edges(pb)
+        var minDist: CGFloat = .greatestFiniteMagnitude
+        for (a0, a1) in ea {
+            for (b0, b1) in eb {
+                let d = segmentDistance(a0, a1, b0, b1)
+                if d < minDist { minDist = d }
+                if minDist == 0 { return 0 }
+            }
+        }
+        return minDist
     }
     
     private func findCluster(starting: String, in proximityMap: [String: Set<String>]) -> Set<String> {
@@ -414,31 +589,17 @@ class ConstructionGroupManager {
         var signals = TemporalSignals()
         
         let timeSinceActivity = Date().timeIntervalSince(group.lastActivity)
+        
+        // Activity recency (more recent = higher)
+        signals.activityRecency = max(0, Float(1 - timeSinceActivity / Config.activityTimeoutSec))
+        
+        // Stability (pieces not moving much)
+        signals.stabilityDuration = timeSinceActivity > Config.stabilityThresholdSec ? 1 : 
+                                    Float(timeSinceActivity / Config.stabilityThresholdSec)
+        
+        // Focus time based on group age and activity
         let groupAge = Date().timeIntervalSince(group.createdAt)
-        
-        // Activity recency (more recent = higher, with faster decay)
-        signals.activityRecency = max(0, Float(1 - pow(timeSinceActivity / 10.0, 2))) // Quadratic decay over 10 seconds
-        
-        // Stability (pieces settled for a bit = higher intent)
-        if timeSinceActivity > Config.stabilityThresholdSec {
-            // Stable for longer than threshold
-            signals.stabilityDuration = min(1, Float(timeSinceActivity / 10.0)) // Max out at 10 seconds
-        } else {
-            // Still being adjusted
-            signals.stabilityDuration = Float(timeSinceActivity / Config.stabilityThresholdSec) * 0.5
-        }
-        
-        // Focus time based on sustained attention to group
-        // Consider both age and activity patterns
-        let focusScore = min(1, Float(groupAge / 20)) // Ramps up over 20 seconds
-        let activityBonus = signals.activityRecency * 0.3 // Recent activity adds to focus
-        signals.focusTime = min(1, focusScore + activityBonus)
-        
-        // Placement speed (rapid placement = higher intent)
-        let avgAttempts = Float(group.attemptHistory.values.reduce(0, +)) / Float(max(1, group.pieces.count))
-        if groupAge > 0 {
-            signals.placementSpeed = min(1, avgAttempts / Float(groupAge) * 10) // Normalize to attempts per 10 seconds
-        }
+        signals.focusTime = min(1, Float(groupAge / 10)) // Ramps up over 10 seconds
         
         return signals
     }

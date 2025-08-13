@@ -276,4 +276,9 @@ extension GameHostViewModel: GameDelegate {
             }
         }
     }
+
+    func getChildDifficultySetting() -> UserPreferences.DifficultySetting {
+        // Fallback to .normal if no active profile
+        return profileService.currentProfile?.preferences.difficultySetting ?? .normal
+    }
 }
