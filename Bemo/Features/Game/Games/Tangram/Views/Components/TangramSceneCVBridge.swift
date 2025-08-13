@@ -67,19 +67,29 @@ extension TangramPuzzleScene {
     // MARK: - CV Frame Rendering
     
     private func updateCVRender(_ frame: CVFrameEvent) {
-        // Update CV render section with frame data
-        // This simulates what the iPad would show based on CV input
-        
-        // Clear old pieces that aren't in the frame
+        // Update CV render section with frame data by mapping physical world → mini display
+        // 1) Build a similarity transform from physicalWorldSection bounds into cvMiniDisplay square
+        let miniSize = min(size.width * 0.25, 150)
+        let physWidth = physicalBounds.width
+        let physHeight = physicalBounds.height
+        guard physWidth > 0, physHeight > 0 else { return }
+        let scaleX = miniSize / physWidth
+        let scaleY = miniSize / physHeight
+        let uniformScale = min(scaleX, scaleY)
+
+        // Center the physical world into the mini square preserving aspect ratio
+        // Keep cvContent at origin and apply uniform scale; cvMiniDisplay itself is already positioned in the corner.
+        cvContent.setScale(uniformScale)
+        cvContent.position = .zero
+
+        // 2) Remove old nodes that are not present in the current frame
         let frameIds = Set(frame.objects.map { pieceIdFromCVName($0.name) })
-        for (pieceId, node) in cvPieces {
-            if !frameIds.contains(pieceId) {
-                node.removeFromParent()
-                cvPieces.removeValue(forKey: pieceId)
-            }
+        for (pieceId, node) in cvPieces where !frameIds.contains(pieceId) {
+            node.removeFromParent()
+            cvPieces.removeValue(forKey: pieceId)
         }
-        
-        // Update or create pieces from frame
+
+        // 3) Update or create each CV piece visualization using proper shape and color
         for object in frame.objects {
             updateCVPiece(object)
         }
@@ -89,28 +99,14 @@ extension TangramPuzzleScene {
         // Find or create CV visualization
         let pieceId = pieceIdFromCVName(cvPiece.name)
         
-        // Only show pieces that have been moved or placed (not just detected)
-        guard let state = pieceStates[pieceId] else {
-            // Remove from CV render if it exists but we don't have state
-            if let existingNode = cvPieces[pieceId] {
-                existingNode.removeFromParent()
-                cvPieces.removeValue(forKey: pieceId)
+        // Only show pieces that have been interacted with (not purely unobserved)
+        if let state = pieceStates[pieceId] {
+            switch state.state {
+            case .unobserved, .detected:
+                if let existingNode = cvPieces[pieceId] { existingNode.removeFromParent(); cvPieces.removeValue(forKey: pieceId) }
+                return
+            default: break
             }
-            return
-        }
-        
-        // Check if the state is not unobserved or detected
-        switch state.state {
-        case .unobserved, .detected:
-            // Remove from CV render if it exists but shouldn't be shown
-            if let existingNode = cvPieces[pieceId] {
-                existingNode.removeFromParent()
-                cvPieces.removeValue(forKey: pieceId)
-            }
-            return
-        case .moved, .placed, .validating, .validated, .invalid:
-            // Continue to show/update the piece in CV render
-            break
         }
         
         if cvPieces[pieceId] == nil {
@@ -122,29 +118,28 @@ extension TangramPuzzleScene {
         // Find the corresponding physical piece to get its position
         guard let physicalPiece = availablePieces.first(where: { $0.name == pieceId }) else { return }
         
-        // Map position from physical world to mini CV display
-        // Scale down significantly for the mini display
-        let miniDisplaySize: CGFloat = min(size.width * 0.25, 150)
-        let scale: CGFloat = miniDisplaySize / (size.width * 0.8)  // Scale relative to physical world width
+        // Position/rotation: use a direct mapping via cvContent's transform (uniformScale + center offset)
+        // Place cvNode as a child of cvContent to inherit uniform scaling and centering
+        if cvNode.parent !== cvContent { cvNode.removeFromParent(); cvContent.addChild(cvNode) }
+        cvNode.position = physicalPiece.position
+        cvNode.zRotation = physicalPiece.zRotation
         
-        let cvPos = CGPoint(
-            x: physicalPiece.position.x * scale,
-            y: physicalPiece.position.y * scale
-        )
-        
-        // Smooth position update - no jitter
-        cvNode.position = cvPos
-        cvNode.zRotation = physicalPiece.zRotation  // Use actual rotation from physical piece
-        
-        // Update flip state if it's a PuzzlePieceNode
-        if let cvPuzzlePiece = cvNode as? PuzzlePieceNode {
-            if cvPuzzlePiece.isFlipped != physicalPiece.isFlipped {
-                cvPuzzlePiece.flip()  // Sync flip state
-            }
-            
-            // Update visual state based on piece state
-            if let state = pieceStates[pieceId] {
-                updateCVPieceVisualState(cvPuzzlePiece, state: state)
+        // Update flip state and visuals for SKShapeNode-based CV piece
+        if let shape = cvNode as? SKShapeNode {
+            // Match bottom piece scale, using xScale sign to encode flip
+            let baseScaleX = max(0.0001, abs(physicalPiece.xScale))
+            let baseScaleY = max(0.0001, abs(physicalPiece.yScale))
+            let desiredSign: CGFloat = physicalPiece.isFlipped ? -1 : 1
+            shape.xScale = desiredSign * baseScaleX
+            shape.yScale = baseScaleY
+
+            if let pieceType = physicalPiece.pieceType {
+                shape.fillColor = TangramColors.Sprite.uiColor(for: pieceType).withAlphaComponent(0.6)
+                shape.strokeColor = TangramColors.Sprite.uiColor(for: pieceType)
+                shape.lineWidth = 1.0
+                if let state = pieceStates[pieceId] {
+                    updateCVShapeVisualState(shape, pieceType: pieceType, state: state)
+                }
             }
         }
     }
@@ -153,38 +148,25 @@ extension TangramPuzzleScene {
     
     // MARK: - CV Visual Feedback
     
-    private func updateCVPieceVisualState(_ cvPiece: PuzzlePieceNode, state: PieceState) {
-        // Update visual appearance based on validation state
+    private func updateCVShapeVisualState(_ shape: SKShapeNode, pieceType: TangramPieceType, state: PieceState) {
         switch state.state {
         case .validated:
-            cvPiece.alpha = 1.0
-            // Update shape color to indicate validation
-            if let shape = cvPiece.shapeNode {
-                shape.fillColor = shape.fillColor.withAlphaComponent(1.0)
-                shape.strokeColor = .systemGreen
-                shape.lineWidth = 3
-            }
+            shape.alpha = 1.0
+            shape.fillColor = shape.fillColor.withAlphaComponent(1.0)
+            shape.strokeColor = .systemGreen
+            shape.lineWidth = 3
         case .invalid:
-            cvPiece.alpha = 0.8
-            // Update shape color to indicate invalid
-            if let shape = cvPiece.shapeNode {
-                shape.strokeColor = .systemRed
-                shape.lineWidth = 2
-            }
+            shape.alpha = 0.8
+            shape.strokeColor = .systemRed
+            shape.lineWidth = 2
         case .validating:
-            cvPiece.alpha = 0.9
-            // Update shape color to indicate validating
-            if let shape = cvPiece.shapeNode {
-                shape.strokeColor = .systemYellow
-                shape.lineWidth = 2
-            }
+            shape.alpha = 0.9
+            shape.strokeColor = .systemYellow
+            shape.lineWidth = 2
         default:
-            cvPiece.alpha = 0.7
-            // Reset shape color to default
-            if let shape = cvPiece.shapeNode, let pieceType = cvPiece.pieceType {
-                shape.strokeColor = TangramColors.Sprite.uiColor(for: pieceType).darker(by: 20)
-                shape.lineWidth = 2
-            }
+            shape.alpha = 0.7
+            shape.strokeColor = TangramColors.Sprite.uiColor(for: pieceType).darker(by: 20)
+            shape.lineWidth = 2
         }
     }
     
@@ -199,7 +181,7 @@ extension TangramPuzzleScene {
         feedbackNode.position = cvNode.position
         feedbackNode.zPosition = cvNode.zPosition + 10
         
-        cvMiniDisplay.addChild(feedbackNode)
+        cvContent.addChild(feedbackNode)
         
         // Animate feedback
         let expand = SKAction.scale(to: 2, duration: 0.3)

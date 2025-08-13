@@ -167,14 +167,8 @@ extension TangramPuzzleScene {
         }
         
         let silhouette = SKShapeNode(path: path)
-        // Style depends on difficulty (easy colored outlines, medium standard, hard black)
-        let childDifficulty: UserPreferences.DifficultySetting = {
-            if let host = self.delegate as? GameDelegate {
-                return host.getChildDifficultySetting()
-            }
-            return .normal
-        }()
-        switch TangramGameConstants.VisualDifficultyStyle.style(for: childDifficulty) {
+        // Style depends on current difficulty setting (scene property set by host/VM)
+        switch TangramGameConstants.VisualDifficultyStyle.style(for: difficultySetting) {
         case .easyColoredOutlines:
             silhouette.fillColor = .clear
             silhouette.strokeColor = TangramColors.Sprite.uiColor(for: target.pieceType)
@@ -188,8 +182,8 @@ extension TangramPuzzleScene {
         case .hardAllBlack:
             silhouette.fillColor = .black
             silhouette.strokeColor = .black
-            silhouette.lineWidth = 1
-            silhouette.alpha = 0.9
+            silhouette.lineWidth = 0
+            silhouette.alpha = 1.0
         }
         silhouette.name = "target_\(target.id)"
         silhouette.position = .zero  // Already positioned via vertices
@@ -214,42 +208,35 @@ extension TangramPuzzleScene {
         // Clean up existing CV piece if any
         cvPieces[pieceId]?.removeFromParent()
         
-        // Create a simple visualization for the mini CV display
+        // Create a shape node that mirrors the physical piece geometry (unscaled here; scaling handled by cvContent)
         guard let physicalPiece = availablePieces.first(where: { $0.name == pieceId }),
               let pieceType = physicalPiece.pieceType else { return }
-        
-        // Create piece visualization
-        let cvPiece = SKShapeNode()
-        cvPiece.name = "cv_\(pieceId)"
-        
-        // Create path based on piece type (simplified)
+
         let path = CGMutablePath()
-        let vertices = TangramGameGeometry.normalizedVertices(for: pieceType)
-        let scaledVertices = vertices.map { CGPoint(x: $0.x * 15, y: $0.y * 15) }  // Small scale for mini display
-        
-        if let first = scaledVertices.first {
-            path.move(to: first)
-            for vertex in scaledVertices.dropFirst() {
-                path.addLine(to: vertex)
+        let normalized = TangramGameGeometry.normalizedVertices(for: pieceType)
+        let scaled = TangramGameGeometry.scaleVertices(normalized, by: TangramGameConstants.visualScale)
+        // Center path around origin so we can position by centroid accurately
+        let centroid = TangramGameGeometry.centerOfVertices(scaled)
+        if let first = scaled.first {
+            path.move(to: CGPoint(x: first.x - centroid.x, y: first.y - centroid.y))
+            for v in scaled.dropFirst() {
+                path.addLine(to: CGPoint(x: v.x - centroid.x, y: v.y - centroid.y))
             }
             path.closeSubpath()
         }
-        
-        cvPiece.path = path
-        cvPiece.fillColor = .systemBlue.withAlphaComponent(0.6)
-        cvPiece.strokeColor = .systemBlue
+
+        let cvPiece = SKShapeNode(path: path)
+        cvPiece.name = "cv_\(pieceId)"
+        cvPiece.fillColor = TangramColors.Sprite.uiColor(for: pieceType).withAlphaComponent(0.6)
+        cvPiece.strokeColor = TangramColors.Sprite.uiColor(for: pieceType)
         cvPiece.lineWidth = 1
-        
-        // Position in mini display (scaled down)
-        let scaleFactor: CGFloat = 0.15  // Mini display is much smaller
-        let miniPos = CGPoint(
-            x: physicalPiece.position.x * scaleFactor,
-            y: physicalPiece.position.y * scaleFactor
-        )
-        cvPiece.position = miniPos
-        cvPiece.zRotation = physicalPiece.zRotation
-        
-        cvMiniDisplay.addChild(cvPiece)
+        // Start with same scale as physical piece so transformed edge distances match once cvContent uniform scale is applied
+        cvPiece.xScale = max(0.0001, abs(physicalPiece.xScale))
+        cvPiece.yScale = max(0.0001, abs(physicalPiece.yScale))
+        if physicalPiece.isFlipped { cvPiece.xScale *= -1 }
+
+        // Add to cvContent (inherits uniform scaling and centering)
+        if cvPiece.parent !== cvContent { cvContent.addChild(cvPiece) }
         cvPieces[pieceId] = cvPiece
     }
     

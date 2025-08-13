@@ -19,6 +19,7 @@ class TangramPuzzleScene: SKScene {
     
     internal var targetSection: SKNode!      // Top panel - shows target puzzle centered
     internal var cvMiniDisplay: SKNode!      // Mini CV display in top-right corner (internal for extensions)
+    internal var cvContent: SKNode!          // Content container inside CV mini display (scaled mapping of physical world)
     internal var physicalWorldSection: SKNode! // Bottom - user interaction area (internal for extensions)
     
     // MARK: - Section Bounds
@@ -149,10 +150,11 @@ class TangramPuzzleScene: SKScene {
         // MINI CV DISPLAY - Small display in top-right corner of top panel
         let miniDisplaySize: CGFloat = min(size.width * 0.25, 150)  // 25% of width or 150px max
         cvMiniDisplay = SKNode()
-        // Position relative to targetSection (which is centered)
+        // Position relative to targetSection (which is centered).
+        // Place cvContent's origin (0,0) to map to the bottom-left corner of the mini square to avoid extra translation.
         cvMiniDisplay.position = CGPoint(
-            x: (size.width / 2) - miniDisplaySize/2 - 20,  // Right edge minus padding
-            y: (sectionHeight / 2) - miniDisplaySize/2 - 20   // Top edge minus padding
+            x: (size.width / 2) - miniDisplaySize + 20,  // left edge of mini square inside targetSection
+            y: (sectionHeight / 2) - miniDisplaySize + 20   // bottom edge of mini square
         )
         cvMiniDisplay.zPosition = 10  // Above target content
         targetSection.addChild(cvMiniDisplay)  // Add as child of target section
@@ -163,6 +165,11 @@ class TangramPuzzleScene: SKScene {
             width: miniDisplaySize,
             height: miniDisplaySize
         )
+        // Add a dedicated content container for correct scaling/mapping
+        cvContent = SKNode()
+        cvContent.name = "cvContent"
+        cvContent.position = .zero
+        cvMiniDisplay.addChild(cvContent)
         
         // BOTTOM - Physical World Section
         physicalWorldSection = SKNode()
@@ -190,12 +197,12 @@ class TangramPuzzleScene: SKScene {
         targetBg.zPosition = -1
         targetSection.addChild(targetBg)
         
-        // Mini CV display background
+        // Mini CV display background (with a subtle border so we can see it during debugging)
         let miniDisplaySize: CGFloat = min(size.width * 0.25, 150)
         let cvMiniBg = SKShapeNode(rectOf: CGSize(width: miniDisplaySize, height: miniDisplaySize))
         cvMiniBg.fillColor = SKColor.systemBlue.withAlphaComponent(0.1)
-        cvMiniBg.strokeColor = SKColor.systemBlue.withAlphaComponent(0.5)
-        cvMiniBg.lineWidth = 1
+        cvMiniBg.strokeColor = SKColor.systemBlue.withAlphaComponent(0.7)
+        cvMiniBg.lineWidth = 2
         cvMiniBg.position = .zero
         cvMiniBg.zPosition = -1
         cvMiniDisplay.addChild(cvMiniBg)
@@ -251,8 +258,9 @@ class TangramPuzzleScene: SKScene {
             }
         }
         
-        // Clear CV mini display contents except its background
+        // Clear CV mini display contents except its background and persistent content container
         cvMiniDisplay?.children.forEach { node in
+            if node.name == "cvContent" { return }
             if !(node is SKShapeNode) && !(node is SKLabelNode) {
                 node.removeFromParent()
             }
@@ -284,42 +292,49 @@ class TangramPuzzleScene: SKScene {
         
         // Check for piece in physical world section
         let physicalLocation = touch.location(in: physicalWorldSection)
-        let physicalNodes = physicalWorldSection.nodes(at: physicalLocation)
+        // Precision picking: sort by zPosition (topmost first) and use polygon-accurate hit testing
+        // Also enforce a small pick radius around the touch to reduce accidental adjacent selections
+        let pickRadius: CGFloat = 12
+        let candidates = physicalWorldSection.children.compactMap { $0 as? PuzzlePieceNode }
+            .filter { node in
+                // Quick reject by distance to centroid
+                let d = hypot(node.position.x - physicalLocation.x, node.position.y - physicalLocation.y)
+                return d <= max(pickRadius, TangramGameConstants.visualScale * 0.9) // lenient radius near centroid
+            }
+            .sorted { a, b in a.zPosition > b.zPosition }
         
-        for node in physicalNodes {
-            if let piece = node as? PuzzlePieceNode {
-                // Store for potential rotation
-                pendingRotationPiece = piece
-                tapStartTime = CACurrentMediaTime()
-                tapStartLocation = physicalLocation
-                
-                selectedPiece = piece
-                piece.isSelected = true
-                piece.zPosition = 1000  // Bring to front
-                
-                // Update piece state to MOVED when picked up
-                if let pieceId = piece.name {
-                    if var state = pieceStates[pieceId] {
-                        if case .detected(let baseline, let baseRot, _) = state.state {
-                            state.state = .moved(from: baseline, rotation: baseRot)
-                            state.interactionCount += 1
-                            state.lastMovedTime = Date()
-                            
-                            // Mark first moved piece as anchor
-                            if firstMovedPieceId == nil {
-                                firstMovedPieceId = pieceId
-                                state.isAnchor = true
-                            }
-                            
-                            pieceStates[pieceId] = state
-                            piece.pieceState = state
-                            piece.updateStateIndicator()
+        if let piece = candidates.first(where: { $0.contains(physicalWorldSection.convert(physicalLocation, to: $0)) })
+                    ?? physicalWorldSection.nodes(at: physicalLocation).compactMap({ $0 as? PuzzlePieceNode }).sorted(by: { $0.zPosition > $1.zPosition }).first {
+            // Store for potential rotation
+            pendingRotationPiece = piece
+            tapStartTime = CACurrentMediaTime()
+            tapStartLocation = physicalLocation
+            
+            selectedPiece = piece
+            piece.isSelected = true
+            piece.zPosition = 1000  // Bring to front
+            
+            // Update piece state to MOVED when picked up
+            if let pieceId = piece.name {
+                if var state = pieceStates[pieceId] {
+                    if case .detected(let baseline, let baseRot, _) = state.state {
+                        state.state = .moved(from: baseline, rotation: baseRot)
+                        state.interactionCount += 1
+                        state.lastMovedTime = Date()
+                        
+                        // Mark first moved piece as anchor
+                        if firstMovedPieceId == nil {
+                            firstMovedPieceId = pieceId
+                            state.isAnchor = true
                         }
+                        
+                        pieceStates[pieceId] = state
+                        piece.pieceState = state
+                        piece.updateStateIndicator()
                     }
-                    
-                    eventBus.emit(.pieceLifted(id: pieceId))
                 }
-                break
+                
+                eventBus.emit(.pieceLifted(id: pieceId))
             }
         }
     }
@@ -384,7 +399,12 @@ class TangramPuzzleScene: SKScene {
         
         // Drag the piece
         let physicalLocation = touch.location(in: physicalWorldSection)
-        selected.position = physicalLocation
+        // Apply small deadzone to reduce jitter causing accidental selection shifts
+        let last = selected.position
+        let dx = physicalLocation.x - last.x
+        let dy = physicalLocation.y - last.y
+        if hypot(dx, dy) < 2.0 { return }
+        selected.position = CGPoint(x: last.x + dx, y: last.y + dy)
         
         // Update piece state position
         if let pieceId = selected.name {
@@ -453,10 +473,14 @@ class TangramPuzzleScene: SKScene {
         
         // Snapping removed
         
-        // Update state to PLACED and start placement timer
+        // Update state to PLACED only if the piece truly moved less than a small threshold since last update
         if let pieceId = selected.name {
             if var state = pieceStates[pieceId] {
-                state.markAsPlaced()
+                // Only mark placed if minimal movement in the last few frames to avoid rapid pick/drop misclassification
+                let distance = hypot(selected.position.x - (state.currentPosition.x), selected.position.y - (state.currentPosition.y))
+                if distance < 3.0 {
+                    state.markAsPlaced()
+                }
                 pieceStates[pieceId] = state
                 selected.pieceState = state
                 selected.updateStateIndicator()

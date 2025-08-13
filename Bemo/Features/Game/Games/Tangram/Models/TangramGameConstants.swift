@@ -62,14 +62,9 @@ enum TangramGameConstants {
 
         /// Per-difficulty tolerance presets
         static func tolerances(for difficulty: UserPreferences.DifficultySetting) -> (position: CGFloat, rotationDeg: CGFloat, connection: CGFloat, edgeContact: CGFloat) {
-            switch difficulty {
-            case .easy:
-                return (position: 55, rotationDeg: 24, connection: 170, edgeContact: 16)
-            case .normal:
-                return (position: 40, rotationDeg: 18, connection: 130, edgeContact: 14)
-            case .hard:
-                return (position: 28, rotationDeg: 12, connection: 90, edgeContact: 10)
-            }
+            // For testing: use the same tolerances across all difficulties
+            // This can be restored to difficulty-specific values later
+            return (position: 40, rotationDeg: 18, connection: 130, edgeContact: 14)
         }
     }
     

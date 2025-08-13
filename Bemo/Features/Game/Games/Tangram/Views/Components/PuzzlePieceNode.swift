@@ -333,3 +333,18 @@ class PuzzlePieceNode: SKNode {
         }
     }
 }
+
+// MARK: - Precision Hit Testing
+
+extension PuzzlePieceNode {
+    /// Perform polygon-accurate hit testing using the piece's path (not just its bounding box).
+    /// The point is expected in this node's coordinate space.
+    override func contains(_ p: CGPoint) -> Bool {
+        guard let path = shapeNode?.path else {
+            return super.contains(p)
+        }
+        // SKShapeNode is centered at origin with path vertices centered as well,
+        // so we can test directly in local coordinates.
+        return path.contains(p, using: .winding, transform: .identity)
+    }
+}

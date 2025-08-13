@@ -747,6 +747,8 @@ class TangramGameViewModel {
     }
     
     private func completePuzzle() {
+        // Ensure timer stops so the displayed time is the final completion time
+        stopTimer()
         currentPhase = .puzzleComplete
         
         // Track completion metrics
