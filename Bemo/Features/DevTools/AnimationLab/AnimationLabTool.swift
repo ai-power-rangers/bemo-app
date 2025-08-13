@@ -32,10 +32,13 @@ class AnimationLabTool: DevTool {
     }
 
     func makeDevToolView(delegate: DevToolDelegate) -> AnyView {
-        // Build a puzzle-aware view model using the service-role puzzle supabase
-        // We access it through DependencyContainer via DevToolHostView environment
-        // For simplicity, create with a global-like access pattern not available here.
-        // Fallback: instantiate a new service for lab (service role) and a local PuzzleManagementService.
+        // Use DI-provided services via the dev tool host context
+        if let host = delegate as? DevToolHostViewModel {
+            let pms = PuzzleManagementService(supabaseService: host.supabaseService, errorTracking: host.errorTrackingService)
+            let vm = AnimationLabViewModel(puzzleService: pms, delegate: delegate)
+            return AnyView(AnimationLabContainerView(viewModel: vm))
+        }
+        // Safe fallback: still avoid creating auth-bound supabase; use service-role minimal
         let supabase = SupabaseService(useServiceRole: true)
         let pms = PuzzleManagementService(supabaseService: supabase, errorTracking: nil)
         let vm = AnimationLabViewModel(puzzleService: pms, delegate: delegate)

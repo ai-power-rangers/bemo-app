@@ -25,8 +25,9 @@ class DevToolHostViewModel {
     var notificationType: NotificationType = .info
     
     let devTool: DevTool
-    private let supabaseService: SupabaseService  // Uses service role for dev tools
-    private let errorTrackingService: ErrorTrackingService?
+    // Exposed for dev tools that need DI services (service-role supabase)
+    let supabaseService: SupabaseService  // Uses service role for dev tools
+    let errorTrackingService: ErrorTrackingService?
     private let onQuit: () -> Void
     
     init(

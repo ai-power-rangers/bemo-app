@@ -312,6 +312,7 @@ struct TangramGameView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 // Hints button - shows active state when hint is showing
                 Button(action: {
+                    // Immediate visual feedback: set a transient flag in VM and request hint
                     viewModel.toggleHints()
                 }) {
                     HStack(spacing: 4) {

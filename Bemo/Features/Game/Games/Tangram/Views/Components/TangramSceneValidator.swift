@@ -482,19 +482,25 @@ extension TangramPuzzleScene {
                             return (t, tScene, z, flipped)
                         }
                 },
-                minFeatureAgreementDeg: 30, // require feature-angle agreement ≤ 30° for initial mapping
+                minFeatureAgreementDeg: 45, // relax mapping acceptance to 45° feature agreement
                 hasAnchorEdgeContact: { () -> Bool in
-                    // Require the anchor to have at least one edge/vertex contact with any piece in the same group
+                    // Prefer true contact, but allow fallback when construction intent is strong or pieces are very close
                     let nodes = self.availablePieces.filter { n in
                         guard let id = n.name else { return false }
                         return group.pieces.contains(id)
                     }
                     guard let anchor = nodes.first(where: { $0.name == rankedAnchor.name }) else { return false }
+                    var minPolyDist: CGFloat = .greatestFiniteMagnitude
+                    var minCentroidDist: CGFloat = .greatestFiniteMagnitude
                     for n in nodes where n !== anchor {
-                        let d = self.groupManager.minimumPolygonDistance(between: anchor, and: n)
-                        if d <= 16 { return true }
+                        minPolyDist = min(minPolyDist, self.groupManager.minimumPolygonDistance(between: anchor, and: n))
+                        let cDist = hypot(anchor.position.x - n.position.x, anchor.position.y - n.position.y)
+                        minCentroidDist = min(minCentroidDist, cDist)
                     }
-                    return false
+                    let contact = (minPolyDist <= 16)
+                    let centroidClose = (minCentroidDist <= 110)
+                    let strongIntent = (group.confidence >= 0.55)
+                    return contact || centroidClose || strongIntent
                 }
             )
             
