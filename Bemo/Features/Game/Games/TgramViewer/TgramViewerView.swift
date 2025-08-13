@@ -65,6 +65,32 @@ struct TgramViewerView: View {
                             ForEach(viewModel.pieces) { piece in
                                 TgramPieceView(piece: piece)
                             }
+
+                            // Target outlines (scaled and aligned to current CV view)
+                            ForEach(Array(viewModel.targetOutlines.enumerated()), id: \.offset) { _, outline in
+                                Path { path in
+                                    if let first = outline.first {
+                                        path.move(to: first)
+                                        for v in outline.dropFirst() { path.addLine(to: v) }
+                                        path.closeSubpath()
+                                    }
+                                }
+                                .stroke(Color.white.opacity(0.8), style: StrokeStyle(lineWidth: 1, dash: [6, 6]))
+                            }
+                            
+                            // Status overlay
+                            if let status = viewModel.statusText {
+                                VStack {
+                                    Spacer()
+                                    Text(status)
+                                        .font(BemoTheme.font(for: .caption))
+                                        .foregroundColor(.white)
+                                        .padding(8)
+                                        .background(Color.black.opacity(0.4))
+                                        .cornerRadius(8)
+                                }
+                                .padding()
+                            }
                             
                             // Origin marker
                             Circle()
@@ -116,7 +142,7 @@ struct TgramPieceView: View {
                 path.closeSubpath()
             }
         }
-        .fill(piece.color.opacity(0.7))
+        .fill(pieceFillColor)
         .overlay(
             Path { path in
                 if let first = piece.vertices.first {
@@ -127,9 +153,31 @@ struct TgramPieceView: View {
                     path.closeSubpath()
                 }
             }
-            .stroke(Color.black, lineWidth: 2)
+            .stroke(strokeColor, lineWidth: 2)
         )
         .rotationEffect(Angle(degrees: piece.rotation))
+    }
+
+    private var pieceFillColor: Color {
+        switch piece.validation {
+        case .correct:
+            return Color.green.opacity(0.5)
+        case .incorrect:
+            return Color.red.opacity(0.5)
+        case .pending:
+            return piece.color.opacity(0.7)
+        }
+    }
+    
+    private var strokeColor: Color {
+        switch piece.validation {
+        case .correct:
+            return .green
+        case .incorrect:
+            return .red
+        case .pending:
+            return .black
+        }
     }
 }
 

@@ -177,8 +177,12 @@ class GameLobbyViewModel {
                 )
             )
             
-            // Add TgramViewer as a developer tool
-            let tgramViewerGame = TgramViewerGame()
+            // Add TgramViewer as a developer tool (inject services so it can load puzzle + validate)
+            let tgramViewerGame = TgramViewerGame(
+                supabaseService: supabaseService,
+                puzzleManagementService: puzzleManagementService,
+                puzzleId: "puzzle_26D26F42-0D65-4D85-9405-15E9CFBA3098"
+            )
             availableGames.append(
                 GameItem(
                     game: tgramViewerGame,

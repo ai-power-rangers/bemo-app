@@ -35,11 +35,30 @@ class TgramViewerGame: Game {
     // MARK: - Properties
     
     private var viewModel: TgramViewerViewModel?
+    private let supabaseService: SupabaseService?
+    private let puzzleManagementService: PuzzleManagementService?
+    private let initialPuzzleId: String
+
+    // MARK: - Initialization
+    
+    init(
+        supabaseService: SupabaseService? = nil,
+        puzzleManagementService: PuzzleManagementService? = nil,
+        puzzleId: String = "puzzle_26D26F42-0D65-4D85-9405-15E9CFBA3098"
+    ) {
+        self.supabaseService = supabaseService
+        self.puzzleManagementService = puzzleManagementService
+        self.initialPuzzleId = puzzleId
+    }
     
     // MARK: - Game Protocol Methods
     
     func makeGameView(delegate: GameDelegate) -> AnyView {
-        let vm = TgramViewerViewModel(delegate: delegate)
+        let container = TangramDependencyContainer(
+            supabaseService: supabaseService,
+            puzzleManagementService: puzzleManagementService
+        )
+        let vm = TgramViewerViewModel(delegate: delegate, container: container, initialPuzzleId: initialPuzzleId)
         self.viewModel = vm
         return AnyView(
             TgramViewerView(viewModel: vm)
