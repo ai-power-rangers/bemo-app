@@ -220,6 +220,17 @@ class GameLobbyViewModel {
                 )
             )
             
+            // Add Tangram Progress Service Tool
+            let tangramProgressServiceTool = TangramProgressServiceTool()
+            availableGames.append(
+                GameItem(
+                    devTool: tangramProgressServiceTool,
+                    iconName: "externaldrive.fill.badge.checkmark",
+                    color: .blue,
+                    badge: "Service Test"
+                )
+            )
+            
             // Add TgramViewer as a developer tool
             let tgramViewerGame = TgramViewerGame()
             availableGames.append(
