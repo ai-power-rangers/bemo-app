@@ -50,10 +50,15 @@ class SupabaseService {
             supabaseKey = config.supabaseAnonKey
         }
         
+        print("[SupabaseService] Validating config - URL: '\(config.supabaseURL)', Key: '\(supabaseKey.isEmpty ? "EMPTY" : "SET (\(supabaseKey.count) chars)")'")
+        
         guard let supabaseURL = URL(string: config.supabaseURL),
               !supabaseKey.isEmpty else {
+            print("[SupabaseService] Validation failed - URL valid: \(URL(string: config.supabaseURL) != nil), Key not empty: \(!supabaseKey.isEmpty)")
             fatalError("Supabase configuration missing. Please configure SUPABASE_URL and SUPABASE_ANON_KEY in .xcconfig files")
         }
+        
+        print("[SupabaseService] Configuration validated successfully")
         
         self.client = SupabaseClient(
             supabaseURL: supabaseURL,
