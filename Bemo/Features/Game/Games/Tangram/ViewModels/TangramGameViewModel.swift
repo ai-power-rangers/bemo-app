@@ -93,6 +93,7 @@ class TangramGameViewModel {
     private weak var delegate: GameDelegate?
     private let container: TangramDependencyContainer
     private let supabaseService: SupabaseService?
+    private var learningService: LearningService?
     var availablePuzzles: [GamePuzzleData] = []
 
     // MARK: - Difficulty
@@ -110,10 +111,11 @@ class TangramGameViewModel {
     
     // MARK: - Initialization
     
-    init(delegate: GameDelegate, container: TangramDependencyContainer) {
+    init(delegate: GameDelegate, container: TangramDependencyContainer, learningService: LearningService?) {
         self.delegate = delegate
         self.container = container
         self.supabaseService = container.supabaseService
+        self.learningService = learningService
         
         // Load puzzles using container's services
         Task { @MainActor [weak self] in
@@ -149,12 +151,13 @@ class TangramGameViewModel {
     }
     
     // Alternative init for backward compatibility
-    convenience init(delegate: GameDelegate, supabaseService: SupabaseService? = nil, puzzleManagementService: PuzzleManagementService? = nil) {
+    convenience init(delegate: GameDelegate, supabaseService: SupabaseService? = nil, puzzleManagementService: PuzzleManagementService? = nil, learningService: LearningService? = nil) {
         let container = TangramDependencyContainer(
             supabaseService: supabaseService,
-            puzzleManagementService: puzzleManagementService
+            puzzleManagementService: puzzleManagementService,
+            learningService: learningService
         )
-        self.init(delegate: delegate, container: container)
+        self.init(delegate: delegate, container: container, learningService: learningService)
     }
     
     // MARK: - Game Actions
@@ -811,148 +814,107 @@ class TangramGameViewModel {
     }
     
     private func startGameSession(puzzleId: String, puzzleName: String, difficulty: Int) {
-        Task { @MainActor [weak self] in
-            guard let self = self,
-                  let supabase = self.supabaseService,
-                  let childId = self.currentChildProfileId else {
-                #if DEBUG
-                print("Warning: Cannot start game session - missing supabase service or child ID")
-                #endif
-                return
-            }
-            
-            // Check if we're authenticated
-            if !supabase.isConnected {
-                print("Warning: Not authenticated with Supabase - game session will not be tracked")
-                return
-            }
-            
-            do {
-                currentSessionId = try await supabase.startGameSession(
-                    childProfileId: childId,
-                    gameId: "tangram",
-                    sessionData: [
-                        "puzzle_id": puzzleId,
-                        "puzzle_name": puzzleName,
-                        "difficulty": difficulty
-                    ]
-                )
-                print("Started game session: \(currentSessionId ?? "unknown")")
-            } catch {
-                print("Failed to start game session: \(error)")
-                // Don't let tracking errors interrupt gameplay
-                currentSessionId = nil
-            }
+        guard let learningService = self.learningService else {
+            #if DEBUG
+            print("Warning: Cannot start game session - missing learning service")
+            #endif
+            return
         }
+        
+        // Record puzzle start event
+        learningService.recordPuzzleStarted(
+            gameId: "tangram",
+            puzzleId: puzzleId,
+            difficulty: difficulty,
+            context: [
+                "puzzle_name": puzzleName
+            ]
+        )
+        
+        #if DEBUG
+        print("Started tracking puzzle: \(puzzleId)")
+        #endif
     }
     
     private func endGameSession(completed: Bool) {
-        Task { @MainActor [weak self] in
-            guard let self = self,
-                  let supabase = self.supabaseService,
-                  let sessionId = self.currentSessionId else {
-                return
-            }
-            
-            let finalXP = completed ? calculateXP() : 0
-            let levelsCompleted = completed ? 1 : 0
-            
-            do {
-                try await supabase.endGameSession(
-                    sessionId: sessionId,
-                    finalXPEarned: finalXP,
-                    finalLevelsCompleted: levelsCompleted,
-                    finalSessionData: [
-                        "completed": completed,
-                        "hints_used": gameProgress?.hintsUsed ?? 0,
-                        "completion_time": gameProgress.map { Date().timeIntervalSince($0.startTime) } ?? 0
-                    ]
-                )
-                print("Ended game session: \(sessionId)")
-            } catch {
-                print("Failed to end game session: \(error)")
-            }
-            
-            currentSessionId = nil
-        }
+        // No longer needed - session management is handled by GameHostViewModel
+        // This method can be removed in a future cleanup
     }
     
     private func trackHintUsage(hint: TangramHintEngine.HintData) {
-        Task { @MainActor [weak self] in
-            guard let self = self,
-                  let supabase = self.supabaseService,
-                  let childId = self.currentChildProfileId,
-                  let puzzle = self.selectedPuzzle,
-                  let progress = gameProgress else {
-                return
-            }
-            
-            // Check if we're authenticated
-            if !supabase.isConnected {
-                print("Warning: Not authenticated - hint usage will not be tracked")
-                return
-            }
-            
-            do {
-                try await supabase.trackLearningEvent(
-                    childProfileId: childId,
-                    eventType: "hint_used",
-                    gameId: "tangram",
-                    xpAwarded: 0,
-                    eventData: [
-                        "puzzle_id": puzzle.id,
-                        "puzzle_name": puzzle.name,
-                        "hint_type": String(describing: hint.hintType),
-                        "hint_reason": String(describing: hint.reason),
-                        "target_piece": hint.targetPiece.rawValue,
-                        "time_since_start": Date().timeIntervalSince(progress.startTime),
-                        "pieces_completed": progress.correctPieces.count,
-                        "total_hints_used": progress.hintsUsed
-                    ],
-                    sessionId: currentSessionId
-                )
-            } catch {
-                // Don't let tracking errors interrupt gameplay
-            }
+        guard let learningService = self.learningService,
+              let puzzle = self.selectedPuzzle else {
+            return
         }
+        
+        learningService.recordHintRequested(
+            gameId: "tangram",
+            puzzleId: puzzle.id,
+            hintType: String(describing: hint.reason),
+            reason: hintReasonToString(hint.reason),
+            context: [
+                "puzzle_name": puzzle.name,
+                "completion_percentage": progress
+            ]
+        )
     }
     
     private func trackPuzzleCompletion() {
-        Task { @MainActor [weak self] in
-            guard let self = self,
-                  let supabase = self.supabaseService,
-                  let childId = self.currentChildProfileId,
-                  let puzzle = self.selectedPuzzle,
-                  let progress = gameProgress else {
-                return
-            }
-            
-            let completionTime = Date().timeIntervalSince(progress.startTime)
-            let finalXP = calculateXP()
-            
-            do {
-                try await supabase.trackLearningEvent(
-                    childProfileId: childId,
-                    eventType: "puzzle_completed",
-                    gameId: "tangram",
-                    xpAwarded: finalXP,
-                    eventData: [
-                        "puzzle_id": puzzle.id,
-                        "puzzle_name": puzzle.name,
-                        "difficulty": puzzle.difficulty,
-                        "completion_time_seconds": completionTime,
-                        "hints_used": progress.hintsUsed,
-                        "xp_awarded": finalXP
-                    ],
-                    sessionId: currentSessionId
-                )
-                
-                // End the session as completed
-                endGameSession(completed: true)
-                
-            } catch {
-                // Handle error silently
-            }
+        #if DEBUG
+        print("🎯 [TangramGameViewModel] trackPuzzleCompletion() called")
+        print("   - learningService: \(learningService != nil ? "✅ Available" : "❌ NIL")")
+        print("   - selectedPuzzle: \(selectedPuzzle != nil ? "✅ Available" : "❌ NIL")")
+        print("   - gameProgress: \(gameProgress != nil ? "✅ Available" : "❌ NIL")")
+        #endif
+        
+        guard let learningService = self.learningService,
+              let puzzle = self.selectedPuzzle,
+              let progress = gameProgress else {
+            #if DEBUG
+            print("❌ [TangramGameViewModel] trackPuzzleCompletion FAILED - missing required objects")
+            #endif
+            return
+        }
+        
+        let completionTime = Date().timeIntervalSince(progress.startTime)
+        let finalXP = calculateXP()
+        
+        #if DEBUG
+        print("📊 [TangramGameViewModel] Tracking completion:")
+        print("   - puzzleId: \(puzzle.id)")
+        print("   - puzzleName: \(puzzle.name)")
+        print("   - difficulty: \(puzzle.difficulty)")
+        print("   - completionTime: \(completionTime)s")
+        print("   - hintsUsed: \(progress.hintsUsed)")
+        print("   - xpAwarded: \(finalXP)")
+        #endif
+        
+        // Record puzzle completion with LearningService
+        learningService.recordPuzzleCompleted(
+            gameId: "tangram",
+            puzzleId: puzzle.id,
+            difficulty: puzzle.difficulty,
+            completionTimeSeconds: completionTime,
+            hintsUsed: progress.hintsUsed,
+            xpAwarded: finalXP,
+            context: [
+                "puzzle_name": puzzle.name
+            ]
+        )
+    }
+    
+    private func hintReasonToString(_ reason: TangramHintEngine.HintReason) -> String {
+        switch reason {
+        case .lastMovedIncorrectly:
+            return "last_moved_incorrectly"
+        case .stuckTooLong(let seconds):
+            return "stuck_too_long_\(Int(seconds))s"
+        case .noRecentProgress:
+            return "no_recent_progress"
+        case .userRequested:
+            return "user_requested"
+        case .firstPiece:
+            return "first_piece"
         }
     }
     

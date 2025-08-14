@@ -13,6 +13,12 @@ import Foundation
 import Supabase
 import Observation
 
+public struct ParentProfileData: Decodable {
+    let apple_user_id: String
+    let full_name: String?
+    let email: String?
+}
+
 @Observable
 class SupabaseService {
     private let client: SupabaseClient
@@ -89,17 +95,45 @@ class SupabaseService {
         // Check if Supabase has a stored session (it persists sessions locally)
         Task {
             do {
+                // This will throw if no valid session/refresh token is found by the SDK.
                 let session = try await client.auth.session
-                await MainActor.run {
-                    self.isConnected = true
-                    self.syncError = nil
-                    print("Supabase: Restored existing session for user: \(session.user.id)")
-                }
+                print("Supabase: Found valid stored session.")
+                await handleSupabaseAuthChange(event: .signedIn, session: session)
             } catch {
-                await MainActor.run {
-                    self.isConnected = false
-                    print("Supabase: No stored session found")
-                }
+                // This is expected if the user is not logged in or token is expired.
+                print("Supabase: No valid stored session found. \(error.localizedDescription)")
+                await handleSupabaseAuthChange(event: .signedOut, session: nil)
+            }
+        }
+    }
+    
+    private func processSignIn(session: Session) {
+        Task {
+            var parentProfile: ParentProfileData?
+            do {
+                let response: [ParentProfileData] = try await client
+                    .from("parent_profiles")
+                    .select("apple_user_id, full_name, email")
+                    .eq("user_id", value: session.user.id)
+                    .limit(1)
+                    .execute()
+                    .value
+                parentProfile = response.first
+            } catch {
+                print("Supabase: Could not fetch parent profile for user \(session.user.id). This might be okay if it's the first sign-in. Error: \(error)")
+                errorTracking?.trackError(error, context: ErrorContext(
+                    feature: "Supabase",
+                    action: "fetchParentProfileOnSignIn",
+                    metadata: ["userId": session.user.id.uuidString]
+                ))
+            }
+            
+            await MainActor.run {
+                self.isConnected = true
+                self.syncError = nil
+                self.lastSyncDate = Date()
+                print("Supabase Event: .signedIn or .tokenRefreshed. Notifying AuthenticationService.")
+                self.authService?.updateUserAndConfirmAuth(session: session, parentProfile: parentProfile)
             }
         }
     }
@@ -108,15 +142,17 @@ class SupabaseService {
     private func handleSupabaseAuthChange(event: AuthChangeEvent, session: Session?) {
         switch event {
         case .signedIn:
-            isConnected = true
-            syncError = nil
-            lastSyncDate = Date()
+            guard let session = session else { return }
+            processSignIn(session: session)
             
         case .signedOut:
             isConnected = false
+            print("Supabase Event: .signedOut. Notifying AuthenticationService.")
+            authService?.performLocalSignOut()
             
         case .tokenRefreshed:
-            lastSyncDate = Date()
+            guard let session = session else { return }
+            processSignIn(session: session)
             
         default:
             break
@@ -197,7 +233,7 @@ class SupabaseService {
         
         try await client
             .from("parent_profiles")
-            .upsert(profileData, onConflict: "apple_user_id")
+            .upsert(profileData, onConflict: "apple_user_id", returning: .minimal)
             .execute()
     }
     
@@ -223,7 +259,7 @@ class SupabaseService {
             
             try await client
                 .from("child_profiles")
-                .upsert(profileData, onConflict: "id")
+                .upsert(profileData, onConflict: "id", returning: .minimal)
                 .execute()
             
             lastSyncDate = Date()
@@ -277,7 +313,7 @@ class SupabaseService {
         do {
             try await client
                 .from("child_profiles")
-                .delete()
+                .delete(returning: .minimal)
                 .eq("id", value: profileId)
                 .execute()
             
@@ -337,13 +373,13 @@ class SupabaseService {
             
             try await client
                 .from("learning_events")
-                .insert(eventRecord)
+                .insert(eventRecord, returning: .minimal)
                 .execute()
             
             // Update XP if awarded - RLS will ensure only the parent can update their child's XP
             if xpAwarded > 0 {
                 // First fetch current XP (RLS ensures we can only see our own child's data)
-                let profiles: [ChildProfileResponse] = try await client
+                let profile: ChildProfileXPResponse = try await client
                     .from("child_profiles")
                     .select("total_xp")
                     .eq("id", value: childProfileId)
@@ -351,14 +387,12 @@ class SupabaseService {
                     .execute()
                     .value
                 
-                if let profile = profiles.first {
-                    let newXP = profile.total_xp + xpAwarded
-                    try await client
-                        .from("child_profiles")
-                        .update(["total_xp": newXP])
-                        .eq("id", value: childProfileId)
-                        .execute()
-                }
+                let newXP = profile.total_xp + xpAwarded
+                try await client
+                    .from("child_profiles")
+                    .update(["total_xp": newXP], returning: .minimal)
+                    .eq("id", value: childProfileId)
+                    .execute()
             }
             
             lastSyncDate = Date()
@@ -436,7 +470,7 @@ class SupabaseService {
             
             try await client
                 .from("game_sessions")
-                .insert(sessionRecord)
+                .insert(sessionRecord, returning: .minimal)
                 .execute()
             
             // Also track the session start event
@@ -489,6 +523,20 @@ class SupabaseService {
             let _ = try await client.auth.session
             // Ending game session
             
+            // First fetch the session to get child_profile_id and game_id
+            struct GameSessionResponse: Decodable {
+                let child_profile_id: String
+                let game_id: String
+            }
+            
+            let session: GameSessionResponse = try await client
+                .from("game_sessions")
+                .select("child_profile_id, game_id")
+                .eq("id", value: sessionId)
+                .single()
+                .execute()
+                .value
+            
             // Update game_sessions table with RLS enforcement
             let encodedSessionData = try encodeEventData(finalSessionData)
             
@@ -521,15 +569,15 @@ class SupabaseService {
             
             try await client
                 .from("game_sessions")
-                .update(updateData)
+                .update(updateData, returning: .minimal)
                 .eq("id", value: sessionId)
                 .execute()
             
-            // Track session end event
+            // Track session end event with proper child profile ID
             try await trackLearningEvent(
-                childProfileId: "", // We don't have child ID here, but it's okay for session end
+                childProfileId: session.child_profile_id,
                 eventType: "game_ended",
-                gameId: "tangram",
+                gameId: session.game_id,
                 xpAwarded: 0,
                 eventData: [
                     "session_ended": true,
@@ -588,6 +636,235 @@ class SupabaseService {
                 feature: "Supabase",
                 action: "getLearningStats",
                 metadata: ["childProfileId": childProfileId]
+            ))
+            throw error
+        }
+    }
+
+    // MARK: - Skill Progress (CRUD)
+
+    struct SkillProgressRow {
+        let id: String
+        let child_profile_id: String
+        let game_id: String
+        let skill_key: String
+        let xp_total: Int
+        let level: Int
+        let sample_count: Int
+        let success_rate_7d: Double
+        let avg_time_ms_7d: Int?
+        let avg_hints_7d: Double
+        let completions_no_hint_7d: Int
+        let mastery_state: String
+        let mastery_score: Double
+        let first_mastered_at: String?
+        let last_mastery_event_at: String?
+        let classifier_version: String?
+        let mastery_threshold_version: String?
+        let last_assessed_at: String?
+        let metadata: [String: Any]
+    }
+
+    func fetchSkillProgress(childProfileId: String, gameId: String, skillKey: String) async throws -> SkillProgressRow? {
+        guard isConnected else { throw SupabaseError.notAuthenticated }
+        do {
+            let response = try await client
+                .from("skill_progress")
+                .select()
+                .eq("child_profile_id", value: childProfileId)
+                .eq("game_id", value: gameId)
+                .eq("skill_key", value: skillKey)
+                .limit(1)
+                .execute()
+
+            // Custom decode for metadata JSONB
+            struct RawRow: Decodable {
+                let id: String
+                let child_profile_id: String
+                let game_id: String
+                let skill_key: String
+                let xp_total: Int
+                let level: Int
+                let sample_count: Int
+                let success_rate_7d: Double
+                let avg_time_ms_7d: Int?
+                let avg_hints_7d: Double
+                let completions_no_hint_7d: Int
+                let mastery_state: String
+                let mastery_score: Double
+                let first_mastered_at: String?
+                let last_mastery_event_at: String?
+                let classifier_version: String?
+                let mastery_threshold_version: String?
+                let last_assessed_at: String?
+                let metadata: AnyCodable  // Changed from String to AnyCodable for JSONB
+            }
+
+            let rawRows = try JSONDecoder().decode([RawRow].self, from: response.data)
+            guard let r = rawRows.first else { return nil }
+            let metaData = r.metadata.value as? [String: Any] ?? [:]  // Extract metadata from AnyCodable
+            return SkillProgressRow(
+                id: r.id,
+                child_profile_id: r.child_profile_id,
+                game_id: r.game_id,
+                skill_key: r.skill_key,
+                xp_total: r.xp_total,
+                level: r.level,
+                sample_count: r.sample_count,
+                success_rate_7d: r.success_rate_7d,
+                avg_time_ms_7d: r.avg_time_ms_7d,
+                avg_hints_7d: r.avg_hints_7d,
+                completions_no_hint_7d: r.completions_no_hint_7d,
+                mastery_state: r.mastery_state,
+                mastery_score: r.mastery_score,
+                first_mastered_at: r.first_mastered_at,
+                last_mastery_event_at: r.last_mastery_event_at,
+                classifier_version: r.classifier_version,
+                mastery_threshold_version: r.mastery_threshold_version,
+                last_assessed_at: r.last_assessed_at,
+                metadata: metaData
+            )
+        } catch {
+            print("Supabase: Failed to fetch skill progress - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "fetchSkillProgress",
+                metadata: ["child_profile_id": childProfileId, "game_id": gameId, "skill_key": skillKey]
+            ))
+            throw error
+        }
+    }
+
+    struct SkillProgressListRow: Decodable {
+        let skill_key: String
+        let xp_total: Int
+        let level: Int
+        let mastery_state: String
+    }
+
+    func listSkillProgressRows(childProfileId: String, gameId: String) async throws -> [SkillProgressListRow] {
+        guard isConnected else { throw SupabaseError.notAuthenticated }
+        do {
+            let rows: [SkillProgressListRow] = try await client
+                .from("skill_progress")
+                .select("skill_key,xp_total,level,mastery_state")
+                .eq("child_profile_id", value: childProfileId)
+                .eq("game_id", value: gameId)
+                .order("skill_key")
+                .execute()
+                .value
+            return rows
+        } catch {
+            print("Supabase: Failed to list skill progress rows - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "listSkillProgressRows",
+                metadata: ["child_profile_id": childProfileId, "game_id": gameId]
+            ))
+            throw error
+        }
+    }
+
+    func upsertSkillProgress(
+        childProfileId: String,
+        gameId: String,
+        skillKey: String,
+        xpTotal: Int,
+        level: Int,
+        sampleCount: Int,
+        successRate7d: Double,
+        avgTimeMs7d: Int?,
+        avgHints7d: Double,
+        completionsNoHint7d: Int,
+        masteryState: String,
+        masteryScore: Double,
+        firstMasteredAt: String?,
+        lastMasteryEventAt: String?,
+        classifierVersion: String?,
+        masteryThresholdVersion: String?,
+        lastAssessedAt: String?,
+        metadata: [String: Any]
+    ) async throws {
+        guard isConnected else { throw SupabaseError.notAuthenticated }
+        do {
+            struct UpsertRow: Encodable {
+                let child_profile_id: String
+                let game_id: String
+                let skill_key: String
+                let xp_total: Int
+                let level: Int
+                let sample_count: Int
+                let success_rate_7d: Double
+                let avg_time_ms_7d: Int?
+                let avg_hints_7d: Double
+                let completions_no_hint_7d: Int
+                let mastery_state: String
+                let mastery_score: Double
+                let first_mastered_at: String?
+                let last_mastery_event_at: String?
+                let classifier_version: String?
+                let mastery_threshold_version: String?
+                let last_assessed_at: String?
+                let metadata: [String: Any]
+
+                enum CodingKeys: String, CodingKey {
+                    case child_profile_id, game_id, skill_key, xp_total, level, sample_count, success_rate_7d, avg_time_ms_7d, avg_hints_7d, completions_no_hint_7d, mastery_state, mastery_score, first_mastered_at, last_mastery_event_at, classifier_version, mastery_threshold_version, last_assessed_at, metadata
+                }
+
+                func encode(to encoder: Encoder) throws {
+                    var container = encoder.container(keyedBy: CodingKeys.self)
+                    try container.encode(child_profile_id, forKey: .child_profile_id)
+                    try container.encode(game_id, forKey: .game_id)
+                    try container.encode(skill_key, forKey: .skill_key)
+                    try container.encode(xp_total, forKey: .xp_total)
+                    try container.encode(level, forKey: .level)
+                    try container.encode(sample_count, forKey: .sample_count)
+                    try container.encode(success_rate_7d, forKey: .success_rate_7d)
+                    try container.encodeIfPresent(avg_time_ms_7d, forKey: .avg_time_ms_7d)
+                    try container.encode(avg_hints_7d, forKey: .avg_hints_7d)
+                    try container.encode(completions_no_hint_7d, forKey: .completions_no_hint_7d)
+                    try container.encode(mastery_state, forKey: .mastery_state)
+                    try container.encode(mastery_score, forKey: .mastery_score)
+                    try container.encodeIfPresent(first_mastered_at, forKey: .first_mastered_at)
+                    try container.encodeIfPresent(last_mastery_event_at, forKey: .last_mastery_event_at)
+                    try container.encodeIfPresent(classifier_version, forKey: .classifier_version)
+                    try container.encodeIfPresent(mastery_threshold_version, forKey: .mastery_threshold_version)
+                    try container.encodeIfPresent(last_assessed_at, forKey: .last_assessed_at)
+                    try container.encode(AnyCodable(metadata), forKey: .metadata)
+                }
+            }
+
+            let row = UpsertRow(
+                child_profile_id: childProfileId,
+                game_id: gameId,
+                skill_key: skillKey,
+                xp_total: xpTotal,
+                level: level,
+                sample_count: sampleCount,
+                success_rate_7d: successRate7d,
+                avg_time_ms_7d: avgTimeMs7d,
+                avg_hints_7d: avgHints7d,
+                completions_no_hint_7d: completionsNoHint7d,
+                mastery_state: masteryState,
+                mastery_score: masteryScore,
+                first_mastered_at: firstMasteredAt,
+                last_mastery_event_at: lastMasteryEventAt,
+                classifier_version: classifierVersion,
+                mastery_threshold_version: masteryThresholdVersion,
+                last_assessed_at: lastAssessedAt,
+                metadata: metadata
+            )
+
+            try await client
+                .from("skill_progress")
+                .upsert(row, onConflict: "child_profile_id,game_id,skill_key", returning: .minimal)
+                .execute()
+        } catch {
+            print("Supabase: Failed to upsert skill progress - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "upsertSkillProgress",
+                metadata: ["child_profile_id": childProfileId, "game_id": gameId, "skill_key": skillKey]
             ))
             throw error
         }
@@ -673,6 +950,10 @@ class SupabaseService {
 }
 
 // MARK: - Data Models
+
+private struct ChildProfileXPResponse: Decodable {
+    let total_xp: Int
+}
 
 struct ParentProfileInsert: Codable {
     let user_id: UUID
@@ -915,7 +1196,7 @@ extension SupabaseService {
             // Upsert puzzle (insert or update based on puzzle_id)
             try await client
                 .from("tangram_puzzles")
-                .upsert(puzzle, onConflict: "puzzle_id")
+                .upsert(puzzle, onConflict: "puzzle_id", returning: .minimal)
                 .execute()
             
         } catch {
@@ -1025,7 +1306,7 @@ extension SupabaseService {
         do {
             try await client
                 .from("tangram_puzzles")
-                .delete()
+                .delete(returning: .minimal)
                 .eq("puzzle_id", value: puzzleId)
                 .execute()
             
@@ -1034,6 +1315,32 @@ extension SupabaseService {
             errorTracking?.trackError(error, context: ErrorContext(
                 feature: "Supabase",
                 action: "deleteTangramPuzzle",
+                metadata: ["puzzle_id": puzzleId]
+            ))
+            throw error
+        }
+    }
+
+    /// Fetch a single tangram puzzle by its puzzle_id
+    func fetchTangramPuzzleById(puzzleId: String) async throws -> TangramPuzzleDTO? {
+        guard isConnected || useServiceRole else {
+            throw SupabaseError.notAuthenticated
+        }
+        do {
+            let response = try await client
+                .from("tangram_puzzles")
+                .select()
+                .eq("puzzle_id", value: puzzleId)
+                .limit(1)
+                .execute()
+
+            let results = try JSONDecoder().decode([TangramPuzzleDTO].self, from: response.data)
+            return results.first
+        } catch {
+            print("Supabase: Failed to fetch tangram puzzle by id - \(error)")
+            errorTracking?.trackError(error, context: ErrorContext(
+                feature: "Supabase",
+                action: "fetchTangramPuzzleById",
                 metadata: ["puzzle_id": puzzleId]
             ))
             throw error
@@ -1153,6 +1460,7 @@ enum SupabaseError: Error, LocalizedError {
     case notAuthenticated
     case encodingFailed
     case configurationMissing
+    case customError(String)
     
     var errorDescription: String? {
         switch self {
@@ -1162,6 +1470,8 @@ enum SupabaseError: Error, LocalizedError {
             return "Failed to encode data for Supabase"
         case .configurationMissing:
             return "Supabase configuration missing"
+        case .customError(let message):
+            return message
         }
     }
 }

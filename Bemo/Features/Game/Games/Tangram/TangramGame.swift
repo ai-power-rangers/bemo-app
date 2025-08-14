@@ -37,24 +37,27 @@ class TangramGame: Game {
     
     private var viewModel: TangramGameViewModel?
     private let supabaseService: SupabaseService?
+    private let learningService: LearningService?
     private let puzzleManagementService: PuzzleManagementService?
     private var childProfileId: String?
     private var overrideDifficulty: UserPreferences.DifficultySetting? = nil
     
     // MARK: - Initialization
     
-    init(supabaseService: SupabaseService? = nil, puzzleManagementService: PuzzleManagementService? = nil) {
+    init(supabaseService: SupabaseService? = nil, puzzleManagementService: PuzzleManagementService? = nil, learningService: LearningService? = nil) {
         self.supabaseService = supabaseService
         self.puzzleManagementService = puzzleManagementService
+        self.learningService = learningService
     }
     
     // MARK: - Game Protocol Methods
     
     func makeGameView(delegate: GameDelegate) -> AnyView {
         let vm = TangramGameViewModel(
-            delegate: delegate, 
+            delegate: delegate,
             supabaseService: supabaseService,
-            puzzleManagementService: puzzleManagementService
+            puzzleManagementService: puzzleManagementService,
+            learningService: learningService
         )
         
         // Set child profile ID if available
