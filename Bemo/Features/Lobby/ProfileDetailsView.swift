@@ -37,8 +37,12 @@ struct ProfileDetailsView: View {
     
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 24) {
+            ZStack {
+                Color("AppBackground")
+                    .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 24) {
                     // Profile Header
                     profileHeaderSection
                     
@@ -55,8 +59,9 @@ struct ProfileDetailsView: View {
                     switchProfileButton
                     
                     Spacer(minLength: 20)
+                    }
+                    .padding()
                 }
-                .padding()
             }
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
@@ -66,6 +71,18 @@ struct ProfileDetailsView: View {
                         onDismiss()
                     }
                 }
+            }
+            .onAppear {
+                // Configure navigation bar appearance with AppBackground color
+                let appearance = UINavigationBarAppearance()
+                appearance.configureWithOpaqueBackground()
+                appearance.backgroundColor = UIColor(Color("AppBackground"))
+                appearance.titleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
+                appearance.largeTitleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
+                
+                UINavigationBar.appearance().standardAppearance = appearance
+                UINavigationBar.appearance().scrollEdgeAppearance = appearance
+                UINavigationBar.appearance().compactAppearance = appearance
             }
         }
     }
@@ -87,6 +104,7 @@ struct ProfileDetailsView: View {
                 Text(profile.name)
                     .font(.title2)
                     .fontWeight(.bold)
+                    .foregroundColor(Color("AppPrimaryTextColor"))
                 
                 HStack(spacing: 8) {
                     Image(systemName: "star.fill")
@@ -104,7 +122,7 @@ struct ProfileDetailsView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Stats")
                 .font(.headline)
-                .foregroundColor(.primary)
+                .foregroundColor(Color("AppPrimaryTextColor"))
             
             HStack(spacing: 16) {
                 StatCard(
@@ -135,13 +153,13 @@ struct ProfileDetailsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Level Progress")
                 .font(.headline)
-                .foregroundColor(.primary)
+                .foregroundColor(Color("AppPrimaryTextColor"))
             
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Level \(level)")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color("AppPrimaryTextColor"))
                     
                     Spacer()
                     
@@ -170,10 +188,10 @@ struct ProfileDetailsView: View {
                 
                 Text("\(xpToNextLevel) XP to next level")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color("AppPrimaryTextColor"))
             }
             .padding()
-            .background(Color(.systemGray6))
+            .background(Color.white)
             .cornerRadius(12)
         }
     }
@@ -182,14 +200,14 @@ struct ProfileDetailsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Preferences")
                 .font(.headline)
-                .foregroundColor(.primary)
+                .foregroundColor(Color("AppPrimaryTextColor"))
             
             VStack(spacing: 0) {
                 PreferenceRow(
                     icon: "speaker.wave.2.fill",
                     title: "Sound",
                     value: profile.preferences.soundEnabled ? "On" : "Off",
-                    valueColor: profile.preferences.soundEnabled ? .green : .secondary
+                    valueColor: profile.preferences.soundEnabled ? .green : Color("AppPrimaryTextColor")
                 )
                 
                 Divider()
@@ -198,7 +216,7 @@ struct ProfileDetailsView: View {
                     icon: "music.note",
                     title: "Music",
                     value: profile.preferences.musicEnabled ? "On" : "Off",
-                    valueColor: profile.preferences.musicEnabled ? .green : .secondary
+                    valueColor: profile.preferences.musicEnabled ? .green : Color("AppPrimaryTextColor")
                 )
                 
                 Divider()
@@ -207,10 +225,10 @@ struct ProfileDetailsView: View {
                     icon: "gauge.with.dots.needle.33percent",
                     title: "Difficulty",
                     value: profile.preferences.difficultySetting.rawValue.capitalized,
-                    valueColor: .primary
+                    valueColor: Color("AppPrimaryTextColor")
                 )
             }
-            .background(Color(.systemGray6))
+            .background(Color.white)
             .cornerRadius(12)
         }
     }
@@ -229,7 +247,7 @@ struct ProfileDetailsView: View {
                 Text("Switch Profile")
                     .font(.headline)
             }
-            .foregroundColor(.white)
+            .foregroundColor(Color("AppPrimaryTextColor"))
             .frame(maxWidth: .infinity)
             .padding()
             .background(Color.blue)
@@ -254,15 +272,15 @@ struct StatCard: View {
             
             Text(value)
                 .font(.headline)
-                .foregroundColor(.primary)
+                .foregroundColor(Color("AppPrimaryTextColor"))
             
             Text(title)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color("AppPrimaryTextColor"))
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
-        .background(Color(.systemGray6))
+        .background(Color.white)
         .cornerRadius(12)
     }
 }
@@ -282,7 +300,7 @@ struct PreferenceRow: View {
             
             Text(title)
                 .font(.body)
-                .foregroundColor(.primary)
+                .foregroundColor(Color("AppPrimaryTextColor"))
             
             Spacer()
             

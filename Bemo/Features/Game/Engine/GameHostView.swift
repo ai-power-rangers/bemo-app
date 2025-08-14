@@ -40,8 +40,8 @@ struct GameHostView: View {
                             }) {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.largeTitle)
-                                    .foregroundColor(.white)
-                                    .background(Color.black.opacity(0.5))
+                                    .foregroundColor(Color("AppPrimaryTextColor"))
+                                    .background(Color("AppBackground").opacity(0.8))
                                     .clipShape(Circle())
                             }
                             .padding()
