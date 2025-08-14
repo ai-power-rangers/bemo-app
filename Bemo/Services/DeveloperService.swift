@@ -118,7 +118,7 @@ class DeveloperService {
         
         // For now, all developers get access to all tools
         // In the future, you could restrict tools based on role
-        return [.tangramEditor, .animationLab]
+        return [.tangramEditor, .animationLab, .tangramProgress]
     }
 }
 
@@ -144,6 +144,7 @@ enum DeveloperRole {
 enum DevToolType {
     case tangramEditor
     case animationLab
+    case tangramProgress
     // Add future dev tools here:
     // case levelEditor
     // case analyticsConsole
@@ -155,6 +156,8 @@ enum DevToolType {
             return "Tangram Editor"
         case .animationLab:
             return "Animation Lab"
+        case .tangramProgress:
+            return "Progress Test"
         }
     }
     
@@ -164,6 +167,8 @@ enum DevToolType {
             return "Create and edit tangram puzzles"
         case .animationLab:
             return "Test and debug animations"
+        case .tangramProgress:
+            return "Test difficulty selection and progress tracking"
         }
     }
 }

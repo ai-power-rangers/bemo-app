@@ -181,7 +181,7 @@
 				CODE_SIGN_ENTITLEMENTS = Bemo/Bemo.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 54Q9XU57JS;
+				DEVELOPMENT_TEAM = 7CM6TJXPLZ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Bemo/Info.plist;
@@ -195,7 +195,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mitchellwhite.Bemo;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yc.Bemo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -211,7 +211,7 @@
 				CODE_SIGN_ENTITLEMENTS = Bemo/Bemo.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 54Q9XU57JS;
+				DEVELOPMENT_TEAM = 7CM6TJXPLZ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Bemo/Info.plist;
@@ -225,7 +225,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mitchellwhite.Bemo;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yc.Bemo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
