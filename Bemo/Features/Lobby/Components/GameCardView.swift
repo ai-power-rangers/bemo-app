@@ -32,28 +32,37 @@ struct GameCardView: View {
     
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: BemoTheme.Spacing.small) {
-                // Game Icon
-                Image(systemName: game.iconName)
-                    .font(.system(size: 48))
-                    .foregroundColor(cardColors.foreground)
-                    .frame(height: 60)
+            VStack(spacing: 20) {
+                // Game Icon with colored background
+                ZStack {
+                    Circle()
+                        .fill(cardColors.foreground.opacity(0.15))
+                        .frame(width: 80, height: 80)
+                    
+                    Image(systemName: game.iconName)
+                        .font(.system(size: 40, weight: .medium))
+                        .foregroundColor(cardColors.foreground)
+                }
                 
-                // Game Title
-                Text(game.title)
-                    .font(BemoTheme.font(for: .body))
-                    .foregroundColor(cardColors.foreground)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
+                // Game Title and Subtitle
+                VStack(spacing: 4) {
+                    Text(game.title)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(Color(hex: "#333333"))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)                    
+                }
+                .padding(.horizontal, 8)
             }
-            .frame(maxWidth: .infinity, minHeight: 150)
-            .padding(BemoTheme.Spacing.medium)
-            .background(cardColors.background)
-            .cornerRadius(BemoTheme.CornerRadius.large)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.vertical, 24)
+            .background(Color.white)
+            .cornerRadius(20)
+            .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
         }
         .buttonStyle(ScaleButtonStyle())
     }
+    
 }
 
 // MARK: - Game Item Model

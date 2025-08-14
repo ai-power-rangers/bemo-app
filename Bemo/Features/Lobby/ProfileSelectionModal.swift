@@ -19,7 +19,11 @@ struct ProfileSelectionModal: View {
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 24) {
+            ZStack {
+                Color("AppBackground")
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 24) {
                 // Header
                 VStack(spacing: 8) {
                     Image(systemName: "person.2.circle.fill")
@@ -29,6 +33,7 @@ struct ProfileSelectionModal: View {
                     Text("Who's Playing?")
                         .font(.title2)
                         .fontWeight(.semibold)
+                        .foregroundColor(Color("AppPrimaryTextColor"))
                     
                     Text("Select a profile to continue")
                         .font(.body)
@@ -45,11 +50,11 @@ struct ProfileSelectionModal: View {
                         
                         Text("No profiles yet")
                             .font(.headline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
                         
                         Text("Create your first child profile to get started")
                             .font(.body)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
                             .multilineTextAlignment(.center)
                     }
                     .padding(.vertical, 40)
@@ -82,7 +87,8 @@ struct ProfileSelectionModal: View {
                 }
                 .padding(.horizontal)
                 
-                Spacer()
+                    Spacer()
+                }
             }
             .navigationTitle("Select Profile")
             .navigationBarTitleDisplayMode(.inline)
@@ -92,6 +98,18 @@ struct ProfileSelectionModal: View {
                         onDismiss()
                     }
                 }
+            }
+            .onAppear {
+                // Configure navigation bar appearance with AppBackground color
+                let appearance = UINavigationBarAppearance()
+                appearance.configureWithOpaqueBackground()
+                appearance.backgroundColor = UIColor(Color("AppBackground"))
+                appearance.titleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
+                appearance.largeTitleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
+                
+                UINavigationBar.appearance().standardAppearance = appearance
+                UINavigationBar.appearance().scrollEdgeAppearance = appearance
+                UINavigationBar.appearance().compactAppearance = appearance
             }
         }
     }
@@ -117,7 +135,7 @@ struct ProfileRowView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(profile.name)
                         .font(.headline)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color("AppPrimaryTextColor"))
                     
                     HStack {
                         HStack(spacing: 4) {

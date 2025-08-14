@@ -27,7 +27,7 @@ struct PuzzleSelectionView: View {
             // Header with title and filters
             headerView
                 .padding()
-                .background(Color(UIColor.systemBackground))
+                .background(Color("AppBackground"))
             
             Divider()
             
@@ -134,7 +134,7 @@ struct PuzzleSelectionView: View {
             .buttonStyle(.plain)
         }
         .padding(8)
-        .background(Color(UIColor.secondarySystemBackground))
+        .background(Color("AppBackground").opacity(0.95))
         .cornerRadius(8)
     }
     
@@ -183,8 +183,8 @@ struct PuzzleSelectionView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(viewModel.hasActiveFilters ? Color.accentColor : Color(UIColor.secondarySystemBackground))
-                .foregroundColor(viewModel.hasActiveFilters ? .white : .primary)
+                .background(viewModel.hasActiveFilters ? Color.accentColor : Color("AppBackground").opacity(0.95))
+                .foregroundColor(viewModel.hasActiveFilters ? .white : Color("AppPrimaryTextColor"))
                 .cornerRadius(15)
             }
             
@@ -377,7 +377,7 @@ struct PuzzleRowView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(puzzle.name)
                         .font(.headline)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color("AppPrimaryTextColor"))
                     
                     HStack {
                         Label(puzzle.category.rawValue, systemImage: categoryIcon)
@@ -400,7 +400,7 @@ struct PuzzleRowView: View {
                     .foregroundColor(.secondary)
             }
             .padding()
-            .background(Color(UIColor.secondarySystemBackground))
+            .background(Color("AppBackground").opacity(0.95))
             .cornerRadius(10)
         }
         .buttonStyle(.plain)

@@ -93,7 +93,7 @@ struct ChildProfileEditView: View {
                     
                     Text("Change Avatar")
                         .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundColor(BemoTheme.Colors.primary)
+                        .foregroundColor(Color("AppPrimaryTextColor"))
                 }
             }
             .onChange(of: selectedAvatar) { _ in hasChanges = true }
@@ -121,7 +121,7 @@ struct ChildProfileEditView: View {
                         .padding(BemoTheme.Spacing.medium)
                         .background(
                             RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
-                                .fill(Color.gray.opacity(0.04))
+                                .fill(Color.white)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
                                         .stroke(Color.gray.opacity(0.08), lineWidth: 1)
@@ -149,7 +149,7 @@ struct ChildProfileEditView: View {
                     ZStack(alignment: .leading) {
                         // Track
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.gray.opacity(0.1))
+                            .fill(Color.white)
                             .frame(height: 8)
                         
                         // Fill
@@ -203,14 +203,14 @@ struct ChildProfileEditView: View {
                             }) {
                                 Text(option)
                                     .font(.system(size: 15, weight: .medium, design: .rounded))
-                                    .foregroundColor(gender == option ? .white : Color("AppPrimaryTextColor").opacity(0.7))
+                                    .foregroundColor(gender == option ? .white : Color("AppPrimaryTextColor"))
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, BemoTheme.Spacing.small)
                                     .background(
                                         RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
                                             .fill(gender == option
                                                 ? BemoTheme.Colors.primary
-                                                : Color.gray.opacity(0.04))
+                                                : Color.white)
                                             .overlay(
                                                 RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
                                                     .stroke(
@@ -283,14 +283,14 @@ struct ChildProfileEditView: View {
                             }) {
                                 Text(label)
                                     .font(.system(size: 14, weight: .medium, design: .rounded))
-                                    .foregroundColor(difficultySetting == setting ? .white : Color("AppPrimaryTextColor").opacity(0.7))
+                                    .foregroundColor(difficultySetting == setting ? .white : Color("AppPrimaryTextColor"))
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, BemoTheme.Spacing.xsmall)
                                     .background(
                                         RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.small)
                                             .fill(difficultySetting == setting
                                                 ? BemoTheme.Colors.primary
-                                                : Color.gray.opacity(0.06))
+                                                : Color.white)
                                     )
                                     .animation(.spring(response: 0.3, dampingFraction: 0.8), value: difficultySetting)
                             }
@@ -301,7 +301,7 @@ struct ChildProfileEditView: View {
                 .padding(BemoTheme.Spacing.medium)
                 .background(
                     RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
-                        .fill(Color.gray.opacity(0.04))
+                        .fill(Color.white)
                         .overlay(
                             RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
                                 .stroke(Color.gray.opacity(0.08), lineWidth: 1)
@@ -351,7 +351,7 @@ struct ChildProfileEditView: View {
                     Text("Delete Profile")
                         .font(.system(size: 16, weight: .medium, design: .rounded))
                 }
-                .foregroundColor(.red)
+                .foregroundColor(Color("AppPrimaryTextColor"))
                 .frame(maxWidth: .infinity)
                 .padding(BemoTheme.Spacing.medium)
                 .background(
@@ -392,7 +392,7 @@ struct ChildProfileEditView: View {
                         dismiss()
                     }
                     .font(.system(size: 17, weight: .medium, design: .rounded))
-                    .foregroundColor(BemoTheme.Colors.primary)
+                    .foregroundColor(Color("AppPrimaryTextColor"))
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -400,7 +400,7 @@ struct ChildProfileEditView: View {
                         saveChanges()
                     }
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundColor(BemoTheme.Colors.primary)
+                    .foregroundColor(Color("AppPrimaryTextColor"))
                     .disabled(!hasChanges || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
@@ -430,6 +430,18 @@ struct ChildProfileEditView: View {
                 }
             } message: {
                 Text("Are you sure you want to delete \(profile.name)'s profile? This action cannot be undone.")
+            }
+            .onAppear {
+                // Configure navigation bar appearance with AppBackground color
+                let appearance = UINavigationBarAppearance()
+                appearance.configureWithOpaqueBackground()
+                appearance.backgroundColor = UIColor(Color("AppBackground"))
+                appearance.titleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
+                appearance.largeTitleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
+                
+                UINavigationBar.appearance().standardAppearance = appearance
+                UINavigationBar.appearance().scrollEdgeAppearance = appearance
+                UINavigationBar.appearance().compactAppearance = appearance
             }
         }
     }
@@ -481,7 +493,7 @@ struct ToggleRow: View {
         .padding(BemoTheme.Spacing.medium)
         .background(
             RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
-                .fill(Color.gray.opacity(0.04))
+                .fill(Color.white)
                 .overlay(
                     RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
                         .stroke(Color.gray.opacity(0.08), lineWidth: 1)

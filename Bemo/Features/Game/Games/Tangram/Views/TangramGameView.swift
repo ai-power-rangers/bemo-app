@@ -44,7 +44,7 @@ struct TangramGameView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color("GameBackground", bundle: nil))
+            .background(Color("AppBackground"))
         }
         .onAppear {
             // Remove navigation bar shadow
@@ -66,11 +66,12 @@ struct TangramGameView: View {
                 // Search field
                 HStack {
                     Image(systemName: "magnifyingglass")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.5))
                     TextField("Search puzzles...", text: $searchText)
+                        .foregroundColor(Color("AppPrimaryTextColor"))
                 }
                 .padding(8)
-                .background(Color(.systemGray6))
+                .background(Color("AppBackground"))
                 .cornerRadius(8)
 
                 // Student difficulty (Default/Easy/Medium/Hard) as icon-only menu
@@ -84,7 +85,7 @@ struct TangramGameView: View {
                     Image(systemName: "slider.horizontal.3")
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(Color(.systemGray6))
+                        .background(Color("AppBackground"))
                         .cornerRadius(8)
                 }
 
@@ -113,7 +114,7 @@ struct TangramGameView: View {
                     Image(systemName: "line.3.horizontal.decrease.circle")
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(Color(.systemGray6))
+                        .background(Color("AppBackground"))
                         .cornerRadius(8)
                 }
             }
@@ -129,7 +130,7 @@ struct TangramGameView: View {
                     ProgressView()
                         .scaleEffect(1.5)
                     Text("Loading puzzles...")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
                 }
                 Spacer()
             } else if filteredPuzzles.isEmpty {
@@ -137,15 +138,16 @@ struct TangramGameView: View {
                 VStack(spacing: 24) {
                     Image(systemName: "square.grid.3x3.square")
                         .font(.system(size: 80))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.4))
                     
                     VStack(spacing: 8) {
                         Text("No Puzzles Found")
                             .font(.title2)
                             .fontWeight(.semibold)
+                            .foregroundColor(Color("AppPrimaryTextColor"))
                         
                         Text("Try adjusting your search or filters")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -169,7 +171,7 @@ struct TangramGameView: View {
                 }
             }
         }
-        .background(Color(.systemGray6))
+        .background(Color("AppBackground"))
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -181,8 +183,10 @@ struct TangramGameView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 16))
+                            .foregroundColor(Color("AppPrimaryTextColor"))
                         Text("Back")
                             .font(.system(size: 16))
+                            .foregroundColor(Color("AppPrimaryTextColor"))
                     }
                 }
             }
@@ -190,6 +194,7 @@ struct TangramGameView: View {
             ToolbarItem(placement: .principal) {
                 Text("Tangram")
                     .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(Color("AppPrimaryTextColor"))
             }
         }
     }
@@ -278,7 +283,7 @@ struct TangramGameView: View {
                 .ignoresSafeArea(edges: .bottom) // Only ignore bottom
             } else {
                 Text("No puzzle selected")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
             }
         }
         .navigationTitle("")
@@ -292,8 +297,10 @@ struct TangramGameView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 16))
+                            .foregroundColor(Color("AppPrimaryTextColor"))
                         Text("Back")
                             .font(.system(size: 16))
+                            .foregroundColor(Color("AppPrimaryTextColor"))
                     }
                 }
             }
@@ -306,7 +313,7 @@ struct TangramGameView: View {
                     Text(viewModel.formattedTime)
                         .font(.system(size: 16, weight: .medium, design: .monospaced))
                 }
-                .foregroundColor(.primary)
+                .foregroundColor(Color("AppPrimaryTextColor"))
             }
             
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -324,7 +331,7 @@ struct TangramGameView: View {
                                 .foregroundColor(.yellow)
                         }
                     }
-                    .foregroundColor(viewModel.currentHint != nil ? .yellow : .primary)
+                    .foregroundColor(viewModel.currentHint != nil ? .yellow : Color("AppPrimaryTextColor"))
                     .scaleEffect(viewModel.currentHint != nil ? 1.1 : 1.0)
                     .animation(.easeInOut(duration: 0.2), value: viewModel.currentHint != nil)
                 }
@@ -413,11 +420,11 @@ struct TangramGameView: View {
             Text("Puzzle Complete!")
                 .font(.largeTitle)
                 .fontWeight(.bold)
-                .foregroundColor(.green)
+                .foregroundColor(Color("AppPrimaryTextColor"))
             
             Text("Amazing work! You solved \"\(viewModel.selectedPuzzle?.name ?? "the puzzle")\"!")
                 .font(.title3)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color("AppPrimaryTextColor").opacity(0.8))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
@@ -428,10 +435,11 @@ struct TangramGameView: View {
                     Image(systemName: "clock.fill")
                         .foregroundColor(.blue)
                     Text("Time:")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
                     Spacer()
                     Text(viewModel.formattedTime)
                         .font(.system(size: 18, weight: .semibold, design: .monospaced))
+                        .foregroundColor(Color("AppPrimaryTextColor"))
                 }
                 .padding(.horizontal, 30)
                 
@@ -441,10 +449,11 @@ struct TangramGameView: View {
                         Image(systemName: "lightbulb.fill")
                             .foregroundColor(.yellow)
                         Text("Hints Used:")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
                         Spacer()
                         Text("\(viewModel.hintHistory.count)")
                             .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(Color("AppPrimaryTextColor"))
                     }
                     .padding(.horizontal, 30)
                 }
@@ -454,7 +463,7 @@ struct TangramGameView: View {
                     Image(systemName: "star.fill")
                         .foregroundColor(difficultyColor)
                     Text("Difficulty:")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
                     Spacer()
                     Text(difficultyName)
                         .font(.system(size: 18, weight: .semibold))
@@ -465,7 +474,7 @@ struct TangramGameView: View {
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(UIColor.secondarySystemBackground))
+                    .fill(Color("AppBackground").opacity(0.95))
             )
             .padding(.horizontal, 20)
             
@@ -506,7 +515,7 @@ struct TangramGameView: View {
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 20)
-                .fill(Color(UIColor.systemBackground))
+                .fill(Color("AppBackground"))
                 .shadow(radius: 10)
         )
         .padding()
@@ -542,12 +551,13 @@ struct FilterChip: View {
                 }
                 Text(title)
                     .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color("AppPrimaryTextColor"))
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 15)
-                    .fill(isSelected ? color.opacity(0.2) : Color(UIColor.tertiarySystemFill))
+                    .fill(isSelected ? color.opacity(0.2) : Color("AppBackground").opacity(0.3))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 15)
@@ -583,7 +593,7 @@ struct PuzzleThumbnailView: View {
                 GeometryReader { geometry in
                     ZStack {
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(UIColor.secondarySystemBackground))
+                            .fill(Color.white)
                         
                         // Render puzzle thumbnail using shared service
                         PuzzleThumbnailService.shared.tangramThumbnailView(for: puzzle, colorful: true)
@@ -629,10 +639,14 @@ struct PuzzleThumbnailView: View {
                     }
                     .padding(.vertical, 4)
                     .frame(maxWidth: .infinity)
-                    .background(Color(UIColor.systemBackground))
+                    .background(Color("AppBackground"))
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color("AppPrimaryTextColor").opacity(0.2), lineWidth: 1)
+            )
             .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
         }
         .buttonStyle(.plain)

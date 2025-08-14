@@ -17,41 +17,66 @@ struct GameLobbyView: View {
     
     var body: some View {
         ZStack {
-            BemoTheme.Colors.background.ignoresSafeArea()
+            // Background using AppBackground asset
+            Color("AppBackground")
+                .ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // Top Navigation Bar
-                HeaderView(
-                    profileName: viewModel.currentUserProfile?.name,
-                    avatarSymbol: viewModel.currentUserProfile?.avatarSymbol,
-                    avatarColor: viewModel.currentUserProfile?.avatarColor,
-                    onMenuTapped: {
-                        showingSideMenu = true
-                    },
-                    onProfileTapped: {
+                // Top Navigation Bar with Profile badge and Hamburger menu
+                HStack {
+                    // Profile Badge
+                    Button(action: {
                         viewModel.showProfileDetailsView()
+                    }) {
+                        ProfileBadgeView(
+                            name: viewModel.currentUserProfile?.name,
+                            avatarSymbol: viewModel.currentUserProfile?.avatarSymbol,
+                            avatarColor: viewModel.currentUserProfile?.avatarColor
+                        )
                     }
-                )
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    Spacer()
+                    
+                    // Hamburger Menu Button
+                    Button(action: {
+                        showingSideMenu = true
+                    }) {
+                        Image(systemName: "line.horizontal.3")
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundColor(Color(hex: "#333333"))
+                            .frame(width: 44, height: 44)
+                            .background(Color.white.opacity(0.9))
+                            .cornerRadius(12)
+                            .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
+                .padding(.bottom, 20)
                 
                 // Welcome Message
-                VStack(alignment: .leading, spacing: BemoTheme.Spacing.xsmall) {
-                    Text("Hello,")
-                        .font(BemoTheme.font(for: .heading2))
-                        .foregroundColor(BemoTheme.Colors.primary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Welcome back,")
+                        .font(.system(size: 20, weight: .regular))
+                        .foregroundColor(Color(hex: "#666666"))
                     
-                    Text("\(viewModel.displayProfile?.name ?? "Friend")!")
-                        .font(BemoTheme.font(for: .heading2))
-                        .foregroundColor(BemoTheme.Colors.primary)                    
+                    Text(viewModel.displayProfile?.name ?? "Friend")
+                        .font(.system(size: 32, weight: .bold))
+                        .foregroundColor(Color(hex: "#333333"))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, BemoTheme.Spacing.xlarge)
-                .padding(.top, BemoTheme.Spacing.large)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 32)
                 
                 // Games Grid
-                ScrollView {
+                ScrollView(.vertical, showsIndicators: false) {
                     LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 150), spacing: BemoTheme.Spacing.large)],
-                        spacing: BemoTheme.Spacing.large
+                        columns: [
+                            GridItem(.flexible(), spacing: 20),
+                            GridItem(.flexible(), spacing: 20)
+                        ],
+                        spacing: 20
                     ) {
                         ForEach(Array(viewModel.availableGames.enumerated()), id: \.element.id) { index, gameItem in
                             GameCardView(
@@ -68,10 +93,11 @@ struct GameLobbyView: View {
                                     viewModel.selectGameItem(gameItem)
                                 }
                             )
+                            .aspectRatio(1, contentMode: .fit)
                         }
                     }
-                    .padding(.horizontal, BemoTheme.Spacing.xlarge)
-                    .padding(.bottom, BemoTheme.Spacing.xlarge)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 24)
                 }
             }
         }

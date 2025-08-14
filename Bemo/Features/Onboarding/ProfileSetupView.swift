@@ -99,6 +99,17 @@ struct ProfileSetupView: View {
             withAnimation(.easeOut(duration: 0.6)) {
                 animateContent = true
             }
+            
+            // Configure navigation bar appearance with AppBackground color
+            let appearance = UINavigationBarAppearance()
+            appearance.configureWithOpaqueBackground()
+            appearance.backgroundColor = UIColor(Color("AppBackground"))
+            appearance.titleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
+            appearance.largeTitleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
+            
+            UINavigationBar.appearance().standardAppearance = appearance
+            UINavigationBar.appearance().scrollEdgeAppearance = appearance
+            UINavigationBar.appearance().compactAppearance = appearance
         }
         .alert("Oops!", isPresented: .constant(viewModel.errorMessage != nil)) {
             Button("OK") {
@@ -136,20 +147,7 @@ struct ProfileSetupView: View {
     }
     
     private var headerSection: some View {
-        VStack(spacing: BemoTheme.Spacing.medium) {
-            ZStack {
-                Circle()
-                    .fill(Color.gray.opacity(0.05))
-                    .frame(width: 100, height: 100)
-                
-                Image(systemName: "person.crop.circle.badge.plus")
-                    .font(.system(size: 56, weight: .regular, design: .rounded))
-                    .foregroundColor(BemoTheme.Colors.primary)
-            }
-            .scaleEffect(animateContent ? 1 : 0.8)
-            .opacity(animateContent ? 1 : 0)
-            .animation(.spring(response: 0.6, dampingFraction: 0.8), value: animateContent)
-            
+        VStack(spacing: BemoTheme.Spacing.medium) {            
             VStack(spacing: BemoTheme.Spacing.xsmall) {
                 Text("Let's Get Started!")
                     .font(.system(size: 32, weight: .bold, design: .rounded))

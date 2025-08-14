@@ -17,22 +17,18 @@ struct SideMenuView: View {
     
     var body: some View {
         NavigationView {
-            ZStack {
-                // App background color from assets
-                Color("AppBackground")
-                    .ignoresSafeArea()
-                
-                VStack(alignment: .leading, spacing: 0) {
-                    // Menu header
-                    VStack(alignment: .leading, spacing: BemoTheme.Spacing.small) {
-                        Image(systemName: "line.3.horizontal")
-                            .font(.system(size: 24, weight: .medium))
-                            .foregroundColor(BemoTheme.Colors.primary)
-                        
-                        Text("Menu")
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
-                            .foregroundColor(Color("AppPrimaryTextColor"))
-                    }
+                            ZStack {
+                    // App background color from assets
+                    Color("AppBackground")
+                        .ignoresSafeArea()
+                    
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Menu header
+                        VStack(alignment: .leading, spacing: BemoTheme.Spacing.small) {
+                            Text("Menu")
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundColor(Color("AppPrimaryTextColor"))
+                        }
                     .padding(.horizontal, BemoTheme.Spacing.large)
                     .padding(.top, BemoTheme.Spacing.xlarge)
                     .padding(.bottom, BemoTheme.Spacing.large)
