@@ -108,6 +108,36 @@ struct ParentDashboardView: View {
                             InsightRow(insight: insight)
                         }
                     }
+
+                    // Current skills (Tangram)
+                    Section(header: Text("Current Skills (Tangram)")) {
+                        if viewModel.skills.isEmpty {
+                            Text("No skill data yet")
+                                .foregroundColor(.secondary)
+                        } else {
+                            ForEach(viewModel.skills) { skill in
+                                HStack(alignment: .center) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(skill.displayName)
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                        Text("Mastery: \(skill.masteryState)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    VStack(alignment: .trailing) {
+                                        Text("Lvl \(skill.level)")
+                                            .fontWeight(.bold)
+                                        Text("\(skill.xpTotal) XP")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
                 }
                 
                 // Settings section

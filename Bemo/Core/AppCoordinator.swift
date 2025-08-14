@@ -137,44 +137,25 @@ class AppCoordinator {
         if authService.isAuthenticated {
             let profileService = dependencyContainer.profileService
             
-            // Check if we have local profiles first
-            // This handles the case where Supabase might not be authenticated yet
-            if !profileService.childProfiles.isEmpty {
-                // Have local profiles - go to lobby immediately
+            // Immediately sync profiles in the background.
+            // This will work if Supabase session is already restored.
+            profileService.syncWithSupabase()
+            
+            // Navigate based on *currently available* local profiles.
+            // The UI will reactively update if/when the sync completes and changes `hasProfiles`.
+            if profileService.hasProfiles {
                 currentState = .lobby
-                
-                // Auto-select if only one profile
                 if profileService.childProfiles.count == 1 && profileService.activeProfile == nil {
                     profileService.setActiveProfile(profileService.childProfiles[0])
                 }
-                
-                // Try to sync from Supabase in background (will work if Supabase session exists)
-                profileService.syncWithSupabase()
             } else {
-                // No local profiles - try to sync from Supabase
-                profileService.syncWithSupabase()
-                
-                // Give sync a moment to complete, then check for profiles
-                Task {
-                    try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second for sync
-                    
-                    await MainActor.run {
-                        // After sync attempt, check if any profiles exist
-                        if profileService.childProfiles.isEmpty {
-                            // No profiles exist at all - go to profile setup
-                            if let currentUser = authService.currentUser {
-                                self.currentState = .profileSetup(currentUser)
-                            }
-                        } else {
-                            // Profiles were synced - go to lobby
-                            self.currentState = .lobby
-                            
-                            // Auto-select if only one profile
-                            if profileService.childProfiles.count == 1 && profileService.activeProfile == nil {
-                                profileService.setActiveProfile(profileService.childProfiles[0])
-                            }
-                        }
-                    }
+                // No profiles found locally, go to setup.
+                // If sync finds profiles later, the handleProfileServiceChange observer will navigate to lobby.
+                if let currentUser = authService.currentUser {
+                    self.currentState = .profileSetup(currentUser)
+                } else {
+                    // This should not happen if authenticated, but as a fallback:
+                    handleAuthenticationChange(isAuthenticated: false)
                 }
             }
         } else {
@@ -286,6 +267,7 @@ class AppCoordinator {
                 profileService: self.dependencyContainer.profileService,
                 supabaseService: self.dependencyContainer.supabaseService,
                 puzzleManagementService: self.dependencyContainer.puzzleManagementService,
+                learningService: self.dependencyContainer.learningService,
                 developerService: self.dependencyContainer.developerService,
                 onGameSelected: { [weak self] selectedGame in
                     self?.currentState = .game(selectedGame)
@@ -324,6 +306,7 @@ class AppCoordinator {
                     cvService: self.dependencyContainer.cvService,
                     profileService: self.dependencyContainer.profileService,
                     supabaseService: self.dependencyContainer.supabaseService,
+                    learningService: self.dependencyContainer.learningService,
                     errorTrackingService: self.dependencyContainer.errorTrackingService,
                     currentChildProfileId: self.dependencyContainer.profileService.activeProfile!.id,
                     onQuit: { [weak self] in
@@ -349,6 +332,7 @@ class AppCoordinator {
                 profileService: self.dependencyContainer.profileService,
                 apiService: self.dependencyContainer.apiService,
                 authenticationService: self.dependencyContainer.authenticationService,
+                supabaseService: self.dependencyContainer.supabaseService,
                 onDismiss: { [weak self] in
                     guard let self else { return }
                     let profileService = self.dependencyContainer.profileService

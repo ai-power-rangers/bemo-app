@@ -24,6 +24,7 @@ class ParentDashboardViewModel {
     private let profileService: ProfileService
     private let apiService: APIService
     private let authenticationService: AuthenticationService
+    private let supabaseService: SupabaseService?
     private let onDismiss: () -> Void
     private let onAddChildRequested: () -> Void
     private var cancellables = Set<AnyCancellable>()
@@ -60,12 +61,14 @@ class ParentDashboardViewModel {
         profileService: ProfileService,
         apiService: APIService,
         authenticationService: AuthenticationService,
+        supabaseService: SupabaseService? = nil,
         onDismiss: @escaping () -> Void,
         onAddChildRequested: @escaping () -> Void
     ) {
         self.profileService = profileService
         self.apiService = apiService
         self.authenticationService = authenticationService
+        self.supabaseService = supabaseService
         self.onDismiss = onDismiss
         self.onAddChildRequested = onAddChildRequested
         
@@ -74,6 +77,19 @@ class ParentDashboardViewModel {
         loadData()
         setupAuthenticationObserver()
     }
+
+    // MARK: - Skills
+
+    struct SkillStat: Identifiable {
+        let id = UUID()
+        let key: String
+        let displayName: String
+        let level: Int
+        let xpTotal: Int
+        let masteryState: String
+    }
+
+    var skills: [SkillStat] = []
     
     private func setupAuthenticationObserver() {
         // With @Observable, the authenticatedUser will automatically sync
@@ -82,11 +98,91 @@ class ParentDashboardViewModel {
     }
     
     private func loadData() {
-        // Load child profiles
+        #if DEBUG
+        print("🎯 [ParentDashboard] loadData() called")
+        #endif
+        
+        // Load child profiles first (synchronously)
         loadChildProfiles()
         
         // Load insights
         generateInsights()
+
+        // Load current skills for selected child after profiles are loaded
+        Task { @MainActor [weak self] in
+            // Small delay to ensure selectedChild is set
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            await self?.loadSkills()
+        }
+    }
+
+    private func loadSkills() async {
+        #if DEBUG
+        print("📊 [ParentDashboard] loadSkills() called")
+        print("   - supabaseService: \(supabaseService != nil ? "✅ Available" : "❌ NIL")")
+        print("   - selectedChild: \(selectedChild != nil ? "✅ \(selectedChild!.name)" : "❌ NIL")")
+        #endif
+        
+        guard let supabase = supabaseService,
+              let selected = selectedChild else {
+            #if DEBUG
+            print("📊 [ParentDashboard] loadSkills - Cannot proceed, missing dependencies")
+            #endif
+            skills = []
+            return
+        }
+        
+        #if DEBUG
+        print("📊 [ParentDashboard] Loading skills for child: \(selected.name) (id: \(selected.id))")
+        #endif
+        
+        // Fetch per-skill rows for Tangram (game_id = "tangram") via SupabaseService helper
+        do {
+            let response = try await supabase.listSkillProgressRows(childProfileId: selected.id, gameId: "tangram")
+            
+            #if DEBUG
+            print("📊 [ParentDashboard] Fetched \(response.count) skill progress rows:")
+            for row in response {
+                print("   - \(row.skill_key): Level \(row.level), XP \(row.xp_total), Mastery: \(row.mastery_state)")
+            }
+            #endif
+            
+            let displayName: (String) -> String = { key in
+                switch key {
+                case "shape_matching": return "Shape Matching"
+                case "mental_rotation": return "Mental Rotation"
+                case "reflection": return "Reflection"
+                case "decomposition": return "Decomposition"
+                case "planning_sequencing": return "Planning & Sequencing"
+                default: return key
+                }
+            }
+
+            let mapped = response.map { r in
+                SkillStat(
+                    key: r.skill_key,
+                    displayName: displayName(r.skill_key),
+                    level: r.level,
+                    xpTotal: r.xp_total,
+                    masteryState: r.mastery_state
+                )
+            }
+            
+            #if DEBUG
+            print("📊 [ParentDashboard] Mapped skills to display format:")
+            for skill in mapped {
+                print("   - \(skill.displayName) [\(skill.key)]: Level \(skill.level), \(skill.xpTotal) XP, \(skill.masteryState)")
+            }
+            #endif
+            
+            await MainActor.run { skills = mapped }
+        } catch {
+            #if DEBUG
+            print("❌ [ParentDashboard] Failed to load skills: \(error)")
+            #endif
+            // Non-fatal
+            await MainActor.run { skills = [] }
+        }
     }
     
     private func loadChildProfiles() {
@@ -94,8 +190,19 @@ class ParentDashboardViewModel {
         let userProfiles = profileService.childProfiles
         let activeProfileId = profileService.activeProfile?.id
         
+        #if DEBUG
+        print("👨‍👩‍👧‍👦 [ParentDashboard] Loading child profiles:")
+        print("   - Total profiles: \(userProfiles.count)")
+        print("   - Active profile ID: \(activeProfileId ?? "none")")
+        #endif
+        
         childProfiles = userProfiles.map { profile in
-            ChildProfile(
+            let isSelected = profile.id == activeProfileId
+            #if DEBUG
+            print("   - \(profile.name) (id: \(profile.id)) - selected: \(isSelected)")
+            #endif
+            
+            return ChildProfile(
                 id: profile.id,
                 name: profile.name,
                 avatarSymbol: profile.avatarSymbol,
@@ -104,11 +211,19 @@ class ParentDashboardViewModel {
                 totalXP: profile.totalXP,
                 playTimeToday: generateMockPlayTime(), // Mock data for now
                 recentAchievements: generateMockAchievements(), // Mock data for now
-                isSelected: profile.id == activeProfileId
+                isSelected: isSelected
             )
         }
         
         selectedChild = childProfiles.first { $0.isSelected } ?? childProfiles.first
+        
+        #if DEBUG
+        if let selected = selectedChild {
+            print("👶 [ParentDashboard] Initially selected child: \(selected.name) (id: \(selected.id))")
+        } else {
+            print("⚠️ [ParentDashboard] No child selected initially")
+        }
+        #endif
     }
     
     private func generateInsights() {
@@ -159,6 +274,10 @@ class ParentDashboardViewModel {
     }
     
     func selectChild(_ profile: ChildProfile) {
+        #if DEBUG
+        print("👶 [ParentDashboard] Child selected: \(profile.name) (id: \(profile.id))")
+        #endif
+        
         selectedChild = profile
         
         // Update selected status
@@ -183,6 +302,14 @@ class ParentDashboardViewModel {
         
         // Update insights for selected child
         generateInsights()
+        
+        // Reload skills for newly selected child
+        Task { @MainActor [weak self] in
+            #if DEBUG
+            print("👶 [ParentDashboard] Reloading skills for newly selected child")
+            #endif
+            await self?.loadSkills()
+        }
     }
     
     func formattedPlayTime(_ timeInterval: TimeInterval) -> String {

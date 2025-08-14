@@ -22,6 +22,7 @@ class DependencyContainer {
     let puzzleSupabaseService: SupabaseService  // Service role version for dev tools
     let puzzleManagementService: PuzzleManagementService
     let developerService: DeveloperService
+    let learningService: LearningService
     
     init() {
         // Initialize error tracking first so it's available for other services
@@ -42,6 +43,11 @@ class DependencyContainer {
         
         // Initialize developer service for determining dev tool access
         self.developerService = DeveloperService(authenticationService: authenticationService)
+        self.learningService = LearningService(
+            supabaseService: supabaseService,
+            profileService: profileService,
+            errorTrackingService: errorTrackingService
+        )
         
         // Initialize services that need setup
         setupServices()
@@ -63,10 +69,5 @@ class DependencyContainer {
         // Setup error tracking integration
         authenticationService.setErrorTrackingService(errorTrackingService)
         profileService.setErrorTrackingService(errorTrackingService)
-        
-        // Trigger initial profile sync from Supabase if user is already authenticated
-        if authenticationService.isAuthenticated {
-            profileService.syncWithSupabase()
-        }
     }
 }
