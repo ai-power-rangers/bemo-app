@@ -17,17 +17,27 @@ class TangramGameViewModel {
     
     // MARK: - Game State
     
-    enum GamePhase {
-        case selectingPuzzle
-        case playingPuzzle
-        case puzzleComplete
+    enum GamePhase: Equatable {
+        case selectingDifficulty    // NEW: Choose difficulty level
+        case map(UserPreferences.DifficultySetting)   // NEW: Show map for selected difficulty
+        case playingPuzzle          // EXISTING: Playing a puzzle
+        case puzzleComplete         // EXISTING: Puzzle completed
+        case promotion(from: UserPreferences.DifficultySetting, to: UserPreferences.DifficultySetting)  // NEW: Auto-promotion flow
     }
     
-    var currentPhase: GamePhase = .selectingPuzzle
+    var currentPhase: GamePhase = .selectingDifficulty
     var selectedPuzzle: GamePuzzleData?
     var gameState: PuzzleGameState?
     var score: Int = 0
     var progress: Double = 0.0
+    
+    // MARK: - Progress Tracking Properties
+    
+    /// Currently selected difficulty level
+    var selectedDifficulty: UserPreferences.DifficultySetting?
+    
+    /// Current child's progress data
+    var currentProgress: TangramProgress?
     var showHints: Bool = false
     var canvasSize: CGSize = CGSize(width: 600, height: 600)
     var showPlacementCelebration: Bool = false
@@ -94,6 +104,7 @@ class TangramGameViewModel {
     private let container: TangramDependencyContainer
     private let supabaseService: SupabaseService?
     private var learningService: LearningService?
+    private let progressService: TangramProgressService
     var availablePuzzles: [GamePuzzleData] = []
     
     // Unified validation engine
@@ -130,6 +141,7 @@ class TangramGameViewModel {
         self.container = container
         self.supabaseService = container.supabaseService
         self.learningService = learningService
+        self.progressService = container.progressService
         
         // Load puzzles using container's services
         Task { @MainActor [weak self] in
@@ -147,6 +159,9 @@ class TangramGameViewModel {
                     // Handle error silently
                 }
             }
+            
+            // After puzzles are loaded, determine initial phase
+            self.determineInitialPhase()
         }
     }
 
@@ -172,6 +187,112 @@ class TangramGameViewModel {
             learningService: learningService
         )
         self.init(delegate: delegate, container: container, learningService: learningService)
+    }
+    
+    // MARK: - Phase Management
+    
+    /// Determine initial phase based on child's progress
+    func determineInitialPhase() {
+        guard let childId = currentChildProfileId else {
+            // No child selected, default to difficulty selection
+            currentPhase = .selectingDifficulty
+            return
+        }
+        
+        // Get child's progress
+        currentProgress = progressService.getProgress(for: childId)
+        
+        if let lastDifficulty = currentProgress?.lastSelectedDifficulty {
+            // Returning user - go to map for last played difficulty
+            selectedDifficulty = lastDifficulty
+            currentPhase = .map(lastDifficulty)
+        } else {
+            // New user - start with difficulty selection
+            currentPhase = .selectingDifficulty
+        }
+    }
+    
+    /// Select a difficulty level and proceed to map
+    func selectDifficulty(_ difficulty: UserPreferences.DifficultySetting) {
+        selectedDifficulty = difficulty
+        
+        // Update progress with selected difficulty
+        if let childId = currentChildProfileId {
+            progressService.setLastSelectedDifficulty(childId: childId, difficulty: difficulty)
+            currentProgress = progressService.getProgress(for: childId)
+        }
+        
+        // Transition to map for selected difficulty
+        currentPhase = .map(difficulty)
+    }
+    
+    /// Show map view for a specific difficulty
+    func showMap(for difficulty: UserPreferences.DifficultySetting) {
+        selectedDifficulty = difficulty
+        currentPhase = .map(difficulty)
+    }
+    
+    /// Exit back to difficulty selection
+    func exitToMenu() {
+        selectedDifficulty = nil
+        currentPhase = .selectingDifficulty
+    }
+    
+    /// Select and start a puzzle from the map (if unlocked)
+    func selectPuzzleFromMap(_ puzzle: GamePuzzleData) {
+        guard let childId = currentChildProfileId,
+              let difficulty = selectedDifficulty else {
+            return
+        }
+        
+        // Check if puzzle is unlocked
+        let isUnlocked = progressService.isPuzzleUnlocked(
+            childId: childId,
+            puzzleId: puzzle.id,
+            difficulty: difficulty,
+            from: availablePuzzles
+        )
+        
+        if isUnlocked {
+            selectedPuzzle = puzzle
+            currentPhase = .playingPuzzle
+            startGameSession(puzzleId: puzzle.id, puzzleName: puzzle.name, difficulty: puzzle.difficulty)
+        }
+    }
+    
+    // MARK: - Computed Properties for New Flow
+    
+    /// Get puzzles for the currently selected difficulty
+    var puzzlesForSelectedDifficulty: [GamePuzzleData] {
+        guard let difficulty = selectedDifficulty else { return [] }
+        return availablePuzzles
+            .filter { difficulty.containsPuzzleLevel($0.difficulty) }
+            .sorted { $0.id < $1.id }
+    }
+    
+    /// Get unlocked puzzles for current child and difficulty
+    var unlockedPuzzles: [GamePuzzleData] {
+        guard let childId = currentChildProfileId,
+              let difficulty = selectedDifficulty else { return [] }
+        
+        return progressService.getUnlockedPuzzles(
+            for: childId,
+            difficulty: difficulty,
+            from: availablePuzzles
+        )
+    }
+    
+    /// Check if a specific puzzle is unlocked
+    func isPuzzleUnlocked(_ puzzle: GamePuzzleData) -> Bool {
+        guard let childId = currentChildProfileId,
+              let difficulty = selectedDifficulty else { return false }
+        
+        return progressService.isPuzzleUnlocked(
+            childId: childId,
+            puzzleId: puzzle.id,
+            difficulty: difficulty,
+            from: availablePuzzles
+        )
     }
     
     // MARK: - Game Actions
@@ -235,7 +356,12 @@ class TangramGameViewModel {
         // End game session if active
         endGameSession(completed: false)
         
-        currentPhase = .selectingPuzzle
+        // Return to map if we have a selected difficulty, otherwise difficulty selection
+        if let difficulty = selectedDifficulty {
+            currentPhase = .map(difficulty)
+        } else {
+            currentPhase = .selectingDifficulty
+        }
         selectedPuzzle = nil
         gameState = nil
         gameProgress = nil
@@ -471,6 +597,9 @@ class TangramGameViewModel {
         // Puzzle completed via SpriteKit
         stopTimer()
         
+        // Save progress through service
+        savePuzzleCompletion()
+        
         // Track completion metrics before showing modal
         trackPuzzleCompletion()
         
@@ -482,7 +611,9 @@ class TangramGameViewModel {
             // Wait for celebration animation (3 seconds)
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             guard !Task.isCancelled else { return }
-            self?.currentPhase = .puzzleComplete
+            
+            // Check for promotion before transitioning
+            self?.checkForPromotionAndTransition()
         }
     }
     
@@ -679,13 +810,61 @@ class TangramGameViewModel {
     private func completePuzzle() {
         // Ensure timer stops so the displayed time is the final completion time
         stopTimer()
-        currentPhase = .puzzleComplete
+        
+        // Save progress through service
+        savePuzzleCompletion()
         
         // Track completion metrics
         trackPuzzleCompletion()
         
         let xpAwarded = calculateXP()
         delegate?.gameDidCompleteLevel(xpAwarded: xpAwarded)
+        
+        // Check for promotion and transition
+        checkForPromotionAndTransition()
+    }
+    
+    /// Save puzzle completion to progress service
+    private func savePuzzleCompletion() {
+        guard let childId = currentChildProfileId,
+              let puzzle = selectedPuzzle,
+              let difficulty = selectedDifficulty else {
+            return
+        }
+        
+        // Mark puzzle as completed in progress service
+        progressService.markPuzzleCompleted(
+            childId: childId,
+            puzzleId: puzzle.id,
+            difficulty: difficulty
+        )
+        
+        // Update current progress reference
+        currentProgress = progressService.getProgress(for: childId)
+    }
+    
+    /// Check for promotion and handle phase transition
+    private func checkForPromotionAndTransition() {
+        guard let childId = currentChildProfileId,
+              let difficulty = selectedDifficulty else {
+            currentPhase = .puzzleComplete
+            return
+        }
+        
+        // Check if promotion is needed
+        let shouldPromote = progressService.shouldPromoteToNextDifficulty(
+            childId: childId,
+            currentDifficulty: difficulty,
+            from: availablePuzzles
+        )
+        
+        if shouldPromote, let nextDifficulty = currentProgress?.getNextDifficulty() {
+            // Auto-promote to next difficulty
+            currentPhase = .promotion(from: difficulty, to: nextDifficulty)
+        } else {
+            // Normal completion - back to map
+            currentPhase = .puzzleComplete
+        }
     }
     
     private func calculateXP() -> Int {
@@ -712,7 +891,12 @@ class TangramGameViewModel {
         // Clear any active hints
         clearHint()
         
-        currentPhase = .selectingPuzzle
+        // Return to map if we have a selected difficulty, otherwise difficulty selection
+        if let difficulty = selectedDifficulty {
+            currentPhase = .map(difficulty)
+        } else {
+            currentPhase = .selectingDifficulty
+        }
         selectedPuzzle = nil
         gameState = nil
         placedPieces = []

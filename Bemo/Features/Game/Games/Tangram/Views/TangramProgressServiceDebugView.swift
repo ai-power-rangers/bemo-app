@@ -16,6 +16,39 @@ struct TangramProgressServiceDebugView: View {
     @State private var selectedChildId = "test-child-1"
     @State private var selectedDifficulty: UserPreferences.DifficultySetting = .easy
     @State private var showingChildSelector = false
+    @State private var testResults: String = ""
+    @State private var testStatus: TestStatus = .notRun
+    
+    enum TestStatus {
+        case notRun, running, passed, failed
+        
+        var color: Color {
+            switch self {
+            case .notRun: return .gray
+            case .running: return .orange
+            case .passed: return .green
+            case .failed: return .red
+            }
+        }
+        
+        var icon: String {
+            switch self {
+            case .notRun: return "circle"
+            case .running: return "hourglass"
+            case .passed: return "checkmark.circle.fill"
+            case .failed: return "xmark.circle.fill"
+            }
+        }
+        
+        var text: String {
+            switch self {
+            case .notRun: return "Ready to test"
+            case .running: return "Running tests..."
+            case .passed: return "All tests passed!"
+            case .failed: return "Some tests failed"
+            }
+        }
+    }
     
     // Sample puzzle data for testing
     private let samplePuzzles: [GamePuzzleData] = [
@@ -214,6 +247,26 @@ struct TangramProgressServiceDebugView: View {
                             }
                             .buttonStyle(.bordered)
                         }
+                        
+                        // Test Suite Button
+                        HStack {
+                            Button("🧪 Run Test Suite") {
+                                runVisualTests()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .background(testStatus.color)
+                            .disabled(testStatus == .running)
+                            
+                            HStack {
+                                Image(systemName: testStatus.icon)
+                                    .foregroundColor(testStatus.color)
+                                Text(testStatus.text)
+                                    .font(.caption)
+                                    .foregroundColor(testStatus.color)
+                            }
+                            
+                            Spacer()
+                        }
                     }
                     
                     // Multi-Child Comparison
@@ -250,6 +303,29 @@ struct TangramProgressServiceDebugView: View {
                         .cornerRadius(8)
                     }
                     
+                    // Test Results
+                    if !testResults.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: testStatus.icon)
+                                    .foregroundColor(testStatus.color)
+                                Text("Test Results:")
+                                    .font(.headline)
+                                    .foregroundColor(testStatus.color)
+                            }
+                            
+                            ScrollView {
+                                Text(testResults)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 150)
+                        }
+                        .padding()
+                        .background(testStatus.color.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                    
                     // Persistence Testing
                     VStack(alignment: .leading) {
                         Text("Persistence Testing:")
@@ -262,6 +338,11 @@ struct TangramProgressServiceDebugView: View {
                         Text("Try switching children - each has independent progress.")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                        
+                        Text("🧪 Use 'Run Test Suite' to validate all core functionality!")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                            .fontWeight(.medium)
                     }
                     .padding()
                     .background(Color.orange.opacity(0.1))
@@ -278,6 +359,223 @@ struct TangramProgressServiceDebugView: View {
                 selectedDifficulty = lastDifficulty
             }
         }
+    }
+    
+    // MARK: - Test Methods
+    
+    private func runVisualTests() {
+        testStatus = .running
+        testResults = ""
+        
+        Task {
+            // Simulate async testing
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            
+            await MainActor.run {
+                captureTestResults()
+            }
+        }
+    }
+    
+    private func captureTestResults() {
+        var results = ""
+        var allPassed = true
+        
+        results += "🧪 Tangram Progress Test Suite\n"
+        results += "================================\n\n"
+        
+        // Test 1: TangramProgress Model
+        results += "📋 Testing TangramProgress Model...\n"
+        do {
+            let testChild = "test-validation-child"
+            var progress = TangramProgress(childProfileId: testChild)
+            
+            // Test initial state
+            guard progress.childProfileId == testChild,
+                  progress.lastSelectedDifficulty == nil,
+                  progress.completedPuzzlesByDifficulty.isEmpty else {
+                results += "   ❌ Initial state incorrect\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ Initial state correct\n"
+            
+            // Test puzzle completion
+            progress.markPuzzleCompleted(puzzleId: "test1", difficulty: .easy)
+            guard progress.isPuzzleCompleted(puzzleId: "test1", difficulty: .easy),
+                  progress.getCompletedCount(for: .easy) == 1 else {
+                results += "   ❌ Puzzle completion tracking failed\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ Puzzle completion tracking works\n"
+            
+            // Test difficulty setting
+            progress.setLastSelectedDifficulty(.normal)
+            guard progress.lastSelectedDifficulty == .normal else {
+                results += "   ❌ Difficulty setting failed\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ Difficulty setting works\n"
+            
+            results += "   🎉 TangramProgress Model: ALL PASSED\n\n"
+            
+        } catch {
+            results += "   ❌ TangramProgress Model: FAILED\n\n"
+            allPassed = false
+        }
+        
+        // Test 2: TangramProgressService
+        results += "🔧 Testing TangramProgressService...\n"
+        do {
+            let testService = TangramProgressService()
+            let testChild = "test-service-child"
+            
+            // Test progress creation
+            let progress = testService.getProgress(for: testChild)
+            guard progress.childProfileId == testChild,
+                  testService.progressByChild.count >= 1 else {
+                results += "   ❌ Progress creation failed\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ Progress creation works\n"
+            
+            // Test puzzle completion through service
+            testService.markPuzzleCompleted(childId: testChild, puzzleId: "test1", difficulty: .easy)
+            let updatedProgress = testService.getProgress(for: testChild)
+            guard updatedProgress.isPuzzleCompleted(puzzleId: "test1", difficulty: .easy) else {
+                results += "   ❌ Service puzzle completion failed\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ Service puzzle completion works\n"
+            
+            // Test difficulty setting
+            testService.setLastSelectedDifficulty(childId: testChild, difficulty: .hard)
+            let finalProgress = testService.getProgress(for: testChild)
+            guard finalProgress.lastSelectedDifficulty == .hard else {
+                results += "   ❌ Service difficulty setting failed\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ Service difficulty setting works\n"
+            
+            results += "   🎉 TangramProgressService: ALL PASSED\n\n"
+            
+        } catch {
+            results += "   ❌ TangramProgressService: FAILED\n\n"
+            allPassed = false
+        }
+        
+        // Test 3: Difficulty Mapping
+        results += "🎯 Testing Difficulty Mapping...\n"
+        do {
+            // Test level mapping
+            guard UserPreferences.DifficultySetting.easy.containsPuzzleLevel(1),
+                  UserPreferences.DifficultySetting.easy.containsPuzzleLevel(2),
+                  !UserPreferences.DifficultySetting.easy.containsPuzzleLevel(3) else {
+                results += "   ❌ Easy difficulty mapping incorrect\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ Easy difficulty mapping correct\n"
+            
+            guard UserPreferences.DifficultySetting.normal.containsPuzzleLevel(3),
+                  UserPreferences.DifficultySetting.normal.containsPuzzleLevel(4),
+                  !UserPreferences.DifficultySetting.normal.containsPuzzleLevel(5) else {
+                results += "   ❌ Normal difficulty mapping incorrect\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ Normal difficulty mapping correct\n"
+            
+            guard UserPreferences.DifficultySetting.hard.containsPuzzleLevel(5),
+                  !UserPreferences.DifficultySetting.hard.containsPuzzleLevel(4) else {
+                results += "   ❌ Hard difficulty mapping incorrect\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ Hard difficulty mapping correct\n"
+            
+            // Test forPuzzleLevel static method
+            guard UserPreferences.DifficultySetting.forPuzzleLevel(1) == .easy,
+                  UserPreferences.DifficultySetting.forPuzzleLevel(3) == .normal,
+                  UserPreferences.DifficultySetting.forPuzzleLevel(5) == .hard else {
+                results += "   ❌ forPuzzleLevel method failed\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ forPuzzleLevel static method works\n"
+            
+            results += "   🎉 Difficulty Mapping: ALL PASSED\n\n"
+            
+        } catch {
+            results += "   ❌ Difficulty Mapping: FAILED\n\n"
+            allPassed = false
+        }
+        
+        // Test 4: Sequential Unlock Logic
+        results += "🔒 Testing Sequential Unlock Logic...\n"
+        do {
+            let testService = TangramProgressService()
+            let testChild = "test-unlock-child"
+            
+            // Initially only first puzzle should be unlocked
+            let initialUnlocked = testService.getUnlockedPuzzles(for: testChild, difficulty: .easy, from: samplePuzzles)
+            guard initialUnlocked.count == 1,
+                  initialUnlocked.first?.id == "easy-01" else {
+                results += "   ❌ Initial unlock state incorrect\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ Initial unlock state correct (only first puzzle)\n"
+            
+            // Complete first puzzle
+            testService.markPuzzleCompleted(childId: testChild, puzzleId: "easy-01", difficulty: .easy)
+            let afterFirst = testService.getUnlockedPuzzles(for: testChild, difficulty: .easy, from: samplePuzzles)
+            guard afterFirst.count == 2,
+                  afterFirst.last?.id == "easy-02" else {
+                results += "   ❌ Sequential unlock after completion failed\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ Sequential unlock after completion works\n"
+            
+            // Test next puzzle logic
+            let nextPuzzle = testService.getNextPuzzle(for: testChild, difficulty: .easy, from: samplePuzzles)
+            guard nextPuzzle?.id == "easy-02" else {
+                results += "   ❌ Next puzzle logic failed\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ Next puzzle logic works\n"
+            
+            results += "   🎉 Sequential Unlock Logic: ALL PASSED\n\n"
+            
+        } catch {
+            results += "   ❌ Sequential Unlock Logic: FAILED\n\n"
+            allPassed = false
+        }
+        
+        // Final results
+        if allPassed {
+            results += "✅ ALL TESTS PASSED! Phase 1 implementation is working correctly.\n"
+            testStatus = .passed
+        } else {
+            results += "❌ SOME TESTS FAILED. Check implementation.\n"
+            testStatus = .failed
+        }
+        
+        testResults = results
+        
+        // Also print to console for developers
+        print(results)
+    }
+    
+    private enum TestError: Error {
+        case failed
     }
 }
 

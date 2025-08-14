@@ -33,7 +33,16 @@ struct TangramGameView: View {
         NavigationStack {
             Group {
                 switch viewModel.currentPhase {
-                case .selectingPuzzle:
+                case .selectingDifficulty:
+                    // TODO: Phase 2 - Add difficulty selection view
+                    puzzleSelectionView
+                    
+                case .map:
+                    // TODO: Phase 2 - Add map view
+                    puzzleSelectionView
+                    
+                case .promotion:
+                    // TODO: Phase 2 - Add promotion view
                     puzzleSelectionView
                     
                 case .playingPuzzle:
