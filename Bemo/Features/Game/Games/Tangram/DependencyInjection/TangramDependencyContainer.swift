@@ -42,6 +42,7 @@ class TangramDependencyContainer {
     
     let supabaseService: SupabaseService?
     let puzzleManagementService: PuzzleManagementService?
+    let learningService: LearningService?
 
     /// Relative mapping service for anchor-based validation shared by Scene and ViewModel
     let mappingService: TangramRelativeMappingService
@@ -50,10 +51,12 @@ class TangramDependencyContainer {
     
     init(
         supabaseService: SupabaseService? = nil,
-        puzzleManagementService: PuzzleManagementService? = nil
+        puzzleManagementService: PuzzleManagementService? = nil,
+        learningService: LearningService? = nil
     ) {
         self.supabaseService = supabaseService
         self.puzzleManagementService = puzzleManagementService
+        self.learningService = learningService
         
         // Initialize utilities
         self.geometryUtilities = TangramGeometryUtilities.self
@@ -76,7 +79,8 @@ class TangramDependencyContainer {
     func makeGameViewModel(delegate: GameDelegate) -> TangramGameViewModel {
         return TangramGameViewModel(
             delegate: delegate,
-            container: self
+            container: self,
+            learningService: learningService
         )
     }
     

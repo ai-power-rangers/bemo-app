@@ -16,6 +16,7 @@ import Security
 import UIKit
 import Observation
 import CryptoKit
+import Supabase
 
 @Observable
 class AuthenticationService: NSObject {
@@ -27,6 +28,8 @@ class AuthenticationService: NSObject {
     private let accessTokenKey = "access_token"
     private let refreshTokenKey = "refresh_token"
     private let userIdKey = "user_id"
+    private let nonceKey = "stored_nonce"
+    private let identityTokenKey = "identity_token"
     
     // Nonce storage for Apple Sign-In
     private var currentNonce: String?
@@ -74,8 +77,12 @@ class AuthenticationService: NSObject {
     
     override init() {
         super.init()
-        // Check for stored authentication tokens
-        checkAuthenticationState()
+        // Check for stored authentication tokens to prevent onboarding flash for logged-in users.
+        // The Supabase session check will asynchronously verify and update the full auth state.
+        if let userId = getToken(key: userIdKey), !userId.isEmpty {
+            self.isAuthenticated = true
+            print("AuthenticationService: Found stored user ID. Setting initial authenticated state.")
+        }
     }
     
     // MARK: - Supabase Integration
@@ -109,44 +116,15 @@ class AuthenticationService: NSObject {
     }
     
     func signOut() {
-        // Clear tokens from Keychain
-        deleteToken(key: accessTokenKey)
-        deleteToken(key: refreshTokenKey)
-        deleteToken(key: userIdKey)
-        
-        // Only clear the active profile selection, keep profiles in storage
-        // They will be available when user signs back in
-        profileService?.clearActiveProfile()
-        
-        // Update state
-        isAuthenticated = false
-        currentUser = nil
-        authenticationError = nil
-        
-        print("User signed out successfully")
-        
-        // Sign out from Supabase if available (non-blocking)
-        syncSupabaseSignOut()
-    }
-    
-    private func syncSupabaseSignOut() {
-        guard let supabaseService = supabaseService else {
-            print("Supabase service not available - skipping sign out sync")
-            return
-        }
-        
-        // Background sync - don't block existing functionality
         Task {
             do {
-                try await supabaseService.signOut()
-                print("Supabase sign out successful")
+                try await supabaseService?.signOut()
+                // The Supabase auth listener will now trigger performLocalSignOut.
             } catch {
-                print("Supabase sign out failed (non-critical): \(error)")
-                errorTrackingService?.trackError(error, context: ErrorContext(
-                    feature: "AuthenticationService",
-                    action: "supabaseSignOut"
-                ))
-                // Don't affect main sign out flow
+                print("Supabase sign-out failed, forcing local sign-out as fallback. Error: \(error)")
+                await MainActor.run {
+                    self.performLocalSignOut()
+                }
             }
         }
     }
@@ -180,104 +158,53 @@ class AuthenticationService: NSObject {
     
     // MARK: - Private Methods
     
-    private func checkAuthenticationState() {
-        // Check if we have stored tokens
-        guard let accessToken = getToken(key: accessTokenKey),
-              let userId = getToken(key: userIdKey) else {
-            isAuthenticated = false
-            return
+    @MainActor
+    public func updateUserAndConfirmAuth(session: Session, parentProfile: ParentProfileData?) {
+        let supabaseUser = session.user
+        
+        // The canonical user ID is now the Supabase UUID.
+        let userId = supabaseUser.id.uuidString
+        
+        let appleIdentifier = parentProfile?.apple_user_id ?? ""
+        let email = parentProfile?.email ?? supabaseUser.email
+        
+        var nameComponents: PersonNameComponents?
+        if let fullNameString = parentProfile?.full_name {
+            let formatter = PersonNameComponentsFormatter()
+            nameComponents = formatter.personNameComponents(from: fullNameString)
         }
         
-        // Create user from stored data
-        // In a real app, you might want to validate the token with your backend
-        currentUser = AuthenticatedUser(
+        self.currentUser = AuthenticatedUser(
             id: userId,
-            appleUserIdentifier: userId, // This would be stored separately in a real app
-            email: nil, // Email might not be available after first sign-in
-            fullName: nil,
-            accessToken: accessToken,
-            nonce: nil 
+            appleUserIdentifier: appleIdentifier,
+            email: email,
+            fullName: nameComponents,
+            accessToken: session.accessToken,
+            nonce: nil
         )
         
-        isAuthenticated = true
-        print("User authentication restored from Keychain")
+        // Persist the Supabase user ID.
+        storeToken(value: userId, key: userIdKey)
+        
+        self.isAuthenticated = true
+        self.authenticationError = nil
+        print("AuthenticationService: State confirmed via Supabase session for user \(userId).")
     }
     
-    func handleSuccessfulAuthentication(user: AuthenticatedUser) {
-        // Store tokens securely
-        storeToken(value: user.accessToken, key: accessTokenKey)
-        storeToken(value: user.id, key: userIdKey)
+    @MainActor
+    public func performLocalSignOut() {
+        guard isAuthenticated else { return }
+    
+        // Clear only the user ID from keychain. Supabase SDK handles its own token storage.
+        deleteToken(key: userIdKey)
         
-        // In a real app, you would also store the refresh token received from your backend
-        // storeToken(value: refreshToken, key: refreshTokenKey)
+        profileService?.clearAllLocalProfiles()
         
-        // Update state
-        currentUser = user
-        isAuthenticated = true
+        isAuthenticated = false
+        currentUser = nil
         authenticationError = nil
         
-        print("Authentication successful for user: \(user.id)")
-        
-        // Sync with Supabase if available (now blocking - required for profile creation)
-        Task {
-            do {
-                try await syncWithSupabase(user: user)
-            } catch {
-                // If Supabase sync fails, treat as authentication failure
-                await MainActor.run {
-                    self.currentUser = nil
-                    self.isAuthenticated = false
-                    self.authenticationError = .supabaseConnectionFailed
-                }
-            }
-        }
-    }
-    
-    private func syncWithSupabase(user: AuthenticatedUser) async throws {
-        guard let supabaseService = supabaseService else {
-            print("Supabase service not available - this will prevent profile creation")
-            throw AuthenticationError.supabaseConnectionFailed
-        }
-        
-        // Use the actual identity token and nonce for Supabase
-        guard let nonce = user.nonce else {
-            print("Error: Nonce missing for Supabase sync")
-            errorTrackingService?.trackError(
-                AuthenticationError.unknown,
-                context: ErrorContext(
-                    feature: "AuthenticationService",
-                    action: "syncWithSupabase",
-                    metadata: ["error": "nonce_missing"]
-                )
-            )
-            throw AuthenticationError.supabaseConnectionFailed
-        }
-        
-        do {
-            try await supabaseService.signInWithAppleIdentity(
-                user.appleUserIdentifier,
-                identityToken: user.accessToken,
-                nonce: nonce,
-                email: user.email,
-                fullName: user.fullName
-            )
-            print("Supabase sync successful for user: \(user.id)")
-        } catch {
-            print("Supabase sync failed: \(error)")
-            
-            // Check if this is an audience mismatch error (configuration issue)
-            let errorString = error.localizedDescription.lowercased()
-            if errorString.contains("unacceptable audience") || errorString.contains("audience") {
-                print("WARNING: Supabase audience configuration mismatch - continuing without Supabase sync")
-                print("This will prevent profile creation until Supabase is properly configured")
-                // For now, don't fail authentication completely for audience issues
-                // This allows the app to function while the configuration is being fixed
-                return
-            }
-            
-            // For other errors, still fail the authentication
-            throw error
-        }
+        print("AuthenticationService: Local user state cleared.")
     }
     
     // MARK: - Keychain Methods
@@ -368,10 +295,6 @@ class AuthenticationService: NSObject {
 extension AuthenticationService: ASAuthorizationControllerDelegate {
     func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
         if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
-            let userIdentifier = appleIDCredential.user
-            let email = appleIDCredential.email
-            let fullName = appleIDCredential.fullName
-            
             // Get the identity token - REQUIRED for Supabase
             guard let identityToken = appleIDCredential.identityToken,
                   let tokenString = String(data: identityToken, encoding: .utf8) else {
@@ -403,22 +326,28 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
                 return
             }
             
-            // Check if this is first time login (Apple provides email and fullName only on first login)
-            let isFirstTimeLogin = (email != nil || fullName != nil)
-            if isFirstTimeLogin {
-                print("First time login detected. Email: \(email ?? "none"), Name: \(fullName?.givenName ?? "none")")
+            // The sole responsibility is to pass the credentials to Supabase.
+            // The Supabase auth listener will handle the state change.
+            Task {
+                do {
+                    try await supabaseService?.signInWithAppleIdentity(
+                        appleIDCredential.user,
+                        identityToken: tokenString,
+                        nonce: nonce,
+                        email: appleIDCredential.email,
+                        fullName: appleIDCredential.fullName
+                    )
+                    // On success, the Supabase auth listener will handle the state change.
+                } catch {
+                    await MainActor.run {
+                        self.authenticationError = .supabaseConnectionFailed
+                        self.errorTrackingService?.trackError(error, context: ErrorContext(
+                            feature: "AuthenticationService",
+                            action: "supabaseSignIn"
+                        ))
+                    }
+                }
             }
-            
-            let user = AuthenticatedUser(
-                id: userIdentifier,
-                appleUserIdentifier: userIdentifier,
-                email: email,
-                fullName: fullName,
-                accessToken: tokenString,
-                nonce: nonce
-            )
-            
-            handleSuccessfulAuthentication(user: user)
             
             // Clear the nonce after use
             currentNonce = nil

@@ -43,7 +43,9 @@ class GameLobbyViewModel {
     private let profileService: ProfileService
     private let supabaseService: SupabaseService?
     private let puzzleManagementService: PuzzleManagementService?
+    private let learningService: LearningService?
     private let developerService: DeveloperService
+    
     private let onGameSelected: (Game) -> Void
     private let onDevToolSelected: (DevTool) -> Void
     private let onParentDashboardRequested: () -> Void
@@ -101,6 +103,7 @@ class GameLobbyViewModel {
         profileService: ProfileService,
         supabaseService: SupabaseService? = nil,
         puzzleManagementService: PuzzleManagementService? = nil,
+        learningService: LearningService? = nil,
         developerService: DeveloperService,
         onGameSelected: @escaping (Game) -> Void,
         onDevToolSelected: @escaping (DevTool) -> Void,
@@ -110,6 +113,7 @@ class GameLobbyViewModel {
         self.profileService = profileService
         self.supabaseService = supabaseService
         self.puzzleManagementService = puzzleManagementService
+        self.learningService = learningService
         self.developerService = developerService
         self.onGameSelected = onGameSelected
         self.onDevToolSelected = onDevToolSelected
@@ -151,7 +155,8 @@ class GameLobbyViewModel {
         // Load available games
         let tangramGame = TangramGame(
             supabaseService: supabaseService,
-            puzzleManagementService: puzzleManagementService
+            puzzleManagementService: puzzleManagementService,
+            learningService: learningService
         )
         
         // Start with regular games (Tangram is now CV-ready)

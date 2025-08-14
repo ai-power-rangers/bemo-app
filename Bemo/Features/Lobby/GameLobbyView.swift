@@ -41,11 +41,7 @@ struct GameLobbyView: View {
                     
                     Text("\(viewModel.displayProfile?.name ?? "Friend")!")
                         .font(BemoTheme.font(for: .heading2))
-                        .foregroundColor(BemoTheme.Colors.primary)
-                    
-                    Text("Nice to see you again!")
-                        .font(BemoTheme.font(for: .body))
-                        .foregroundColor(BemoTheme.Colors.gray2)
+                        .foregroundColor(BemoTheme.Colors.primary)                    
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, BemoTheme.Spacing.xlarge)
