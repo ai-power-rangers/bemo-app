@@ -2,11 +2,12 @@
 .DS_Store
 .Trashes
 
-Bemo.xcodeproj/project.pbxproj
-# Xcode User settings
+# Xcode project files that cause merge conflicts
+*.xcodeproj/project.pbxproj
+*.xcworkspace/xcuserdata/
 xcuserdata/
 
-# Build directories
+# Xcode build directories
 build/
 .build/
 DerivedData/
@@ -24,10 +25,7 @@ Pods/
 # For now, we're including them but make sure to update with real keys before deploying
 Bemo/Config/Debug.xcconfig
 Bemo/Config/Release.xcconfig
-
-Bemo.xcodeproj/project.pbxproj
-
 Config/
 
-# personal doc
+# Personal documentation
 .doc/
