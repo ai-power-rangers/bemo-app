@@ -62,6 +62,12 @@ class DeveloperService {
     /// - Parameter user: The authenticated user to check
     /// - Returns: true if the user is a developer
     func isDeveloper(user: AuthenticatedUser) -> Bool {
+        // TEMPORARY OVERRIDE FOR TESTING - REMOVE IN PRODUCTION
+        #if DEBUG
+        print("🛠️ DEBUG MODE: Developer access granted for testing (user: \(user.appleUserIdentifier))")
+        return true
+        #else
+        
         // Check by email address first
         if let email = user.email {
             // Check exact email matches
@@ -85,6 +91,7 @@ class DeveloperService {
         }
         
         return false
+        #endif
     }
     
     /// Returns the developer role/type for the current user
@@ -118,7 +125,7 @@ class DeveloperService {
         
         // For now, all developers get access to all tools
         // In the future, you could restrict tools based on role
-        return [.tangramEditor, .animationLab]
+        return [.tangramEditor, .animationLab, .tangramProgress]
     }
 }
 
@@ -144,6 +151,7 @@ enum DeveloperRole {
 enum DevToolType {
     case tangramEditor
     case animationLab
+    case tangramProgress
     // Add future dev tools here:
     // case levelEditor
     // case analyticsConsole
@@ -155,6 +163,8 @@ enum DevToolType {
             return "Tangram Editor"
         case .animationLab:
             return "Animation Lab"
+        case .tangramProgress:
+            return "Progress Test"
         }
     }
     
@@ -164,6 +174,8 @@ enum DevToolType {
             return "Create and edit tangram puzzles"
         case .animationLab:
             return "Test and debug animations"
+        case .tangramProgress:
+            return "Test difficulty selection and progress tracking"
         }
     }
 }
