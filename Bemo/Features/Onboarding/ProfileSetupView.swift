@@ -170,42 +170,71 @@ struct ProfileSetupView: View {
     
     private var profileFormSection: some View {
         VStack(spacing: BemoTheme.Spacing.large) {
-            // Avatar selection
-            Button(action: { showAvatarPicker = true }) {
-                HStack(spacing: BemoTheme.Spacing.medium) {
-                    AvatarView(avatar: selectedAvatar, size: 72)
-                        .overlay(
-                            Circle()
-                                .stroke(BemoTheme.Colors.primary.opacity(0.2), lineWidth: 2)
-                        )
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Avatar")
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
-                            .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
+            // Avatar selection and creation
+            HStack(spacing: BemoTheme.Spacing.small) {
+                // Avatar selection button
+                Button(action: { showAvatarPicker = true }) {
+                    HStack(spacing: BemoTheme.Spacing.medium) {
+                        AvatarView(avatar: selectedAvatar, size: 72)
+                            .overlay(
+                                Circle()
+                                    .stroke(BemoTheme.Colors.primary.opacity(0.2), lineWidth: 2)
+                            )
                         
-                        Text(selectedAvatar.displayName)
-                            .font(.system(size: 17, weight: .medium, design: .rounded))
-                            .foregroundColor(Color("AppPrimaryTextColor"))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Avatar")
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
+                            
+                            Text(selectedAvatar.displayName)
+                                .font(.system(size: 17, weight: .medium, design: .rounded))
+                                .foregroundColor(Color("AppPrimaryTextColor"))
+                        }
+                        
+                        Spacer()
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(Color("AppPrimaryTextColor").opacity(0.4))
                     }
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.4))
+                    .padding(BemoTheme.Spacing.medium)
+                    .background(
+                        RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.large)
+                            .fill(Color("AppBackground"))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.large)
+                                    .stroke(Color("AppPrimaryTextColor").opacity(0.1), lineWidth: 1)
+                            )
+                    )
                 }
-                .padding(BemoTheme.Spacing.medium)
-                .background(
-                    RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.large)
-                        .fill(Color.gray.opacity(0.04))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.large)
-                                .stroke(Color.gray.opacity(0.08), lineWidth: 1)
-                        )
-                )
+                .buttonStyle(.plain)
+                
+                // Create Avatar from Photo button
+                Button(action: { 
+                    print("Create Avatar from Photo tapped")
+                }) {
+                    VStack(spacing: BemoTheme.Spacing.xsmall) {
+                        ZStack {
+                            Circle()
+                                .fill(BemoTheme.Colors.primary.opacity(0.1))
+                                .frame(width: 56, height: 56)
+                            
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 24, weight: .medium))
+                                .foregroundColor(BemoTheme.Colors.primary)
+                        }
+                        
+                        Text("Create Avatar\nfrom Photo")
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                    }
+                    .frame(width: 80)
+                    .padding(.vertical, BemoTheme.Spacing.small)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
             .opacity(animateContent ? 1 : 0)
             .offset(y: animateContent ? 0 : 20)
             .animation(.easeOut(duration: 0.5).delay(0.3), value: animateContent)
@@ -218,13 +247,14 @@ struct ProfileSetupView: View {
                 
                 TextField("Your child's name", text: $childName)
                     .font(.system(size: 17, design: .rounded))
+                    .foregroundColor(Color("AppPrimaryTextColor"))
                     .padding(BemoTheme.Spacing.medium)
                     .background(
                         RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
-                            .fill(Color.gray.opacity(0.04))
+                            .fill(Color("AppBackground"))
                             .overlay(
                                 RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
-                                    .stroke(Color.gray.opacity(0.08), lineWidth: 1)
+                                    .stroke(Color("AppPrimaryTextColor").opacity(0.1), lineWidth: 1)
                             )
                     )
                     .focused($isNameFieldFocused)
@@ -253,7 +283,7 @@ struct ProfileSetupView: View {
                 ZStack(alignment: .leading) {
                     // Track
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.1))
+                        .fill(Color("AppPrimaryTextColor").opacity(0.1))
                         .frame(height: 8)
                     
                     // Fill
@@ -291,10 +321,10 @@ struct ProfileSetupView: View {
             .padding(BemoTheme.Spacing.medium)
             .background(
                 RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.large)
-                    .fill(Color.gray.opacity(0.04))
+                    .fill(Color("AppBackground"))
                     .overlay(
                         RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.large)
-                            .stroke(Color.gray.opacity(0.08), lineWidth: 1)
+                            .stroke(Color("AppPrimaryTextColor").opacity(0.1), lineWidth: 1)
                     )
             )
             .opacity(animateContent ? 1 : 0)
@@ -319,13 +349,13 @@ struct ProfileSetupView: View {
                                     RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
                                         .fill(selectedGender == gender
                                             ? BemoTheme.Colors.primary
-                                            : Color.gray.opacity(0.04))
+                                            : Color("AppBackground"))
                                         .overlay(
                                             RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
                                                 .stroke(
                                                     selectedGender == gender
                                                         ? Color.clear
-                                                        : Color.gray.opacity(0.08),
+                                                        : Color("AppPrimaryTextColor").opacity(0.1),
                                                     lineWidth: 1
                                                 )
                                         )
