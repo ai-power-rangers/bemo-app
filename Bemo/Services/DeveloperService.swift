@@ -62,6 +62,12 @@ class DeveloperService {
     /// - Parameter user: The authenticated user to check
     /// - Returns: true if the user is a developer
     func isDeveloper(user: AuthenticatedUser) -> Bool {
+        // TEMPORARY OVERRIDE FOR TESTING - REMOVE IN PRODUCTION
+        #if DEBUG
+        print("🛠️ DEBUG MODE: Developer access granted for testing (user: \(user.appleUserIdentifier))")
+        return true
+        #else
+        
         // Check by email address first
         if let email = user.email {
             // Check exact email matches
@@ -85,6 +91,7 @@ class DeveloperService {
         }
         
         return false
+        #endif
     }
     
     /// Returns the developer role/type for the current user
