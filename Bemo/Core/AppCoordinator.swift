@@ -47,12 +47,13 @@ class AppCoordinator {
         let authService = dependencyContainer.authenticationService
         
         withObservationTracking {
-            // Access the property we want to observe
+            // Access the properties we want to observe
             _ = authService.isAuthenticated
+            _ = authService.currentUser
         } onChange: { [weak self] in
-            // This will be called when isAuthenticated changes
+            // This will be called when isAuthenticated or currentUser changes
             Task { @MainActor in
-                self?.handleAuthenticationChange(isAuthenticated: authService.isAuthenticated)
+                await self?.handleAuthenticationChange(isAuthenticated: authService.isAuthenticated)
             }
             // Re-establish observation
             self?.setupAuthenticationObserver()
@@ -104,9 +105,9 @@ class AppCoordinator {
         guard authService.isAuthenticated else { return }
         
         if profileService.hasProfiles {
-            // When profiles become available while in setup flows, move to lobby
+            // When profiles become available while in setup or loading flows, move to lobby
             switch currentState {
-            case .profileSetup, .addChildProfile:
+            case .loading, .profileSetup, .addChildProfile:
                 currentState = .lobby
                 // Auto-select the profile if it's the only one
                 if profileService.childProfiles.count == 1 && profileService.activeProfile == nil {
@@ -135,28 +136,31 @@ class AppCoordinator {
         let authService = dependencyContainer.authenticationService
         
         if authService.isAuthenticated {
+            // If we are authenticated but don't have the user object yet,
+            // it means we are waiting for Supabase to confirm the session.
+            // Show a loading view to prevent flashing irrelevant screens.
+            guard let user = authService.currentUser else {
+                currentState = .loading
+                return
+            }
+
             let profileService = dependencyContainer.profileService
             
-            // Immediately sync profiles in the background.
-            // This will work if Supabase session is already restored.
-            profileService.syncWithSupabase()
+            // Sync is triggered from handleAuthenticationChange, so we just check state here.
             
-            // Navigate based on *currently available* local profiles.
-            // The UI will reactively update if/when the sync completes and changes `hasProfiles`.
-            if profileService.hasProfiles {
+            // Check if local profiles belong to the current user.
+            if profileService.profilesBelong(to: user.id) {
                 currentState = .lobby
-                if profileService.childProfiles.count == 1 && profileService.activeProfile == nil {
+                // If there's an active profile saved, it will be used.
+                // If not, and there's only one profile, set it as active.
+                if profileService.activeProfile == nil && profileService.childProfiles.count == 1 {
                     profileService.setActiveProfile(profileService.childProfiles[0])
                 }
             } else {
-                // No profiles found locally, go to setup.
-                // If sync finds profiles later, the handleProfileServiceChange observer will navigate to lobby.
-                if let currentUser = authService.currentUser {
-                    self.currentState = .profileSetup(currentUser)
-                } else {
-                    // This should not happen if authenticated, but as a fallback:
-                    handleAuthenticationChange(isAuthenticated: false)
-                }
+                // Local profiles are for another user, or don't exist.
+                // Show loading and wait for sync to fetch correct profiles or determine new user status.
+                // `handleProfileServiceChange` will navigate to lobby or profile setup once sync completes.
+                currentState = .loading
             }
         } else {
             // Not authenticated, show onboarding
@@ -164,14 +168,14 @@ class AppCoordinator {
         }
     }
     
-    private func handleAuthenticationChange(isAuthenticated: Bool) {
+    private func handleAuthenticationChange(isAuthenticated: Bool) async {
         if !isAuthenticated {
             // User signed out, only clear active profile selection (not all profiles)
             dependencyContainer.profileService.clearActiveProfile()
             currentState = .onboarding
         } else {
             // User signed in, filter profiles for current user and sync
-            dependencyContainer.profileService.filterProfilesForCurrentUser()
+            await dependencyContainer.profileService.filterProfilesForCurrentUser()
             dependencyContainer.profileService.syncWithSupabase()
             checkAuthenticationAndNavigate()
         }

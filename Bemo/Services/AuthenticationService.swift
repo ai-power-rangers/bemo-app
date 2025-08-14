@@ -77,7 +77,12 @@ class AuthenticationService: NSObject {
     
     override init() {
         super.init()
-        // Check for stored authentication tokens
+        // Check for stored authentication tokens to prevent onboarding flash for logged-in users.
+        // The Supabase session check will asynchronously verify and update the full auth state.
+        if let userId = getToken(key: userIdKey), !userId.isEmpty {
+            self.isAuthenticated = true
+            print("AuthenticationService: Found stored user ID. Setting initial authenticated state.")
+        }
     }
     
     // MARK: - Supabase Integration
@@ -193,7 +198,7 @@ class AuthenticationService: NSObject {
         // Clear only the user ID from keychain. Supabase SDK handles its own token storage.
         deleteToken(key: userIdKey)
         
-        profileService?.clearActiveProfile()
+        profileService?.clearAllLocalProfiles()
         
         isAuthenticated = false
         currentUser = nil

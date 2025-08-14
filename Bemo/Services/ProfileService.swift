@@ -135,31 +135,39 @@ class ProfileService {
         print("All local profile data cleared")
     }
     
-    func filterProfilesForCurrentUser() {
+    func profilesBelong(to userId: String) -> Bool {
+        // If there are no profiles, they don't belong to anyone.
+        if childProfiles.isEmpty { return false }
+        
+        // This is an optimistic check. If we have any profile for the user,
+        // we can assume we're good to go to the lobby. `filterProfilesForCurrentUser`
+        // will clean up any stale profiles from other users.
+        return childProfiles.contains { $0.userId == userId }
+    }
+    
+    func filterProfilesForCurrentUser() async {
         // Filter local profiles to only keep those belonging to the current authenticated user
         // This is called after authentication to ensure we only show the right profiles
-        Task {
-            if let supabaseService = supabaseService {
-                do {
-                    let currentUserId = try await supabaseService.getCurrentUserID()
-                    await MainActor.run {
-                        // Filter profiles to only those belonging to current user
-                        let filteredProfiles = childProfiles.filter { $0.userId == currentUserId }
-                        if filteredProfiles.count != childProfiles.count {
-                            print("Filtered profiles: keeping \(filteredProfiles.count) of \(childProfiles.count) profiles for user \(currentUserId)")
-                            childProfiles = filteredProfiles
-                            saveChildProfiles()
-                            
-                            // Clear active profile if it doesn't belong to current user
-                            if let active = activeProfile,
-                               !filteredProfiles.contains(where: { $0.id == active.id }) {
-                                clearActiveProfile()
-                            }
+        if let supabaseService = supabaseService {
+            do {
+                let currentUserId = try await supabaseService.getCurrentUserID()
+                await MainActor.run {
+                    // Filter profiles to only those belonging to current user
+                    let filteredProfiles = childProfiles.filter { $0.userId == currentUserId }
+                    if filteredProfiles.count != childProfiles.count {
+                        print("Filtered profiles: keeping \(filteredProfiles.count) of \(childProfiles.count) profiles for user \(currentUserId)")
+                        childProfiles = filteredProfiles
+                        saveChildProfiles()
+                        
+                        // Clear active profile if it doesn't belong to current user
+                        if let active = activeProfile,
+                           !filteredProfiles.contains(where: { $0.id == active.id }) {
+                            clearActiveProfile()
                         }
                     }
-                } catch {
-                    print("Failed to filter profiles for current user: \(error)")
                 }
+            } catch {
+                print("Failed to filter profiles for current user: \(error)")
             }
         }
     }
