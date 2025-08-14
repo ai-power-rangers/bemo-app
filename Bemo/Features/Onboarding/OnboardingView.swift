@@ -15,7 +15,10 @@ import AuthenticationServices
 struct OnboardingView: View {
     @State private var viewModel: OnboardingViewModel
     @State private var currentStep = 0
+    @State private var animateContent = false
+    @State private var showPageIndicator = true
     
+    @Namespace private var animation
     private let onboardingSteps = OnboardingStep.allSteps
     
     init(viewModel: OnboardingViewModel) {
@@ -24,20 +27,20 @@ struct OnboardingView: View {
     
     var body: some View {
         ZStack {
-            // Background gradient
-            LinearGradient(
-                gradient: Gradient(colors: [Color.blue.opacity(0.1), Color.purple.opacity(0.1)]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            // Dynamic background
+            backgroundView
+                .ignoresSafeArea()
             
             VStack(spacing: 0) {
                 if currentStep < onboardingSteps.count {
                     // Onboarding content
                     onboardingContent
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
                         .gesture(
-                            DragGesture()
+                            DragGesture(minimumDistance: 30)
                                 .onEnded { value in
                                     handleSwipeGesture(value)
                                 }
@@ -45,13 +48,16 @@ struct OnboardingView: View {
                 } else {
                     // Sign-in screen
                     signInContent
-                        .gesture(
-                            DragGesture()
-                                .onEnded { value in
-                                    handleSwipeGesture(value)
-                                }
-                        )
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
                 }
+            }
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.6)) {
+                animateContent = true
             }
         }
         .alert("Authentication Error", isPresented: .constant(viewModel.authenticationError != nil)) {
@@ -65,128 +71,258 @@ struct OnboardingView: View {
         }
     }
     
+    private var backgroundView: some View {
+        ZStack {
+            // App background color from assets
+            Color("AppBackground")
+            
+            // Subtle animated shapes
+            GeometryReader { geometry in
+                ForEach(0..<2) { index in
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    Color.gray.opacity(0.03),
+                                    Color.gray.opacity(0.01)
+                                ]),
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .blur(radius: 40)
+                        .frame(width: geometry.size.width * 0.8)
+                        .offset(
+                            x: CGFloat.random(in: -50...50),
+                            y: CGFloat(index) * 300 - 100
+                        )
+                        .animation(
+                            Animation.easeInOut(duration: Double.random(in: 15...20))
+                                .repeatForever(autoreverses: true),
+                            value: animateContent
+                        )
+                }
+            }
+        }
+    }
+    
     private var onboardingContent: some View {
         let step = onboardingSteps[currentStep]
         
-        return VStack(spacing: 40) {
-            Spacer()
-            
-            // Step indicator
-            HStack(spacing: 8) {
-                ForEach(0..<onboardingSteps.count + 1, id: \.self) { index in
-                    Circle()
-                        .fill(index == currentStep ? Color.blue : Color.gray.opacity(0.3))
-                        .frame(width: index == currentStep ? 10 : 8, height: index == currentStep ? 10 : 8)
-                        .animation(.easeInOut(duration: 0.2), value: currentStep)
+        return VStack(spacing: 0) {
+            // Top section with page indicator
+            VStack(spacing: BemoTheme.Spacing.medium) {
+                // Page indicator
+                if showPageIndicator {
+                    pageIndicator
+                        .padding(.top, 60)
+                        .transition(.opacity)
                 }
             }
-            .padding(.top, 20)
-            
-            // Content
-            VStack(spacing: 24) {
-                Image(systemName: step.imageName)
-                    .font(.system(size: 80))
-                    .foregroundColor(.blue)
-                
-                Text(step.title)
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .multilineTextAlignment(.center)
-                
-                Text(step.description)
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
-            }
             
             Spacer()
             
-            // Navigation buttons
-            VStack(spacing: 16) {
+            // Main content
+            VStack(spacing: BemoTheme.Spacing.xxlarge) {
+                // Icon with animation
+                ZStack {
+                    Circle()
+                        .fill(step.iconBackgroundColors.0.opacity(0.08))
+                        .frame(width: 140, height: 140)
+                        .scaleEffect(animateContent ? 1 : 0.9)
+                        .animation(
+                            Animation.easeInOut(duration: 2)
+                                .repeatForever(autoreverses: true),
+                            value: animateContent
+                        )
+                    
+                    Image(systemName: step.imageName)
+                        .font(.system(size: 64, weight: .regular, design: .rounded))
+                        .foregroundColor(step.iconBackgroundColors.0)
+                        .scaleEffect(animateContent ? 1 : 0.8)
+                        .opacity(animateContent ? 1 : 0)
+                        .animation(.spring(response: 0.6, dampingFraction: 0.8), value: animateContent)
+                }
+                
+                // Text content
+                VStack(spacing: BemoTheme.Spacing.medium) {
+                    Text(step.title)
+                        .font(BemoTheme.font(for: .heading3))
+                        .foregroundColor(Color("AppPrimaryTextColor"))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .opacity(animateContent ? 1 : 0)
+                        .offset(y: animateContent ? 0 : 20)
+                        .animation(.easeOut(duration: 0.5).delay(0.2), value: animateContent)
+                    
+                    Text(step.description)
+                        .font(.system(size: 17, weight: .regular, design: .rounded))
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                        .padding(.horizontal, 32)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .opacity(animateContent ? 1 : 0)
+                        .offset(y: animateContent ? 0 : 20)
+                        .animation(.easeOut(duration: 0.5).delay(0.3), value: animateContent)
+                }
+            }
+            .padding(.horizontal, BemoTheme.Spacing.large)
+            
+            Spacer()
+            
+            // Bottom navigation
+            VStack(spacing: BemoTheme.Spacing.medium) {
+                // Primary action button
                 Button(action: {
-                    withAnimation(.easeInOut(duration: 0.3)) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                         goToNextStep()
                     }
                 }) {
-                    Text(currentStep < onboardingSteps.count - 1 ? "Next" : "Get Started")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .cornerRadius(12)
+                    HStack {
+                        Text(currentStep < onboardingSteps.count - 1 ? "Continue" : "Get Started")
+                            .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(BemoTheme.Colors.primary)
+                    .cornerRadius(BemoTheme.CornerRadius.large)
+                    .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
                 }
-                .padding(.horizontal, 40)
+                .padding(.horizontal, BemoTheme.Spacing.large)
+                .scaleEffect(animateContent ? 1 : 0.9)
+                .opacity(animateContent ? 1 : 0)
+                .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.4), value: animateContent)
                 
-                if currentStep > 0 && currentStep < onboardingSteps.count {
-                    Button("Back") {
+                // Skip button
+                if currentStep < onboardingSteps.count - 1 {
+                    Button("Skip") {
                         withAnimation(.easeInOut(duration: 0.3)) {
-                            goToPreviousStep()
+                            currentStep = onboardingSteps.count
                         }
                     }
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
+                    .padding(.vertical, BemoTheme.Spacing.xsmall)
                 }
             }
-            
-            // Swipe hint
-            Text("← Swipe to navigate →")
-                .font(.caption2)
-                .foregroundColor(.secondary.opacity(0.7))
-                .padding(.bottom, 20)
+            .padding(.bottom, 50)
+        }
+        .onAppear {
+            animateContent = false
+            withAnimation(.easeOut(duration: 0.6)) {
+                animateContent = true
+            }
+        }
+    }
+    
+    private var pageIndicator: some View {
+        HStack(spacing: 12) {
+            ForEach(0..<onboardingSteps.count + 1, id: \.self) { index in
+                Capsule()
+                    .fill(
+                        index == currentStep 
+                            ? BemoTheme.Colors.primary
+                            : Color.gray.opacity(0.2)
+                    )
+                    .frame(
+                        width: index == currentStep ? 28 : 8,
+                        height: 8
+                    )
+                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: currentStep)
+            }
         }
     }
     
     private var signInContent: some View {
-        VStack(spacing: 40) {
-            Spacer()
-            
-            // Step indicator
-            HStack(spacing: 8) {
-                ForEach(0..<onboardingSteps.count + 1, id: \.self) { index in
-                    Circle()
-                        .fill(index == currentStep ? Color.blue : Color.gray.opacity(0.3))
-                        .frame(width: index == currentStep ? 10 : 8, height: index == currentStep ? 10 : 8)
-                        .animation(.easeInOut(duration: 0.2), value: currentStep)
+        VStack(spacing: 0) {
+            // Top section with page indicator
+            VStack(spacing: BemoTheme.Spacing.medium) {
+                if showPageIndicator {
+                    pageIndicator
+                        .padding(.top, 60)
+                        .transition(.opacity)
                 }
             }
-            .padding(.top, 20)
             
-            // Welcome content
-            VStack(spacing: 24) {
-                Image(systemName: "person.2.circle")
-                    .font(.system(size: 80))
-                    .foregroundColor(.blue)
+            Spacer()
+            
+            // Main content
+            VStack(spacing: BemoTheme.Spacing.xxlarge) {
+                // Logo/Icon section
+                ZStack {
+                    // Subtle background circle
+                    Circle()
+                        .fill(Color.gray.opacity(0.05))
+                        .frame(width: 160, height: 160)
+                        .scaleEffect(animateContent ? 1 : 0.9)
+                        .animation(
+                            Animation.easeInOut(duration: 2)
+                                .repeatForever(autoreverses: true),
+                            value: animateContent
+                        )
+                    
+                    // Bemo logo placeholder (using shapes)
+                    VStack(spacing: 8) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 32, weight: .regular, design: .rounded))
+                            .foregroundColor(BemoTheme.Colors.secondary)
+                        
+                        Text("Bemo")
+                            .font(.system(size: 42, weight: .bold, design: .rounded))
+                            .foregroundColor(BemoTheme.Colors.primary)
+                    }
+                    .scaleEffect(animateContent ? 1 : 0.8)
+                    .opacity(animateContent ? 1 : 0)
+                    .animation(.spring(response: 0.6, dampingFraction: 0.8), value: animateContent)
+                }
                 
-                Text("Welcome to Bemo!")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .multilineTextAlignment(.center)
-                
-                Text("Sign in to create profiles for your children and track their progress.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
+                // Welcome text
+                VStack(spacing: BemoTheme.Spacing.medium) {
+                    Text("Ready to Begin?")
+                        .font(BemoTheme.font(for: .heading3))
+                        .foregroundColor(Color("AppPrimaryTextColor"))
+                        .multilineTextAlignment(.center)
+                        .opacity(animateContent ? 1 : 0)
+                        .offset(y: animateContent ? 0 : 20)
+                        .animation(.easeOut(duration: 0.5).delay(0.2), value: animateContent)
+                    
+                    Text("Sign in to unlock personalized learning experiences tailored for your child.")
+                        .font(.system(size: 17, weight: .regular, design: .rounded))
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                        .padding(.horizontal, 32)
+                        .opacity(animateContent ? 1 : 0)
+                        .offset(y: animateContent ? 0 : 20)
+                        .animation(.easeOut(duration: 0.5).delay(0.3), value: animateContent)
+                }
             }
+            .padding(.horizontal, BemoTheme.Spacing.large)
             
             Spacer()
             
             // Sign-in section
-            VStack(spacing: 24) {
+            VStack(spacing: BemoTheme.Spacing.large) {
                 // Apple Sign-In Button or Loading
                 if viewModel.isLoading {
-                    HStack {
+                    HStack(spacing: 12) {
                         ProgressView()
                             .tint(.white)
+                            .scaleEffect(0.9)
                         Text("Signing in...")
+                            .font(.system(size: 17, weight: .medium, design: .rounded))
                             .foregroundColor(.white)
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 50)
+                    .frame(height: 56)
                     .background(Color.black)
-                    .cornerRadius(8)
-                    .padding(.horizontal, 40)
+                    .cornerRadius(BemoTheme.CornerRadius.medium)
+                    .padding(.horizontal, BemoTheme.Spacing.large)
                 } else {
                     Button(action: {
                         viewModel.signInWithApple()
@@ -198,31 +334,62 @@ struct OnboardingView: View {
                         .allowsHitTesting(false)
                     }
                     .signInWithAppleButtonStyle(.black)
-                    .frame(height: 50)
-                    .padding(.horizontal, 40)
+                    .frame(height: 56)
+                    .cornerRadius(BemoTheme.CornerRadius.medium)
+                    .padding(.horizontal, BemoTheme.Spacing.large)
+                    .scaleEffect(animateContent ? 1 : 0.9)
+                    .opacity(animateContent ? 1 : 0)
+                    .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.4), value: animateContent)
                 }
                 
-                // Privacy note
-                Text("By signing in, you agree to our Privacy Policy and Terms of Service. We only use your information to create and manage child profiles.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                // Privacy & Security badge
+                HStack(spacing: 8) {
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(Color.gray)
+                    
+                    Text("Your data is secure and private")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule()
+                        .fill(Color.gray.opacity(0.06))
+                )
+                .opacity(animateContent ? 1 : 0)
+                .animation(.easeOut(duration: 0.5).delay(0.5), value: animateContent)
+                
+                // Terms text
+                Text("By continuing, you agree to our [Terms of Service](https://bemo.app/terms) and [Privacy Policy](https://bemo.app/privacy)")
+                    .font(.system(size: 12, weight: .regular, design: .rounded))
+                    .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
+                    .tint(BemoTheme.Colors.primary)
                 
                 // Back button
-                Button("Back to Tutorial") {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        goToPreviousStep()
+                if currentStep > 0 {
+                    Button(action: {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            goToPreviousStep()
+                        }
+                    }) {
+                        Text("Back")
+                            .font(.system(size: 15, weight: .medium, design: .rounded))
+                            .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
                     }
+                    .padding(.vertical, BemoTheme.Spacing.xsmall)
                 }
-                .foregroundColor(.secondary)
             }
-            
-            // Swipe hint
-            Text("← Swipe to navigate →")
-                .font(.caption2)
-                .foregroundColor(.secondary.opacity(0.7))
-                .padding(.bottom, 20)
+            .padding(.bottom, 50)
+        }
+        .onAppear {
+            animateContent = false
+            withAnimation(.easeOut(duration: 0.6)) {
+                animateContent = true
+            }
         }
     }
     
@@ -264,27 +431,32 @@ struct OnboardingStep {
     let title: String
     let description: String
     let imageName: String
+    let iconBackgroundColors: (Color, Color)
     
     static let allSteps = [
         OnboardingStep(
-            title: "Learn Through Play",
-            description: "Engage your child with educational games that make learning fun and interactive.",
-            imageName: "gamecontroller.fill"
+            title: "Tangram Adventures",
+            description: "Watch your child develop spatial reasoning and problem-solving skills through engaging tangram puzzles designed for their age.",
+            imageName: "square.on.square.dashed",
+            iconBackgroundColors: (Color(hex: "#3B82F6"), Color(hex: "#60A5FA"))  // Blue
         ),
         OnboardingStep(
-            title: "Computer Vision Magic",
-            description: "Use your device's camera to interact with physical objects and bring them to life.",
-            imageName: "camera.fill"
+            title: "Real Objects, Real Learning",
+            description: "Our computer vision technology recognizes physical tangram pieces, bridging the gap between digital and hands-on learning.",
+            imageName: "viewfinder.circle.fill",
+            iconBackgroundColors: (Color(hex: "#10B981"), Color(hex: "#34D399"))  // Green
         ),
         OnboardingStep(
-            title: "Track Progress",
-            description: "Monitor your child's learning journey with detailed progress tracking and achievements.",
-            imageName: "chart.line.uptrend.xyaxis"
+            title: "Smart Progress Tracking",
+            description: "Every puzzle solved builds a comprehensive skill profile. Watch your child master rotation, reflection, decomposition, and planning skills.",
+            imageName: "chart.xyaxis.line",
+            iconBackgroundColors: (Color(hex: "#F97316"), Color(hex: "#FB923C"))  // Orange
         ),
         OnboardingStep(
-            title: "Safe & Secure",
-            description: "Your child's privacy and safety are our top priority. All data is encrypted and secure.",
-            imageName: "shield.checkered"
+            title: "Parent Dashboard",
+            description: "Stay connected to your child's learning journey with detailed insights, achievements, and personalized recommendations.",
+            imageName: "person.2.badge.gearshape.fill",
+            iconBackgroundColors: (Color(hex: "#EC4899"), Color(hex: "#F472B6"))  // Pink
         )
     ]
 }
@@ -325,3 +497,4 @@ struct LoadingView_Previews: PreviewProvider {
         LoadingView()
     }
 }
+
