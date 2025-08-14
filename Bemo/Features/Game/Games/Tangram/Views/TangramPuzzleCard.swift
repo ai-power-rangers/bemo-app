@@ -37,7 +37,7 @@ struct TangramPuzzleCard: View {
             ZStack {
                 // Background for consistent card size
                 Rectangle()
-                    .fill(Color(.systemGray6))
+                    .fill(Color.white)
                     .aspectRatio(1, contentMode: .fit)
                 
                 // Render puzzle using shared service
@@ -47,7 +47,7 @@ struct TangramPuzzleCard: View {
             .cornerRadius(8)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color(.systemGray4), lineWidth: 1)
+                    .stroke(Color("AppPrimaryTextColor").opacity(0.2), lineWidth: 1)
             )
             .overlay(
                 // Dynamic badge based on puzzle properties - top left corner
@@ -76,14 +76,16 @@ struct TangramPuzzleCard: View {
                 Text(puzzle.name)
                     .font(.headline)
                     .lineLimit(1)
+                    .foregroundColor(Color("AppPrimaryTextColor"))
                 
                 HStack {
                     // Category badge
                     Text(puzzle.category)
                         .font(.caption)
+                        .foregroundColor(Color("AppPrimaryTextColor"))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color(.systemGray5))
+                        .background(Color("AppBackground").opacity(0.8))
                         .cornerRadius(4)
                     
                     Spacer()
@@ -101,7 +103,7 @@ struct TangramPuzzleCard: View {
             .padding(.horizontal, 8)
             .padding(.bottom, 8)
         }
-        .background(Color(.systemBackground))
+        .background(Color.white)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
         .scaleEffect(isPressed ? 0.95 : 1.0)

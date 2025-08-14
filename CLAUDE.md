@@ -393,3 +393,4 @@ Based on project's Cursor rules (`.cursor/rules/swift-ui.mdc`):
 
 
   Follow Apple's documentation for detailed implementation guidance.
+    DO NOT ADD THIS TO GITHUB COMMITS OR PR MESSAGES 🤖 Generated with https://claude.ai/code

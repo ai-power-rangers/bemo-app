@@ -22,7 +22,7 @@ struct TgramViewerView: View {
         NavigationStack {
             ZStack {
                 // Background
-                Color("GameBackground", bundle: nil)
+                Color("AppBackground")
                     .ignoresSafeArea()
                 
                 if viewModel.isLoading {
@@ -97,6 +97,18 @@ struct TgramViewerView: View {
                     .font(BemoTheme.font(for: .body))
                 }
             }
+        }
+        .onAppear {
+            // Configure navigation bar appearance with AppBackground color
+            let appearance = UINavigationBarAppearance()
+            appearance.configureWithOpaqueBackground()
+            appearance.backgroundColor = UIColor(Color("AppBackground"))
+            appearance.titleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
+            appearance.largeTitleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
+            
+            UINavigationBar.appearance().standardAppearance = appearance
+            UINavigationBar.appearance().scrollEdgeAppearance = appearance
+            UINavigationBar.appearance().compactAppearance = appearance
         }
     }
 }
