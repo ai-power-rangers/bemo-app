@@ -15,12 +15,21 @@ struct ProfileSetupView: View {
     @State private var viewModel: ProfileSetupViewModel
     @State private var childName = ""
     @State private var childAge = 5
-    @State private var selectedGender = "Not specified"
+    @State private var selectedGender = "Prefer not to say"
     @State private var selectedAvatar = Avatar.random()
     @State private var showAvatarPicker = false
+    @State private var animateContent = false
     @FocusState private var isNameFieldFocused: Bool
     
-    private let genderOptions = ["Male", "Female", "Not specified"]
+    private let genderOptions = ["Boy", "Girl", "Prefer not to say"]
+    
+    private var genderForAPI: String {
+        switch selectedGender {
+        case "Boy": return "Male"
+        case "Girl": return "Female"
+        default: return "Not specified"
+        }
+    }
     
     init(viewModel: ProfileSetupViewModel) {
         self._viewModel = State(wrappedValue: viewModel)
@@ -28,24 +37,30 @@ struct ProfileSetupView: View {
     
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 32) {
-                    // Header
-                    headerSection
-                    
-                    // Profile form
-                    profileFormSection
-                    
-                    // Action buttons
-                    actionButtonsSection
-                    
-                    Spacer(minLength: 100)
+            ZStack {
+                // App background color from assets
+                Color("AppBackground")
+                    .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: BemoTheme.Spacing.xlarge) {
+                        // Header
+                        headerSection
+                            .padding(.top, BemoTheme.Spacing.large)
+                        
+                        // Profile form
+                        profileFormSection
+                        
+                        // Action buttons
+                        actionButtonsSection
+                        
+                        Spacer(minLength: 100)
+                    }
+                    .padding(.horizontal, BemoTheme.Spacing.large)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
             }
-            .navigationTitle("Create Profile")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -57,35 +72,35 @@ struct ProfileSetupView: View {
                                 Image(systemName: "chevron.left")
                                     .font(.system(size: 16, weight: .medium))
                                 Text("Back")
-                                    .font(.body)
+                                    .font(.system(size: 17))
                             }
-                            .foregroundColor(.blue)
+                            .foregroundColor(BemoTheme.Colors.primary)
                         }
                         .disabled(viewModel.isLoading)
                     }
                 }
-            }
-            .safeAreaInset(edge: .bottom) {
-                Button(action: { viewModel.signOut() }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                        Text("Sign Out")
-                            .fontWeight(.semibold)
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { viewModel.signOut() }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .font(.system(size: 14))
+                            Text("Sign Out")
+                                .font(.system(size: 15, weight: .medium))
+                        }
+                        .foregroundColor(.red.opacity(0.8))
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.red.opacity(0.1))
-                    .foregroundColor(.red)
-                    .cornerRadius(12)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 8)
+                    .disabled(viewModel.isLoading)
                 }
-                .disabled(viewModel.isLoading)
-                .background(.ultraThinMaterial)
             }
             .disabled(viewModel.isLoading)
         }
-        .alert("Profile Creation Error", isPresented: .constant(viewModel.errorMessage != nil)) {
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.6)) {
+                animateContent = true
+            }
+        }
+        .alert("Oops!", isPresented: .constant(viewModel.errorMessage != nil)) {
             Button("OK") {
                 viewModel.clearError()
             }
@@ -110,154 +125,276 @@ struct ProfileSetupView: View {
                             Button("Done") {
                                 showAvatarPicker = false
                             }
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundColor(BemoTheme.Colors.primary)
                         }
                     }
             }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
     }
     
     private var headerSection: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "person.circle.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.blue)
+        VStack(spacing: BemoTheme.Spacing.medium) {
+            ZStack {
+                Circle()
+                    .fill(Color.gray.opacity(0.05))
+                    .frame(width: 100, height: 100)
+                
+                Image(systemName: "person.crop.circle.badge.plus")
+                    .font(.system(size: 56, weight: .regular, design: .rounded))
+                    .foregroundColor(BemoTheme.Colors.primary)
+            }
+            .scaleEffect(animateContent ? 1 : 0.8)
+            .opacity(animateContent ? 1 : 0)
+            .animation(.spring(response: 0.6, dampingFraction: 0.8), value: animateContent)
             
-            Text("Create Your Child's Profile")
-                .font(.title2)
-                .fontWeight(.semibold)
-                .multilineTextAlignment(.center)
-            
-            Text("Tell us a bit about your child to personalize their learning experience.")
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
+            VStack(spacing: BemoTheme.Spacing.xsmall) {
+                Text("Let's Get Started!")
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundColor(Color("AppPrimaryTextColor"))
+                    .multilineTextAlignment(.center)
+                    .opacity(animateContent ? 1 : 0)
+                    .offset(y: animateContent ? 0 : 20)
+                    .animation(.easeOut(duration: 0.5).delay(0.1), value: animateContent)
+                
+                Text("Create a profile for your little learner")
+                    .font(.system(size: 17, weight: .regular, design: .rounded))
+                    .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .opacity(animateContent ? 1 : 0)
+                    .offset(y: animateContent ? 0 : 20)
+                    .animation(.easeOut(duration: 0.5).delay(0.2), value: animateContent)
+            }
         }
     }
     
     private var profileFormSection: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: BemoTheme.Spacing.large) {
             // Avatar selection
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Choose Avatar")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                HStack {
-                    AvatarView(avatar: selectedAvatar, size: 60)
+            Button(action: { showAvatarPicker = true }) {
+                HStack(spacing: BemoTheme.Spacing.medium) {
+                    AvatarView(avatar: selectedAvatar, size: 72)
+                        .overlay(
+                            Circle()
+                                .stroke(BemoTheme.Colors.primary.opacity(0.2), lineWidth: 2)
+                        )
                     
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(selectedAvatar.displayName)
-                            .font(.subheadline)
-                            .foregroundColor(.primary)
+                        Text("Avatar")
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
                         
-                        Button("Change Avatar") {
-                            showAvatarPicker = true
-                        }
-                        .font(.caption)
-                        .foregroundColor(.blue)
+                        Text(selectedAvatar.displayName)
+                            .font(.system(size: 17, weight: .medium, design: .rounded))
+                            .foregroundColor(Color("AppPrimaryTextColor"))
                     }
-                    .padding(.leading, 8)
                     
                     Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.4))
                 }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
+                .padding(BemoTheme.Spacing.medium)
+                .background(
+                    RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.large)
+                        .fill(Color.gray.opacity(0.04))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.large)
+                                .stroke(Color.gray.opacity(0.08), lineWidth: 1)
+                        )
+                )
             }
+            .buttonStyle(.plain)
+            .opacity(animateContent ? 1 : 0)
+            .offset(y: animateContent ? 0 : 20)
+            .animation(.easeOut(duration: 0.5).delay(0.3), value: animateContent)
             
             // Name input
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Child's Name")
-                    .font(.headline)
-                    .foregroundColor(.primary)
+            VStack(alignment: .leading, spacing: BemoTheme.Spacing.xsmall) {
+                Text("Name")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
                 
-                TextField("Enter name", text: $childName)
-                    .textFieldStyle(.roundedBorder)
+                TextField("Your child's name", text: $childName)
+                    .font(.system(size: 17, design: .rounded))
+                    .padding(BemoTheme.Spacing.medium)
+                    .background(
+                        RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
+                            .fill(Color.gray.opacity(0.04))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
+                                    .stroke(Color.gray.opacity(0.08), lineWidth: 1)
+                            )
+                    )
                     .focused($isNameFieldFocused)
                     .onSubmit {
                         isNameFieldFocused = false
                     }
             }
+            .opacity(animateContent ? 1 : 0)
+            .offset(y: animateContent ? 0 : 20)
+            .animation(.easeOut(duration: 0.5).delay(0.4), value: animateContent)
             
             // Age selection
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Age")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                VStack(spacing: 16) {
-                    Text("\(childAge) years old")
-                        .font(.title3)
-                        .fontWeight(.medium)
-                        .foregroundColor(.blue)
+            VStack(alignment: .leading, spacing: BemoTheme.Spacing.medium) {
+                HStack {
+                    Text("Age")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
                     
-                    HStack {
-                        Text("3")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Slider(value: Binding(
-                            get: { Double(childAge) },
-                            set: { childAge = Int($0) }
-                        ), in: 3...12, step: 1)
-                        
-                        Text("12")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    Spacer()
+                    
+                    Text("\(childAge) years old")
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .foregroundColor(BemoTheme.Colors.primary)
                 }
-                .padding(.vertical, 8)
+                
+                ZStack(alignment: .leading) {
+                    // Track
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.1))
+                        .frame(height: 8)
+                    
+                    // Fill
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    BemoTheme.Colors.primary,
+                                    BemoTheme.Colors.tertiary
+                                ]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: max(0, CGFloat(childAge - 3) / 9.0 * (UIScreen.main.bounds.width - 80)), height: 8)
+                }
+                .overlay(
+                    Slider(value: Binding(
+                        get: { Double(childAge) },
+                        set: { childAge = Int($0) }
+                    ), in: 3...12, step: 1)
+                        .tint(.clear)
+                )
+                
+                HStack {
+                    Text("3")
+                        .font(.system(size: 12, design: .rounded))
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.5))
+                    Spacer()
+                    Text("12")
+                        .font(.system(size: 12, design: .rounded))
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.5))
+                }
             }
+            .padding(BemoTheme.Spacing.medium)
+            .background(
+                RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.large)
+                    .fill(Color.gray.opacity(0.04))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.large)
+                            .stroke(Color.gray.opacity(0.08), lineWidth: 1)
+                    )
+            )
+            .opacity(animateContent ? 1 : 0)
+            .offset(y: animateContent ? 0 : 20)
+            .animation(.easeOut(duration: 0.5).delay(0.5), value: animateContent)
             
             // Gender selection
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: BemoTheme.Spacing.xsmall) {
                 Text("Gender")
-                    .font(.headline)
-                    .foregroundColor(.primary)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
                 
-                Picker("Gender", selection: $selectedGender) {
+                HStack(spacing: BemoTheme.Spacing.xsmall) {
                     ForEach(genderOptions, id: \.self) { gender in
-                        Text(gender).tag(gender)
+                        Button(action: { selectedGender = gender }) {
+                            Text(gender)
+                                .font(.system(size: 15, weight: .medium, design: .rounded))
+                                .foregroundColor(selectedGender == gender ? .white : Color("AppPrimaryTextColor").opacity(0.7))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, BemoTheme.Spacing.small)
+                                .background(
+                                    RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
+                                        .fill(selectedGender == gender
+                                            ? BemoTheme.Colors.primary
+                                            : Color.gray.opacity(0.04))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
+                                                .stroke(
+                                                    selectedGender == gender
+                                                        ? Color.clear
+                                                        : Color.gray.opacity(0.08),
+                                                    lineWidth: 1
+                                                )
+                                        )
+                                )
+                                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: selectedGender)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-                .pickerStyle(.segmented)
             }
-            .padding(.vertical, 8)
+            .opacity(animateContent ? 1 : 0)
+            .offset(y: animateContent ? 0 : 20)
+            .animation(.easeOut(duration: 0.5).delay(0.6), value: animateContent)
             
-            // Age-appropriate content note
-            HStack {
-                Image(systemName: "info.circle.fill")
-                    .foregroundColor(.blue)
+            // Info note
+            HStack(spacing: BemoTheme.Spacing.small) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14))
+                    .foregroundColor(BemoTheme.Colors.secondary)
                 
-                Text("We'll customize the experience based on your child's information")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Spacer()
+                Text("Personalized learning paths adapt to your child's age and progress")
+                    .font(.system(size: 13, design: .rounded))
+                    .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.blue.opacity(0.1))
-            .cornerRadius(8)
+            .padding(BemoTheme.Spacing.medium)
+            .background(
+                RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
+                    .fill(Color(hex: "#E0F2FE"))  // Light blue background similar to screenshot
+            )
+            .opacity(animateContent ? 1 : 0)
+            .offset(y: animateContent ? 0 : 20)
+            .animation(.easeOut(duration: 0.5).delay(0.7), value: animateContent)
         }
-        .padding(.vertical, 16)
     }
     
     private var actionButtonsSection: some View {
-        VStack(spacing: 16) {
-            Button(action: {
-                createProfile()
-            }) {
+        Button(action: {
+            createProfile()
+        }) {
+            HStack {
                 Text("Create Profile")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(isCreateButtonEnabled ? Color.blue : Color.gray)
-                    .cornerRadius(12)
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 14, weight: .semibold))
             }
-            .disabled(!isCreateButtonEnabled)
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 56)
+            .background(
+                isCreateButtonEnabled ? BemoTheme.Colors.primary : Color.gray.opacity(0.3)
+            )
+            .cornerRadius(BemoTheme.CornerRadius.large)
+            .shadow(
+                color: isCreateButtonEnabled ? Color.black.opacity(0.1) : Color.clear,
+                radius: 8,
+                x: 0,
+                y: 4
+            )
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isCreateButtonEnabled)
         }
+        .disabled(!isCreateButtonEnabled)
+        .scaleEffect(animateContent ? 1 : 0.9)
+        .opacity(animateContent ? 1 : 0)
+        .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.8), value: animateContent)
     }
     
     private var isCreateButtonEnabled: Bool {
@@ -271,7 +408,7 @@ struct ProfileSetupView: View {
         viewModel.createChildProfile(
             name: trimmedName,
             age: childAge,
-            gender: selectedGender,
+            gender: genderForAPI,
             avatarSymbol: selectedAvatar.symbol,
             avatarColor: selectedAvatar.colorName
         )
@@ -281,23 +418,41 @@ struct ProfileSetupView: View {
 // MARK: - Loading Overlay
 
 struct LoadingOverlay: View {
+    @State private var isAnimating = false
+    
     var body: some View {
         ZStack {
-            Color.black.opacity(0.3)
+            Color.black.opacity(0.2)
                 .ignoresSafeArea()
+                .transition(.opacity)
             
-            VStack(spacing: 16) {
+            VStack(spacing: BemoTheme.Spacing.large) {
                 ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: BemoTheme.Colors.primary))
                     .scaleEffect(1.2)
-                    .tint(.white)
                 
-                Text("Creating profile...")
-                    .font(.headline)
-                    .foregroundColor(.white)
+                VStack(spacing: 4) {
+                    Text("Creating Profile")
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .foregroundColor(Color("AppPrimaryTextColor"))
+                    
+                    Text("Just a moment...")
+                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
+                }
             }
-            .padding(24)
-            .background(Color.black.opacity(0.8))
-            .cornerRadius(16)
+            .padding(40)
+            .background(
+                RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.xlarge)
+                    .fill(Color("AppBackground"))
+                    .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 10)
+            )
+            .scaleEffect(isAnimating ? 1 : 0.9)
+            .opacity(isAnimating ? 1 : 0)
+            .animation(.spring(response: 0.5, dampingFraction: 0.8), value: isAnimating)
+        }
+        .onAppear {
+            isAnimating = true
         }
     }
 }
