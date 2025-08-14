@@ -100,37 +100,10 @@ class TangramPieceValidator {
         return (positionValid, rotationValid, flipValid)
     }
     
-    // MARK: - Legacy Support (Deprecated)
-    
-    /// Legacy validation method - DEPRECATED, use validateForSpriteKitWithFeatures instead
-    /// This method mixes raw angles with feature angles and causes validation issues
-    @available(*, deprecated, message: "Use validateForSpriteKitWithFeatures for consistent feature-based validation")
-    func validateForSpriteKit(
-        piecePosition: CGPoint,
-        pieceRotation: CGFloat,
-        pieceType: TangramPieceType,
-        isFlipped: Bool,
-        targetTransform: CGAffineTransform,
-        targetWorldPos: CGPoint
-    ) -> ValidationResult {
-        // This legacy path should not be used
-        // Return false for all validations to force migration to feature-based validation
-        return (false, false, false)
-    }
-    
-    // MARK: - PlacedPiece Support
-    
-    /// Validates if a placed piece matches a target position within tolerances
-    /// DEPRECATED: This method uses raw angles instead of feature angles and causes validation issues.
-    /// Use GamePuzzleData.TargetPiece.matches() instead, which internally uses validateForSpriteKitWithFeatures
-    @available(*, deprecated, message: "Use GamePuzzleData.TargetPiece.matches() which uses feature-based validation")
-    func validate(placed: PlacedPiece, target: GamePuzzleData.TargetPiece) -> Bool {
-        // This method is deprecated - it mixes raw angles with validation logic
-        // The correct path is through GamePuzzleData.TargetPiece.matches() which uses feature angles
-        // Returning false to force migration to the correct validation path
-        print("[WARNING] TangramPieceValidator.validate(placed:target:) is deprecated. Use target.matches(placed) instead.")
-        return false
-    }
+    // MARK: - Legacy Methods Removed
+    // All deprecated validation methods have been removed.
+    // Use validateForSpriteKitWithFeatures for all validation needs.
+    // For placed piece validation, use the TangramValidationEngine instead.
     
     // MARK: - Helper Methods
     

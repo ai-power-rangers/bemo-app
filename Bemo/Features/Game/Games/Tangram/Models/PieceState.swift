@@ -93,7 +93,7 @@ struct PieceState: Equatable {
     
     // Movement detection thresholds
     static let movementThreshold: CGFloat = 20.0  // pixels
-    static let rotationThreshold: CGFloat = 0.174 // ~10 degrees
+    static let rotationThreshold: CGFloat = 0.087 // ~5 degrees (stricter for settled/orientation gating)
     static let placementDelay: TimeInterval = 1.0 // seconds
     
     init(pieceId: String, pieceType: TangramPieceType) {

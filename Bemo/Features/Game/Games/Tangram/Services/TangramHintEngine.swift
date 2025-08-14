@@ -87,10 +87,17 @@ class TangramHintEngine {
     // MARK: - Constants
     
     private let stuckThreshold: TimeInterval = 30.0  // 30 seconds without progress
-    private let rotationTolerance: Double = 15.0      // Degrees (will be superseded by difficulty when available)
-    private let positionTolerance: CGFloat = 50.0     // Points (will be superseded by difficulty when available)
+    
+    // MARK: - Properties
+    
+    private var currentDifficulty: UserPreferences.DifficultySetting = .normal
     
     // MARK: - Public Interface
+    
+    /// Set the difficulty for tolerance calculations
+    func setDifficulty(_ difficulty: UserPreferences.DifficultySetting) {
+        self.currentDifficulty = difficulty
+    }
     
     /// Determine the most appropriate hint based on current game state
     func determineNextHint(
@@ -547,6 +554,11 @@ class TangramHintEngine {
     // MARK: - Helper Methods
     
     private func determineHintType(current: PlacedPiece, target: GamePuzzleData.TargetPiece) -> HintType {
+        // Get tolerances from unified source based on difficulty
+        let tolerances = TangramGameConstants.Validation.tolerances(for: currentDifficulty)
+        let rotationTolerance = tolerances.rotationDeg
+        let positionTolerance = tolerances.position
+        
         // Convert target position to SK space for comparison
         let rawPosition = TangramPoseMapper.rawPosition(from: target.transform)
         let targetPositionSK = TangramPoseMapper.spriteKitPosition(fromRawPosition: rawPosition)

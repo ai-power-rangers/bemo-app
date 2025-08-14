@@ -67,32 +67,136 @@ extension TangramPuzzleScene {
     // MARK: - CV Frame Rendering
     
     private func updateCVRender(_ frame: CVFrameEvent) {
-        // Update CV render section with frame data by mapping physical world → mini display
-        // 1) Build a similarity transform from physicalWorldSection bounds into cvMiniDisplay square
-        let miniSize = min(size.width * 0.25, 150)
-        let physWidth = physicalBounds.width
-        let physHeight = physicalBounds.height
-        guard physWidth > 0, physHeight > 0 else { return }
-        let scaleX = miniSize / physWidth
-        let scaleY = miniSize / physHeight
-        let uniformScale = min(scaleX, scaleY)
-
-        // Center the physical world into the mini square preserving aspect ratio
-        // Keep cvContent at origin and apply uniform scale; cvMiniDisplay itself is already positioned in the corner.
-        cvContent.setScale(uniformScale)
-        cvContent.position = .zero
-
-        // 2) Remove old nodes that are not present in the current frame
-        let frameIds = Set(frame.objects.map { pieceIdFromCVName($0.name) })
-        for (pieceId, node) in cvPieces where !frameIds.contains(pieceId) {
-            node.removeFromParent()
-            cvPieces.removeValue(forKey: pieceId)
+        // Schedule validation only when the frame meaningfully changed
+        if let bridge = validationBridge {
+            if userData == nil { userData = NSMutableDictionary() }
+            // Build a quantized signature of the frame (pieceId|x|y|rot) sorted
+            let items: [String] = frame.objects.map { obj in
+                let pid = pieceIdFromCVName(obj.name)
+                let x = Int((obj.pose.translation.first ?? 0).rounded())
+                let y = Int((obj.pose.translation.dropFirst().first ?? 0).rounded())
+                let r = Int(obj.pose.rotationDegrees.rounded())
+                return "\(pid)|\(x)|\(y)|\(r)"
+            }.sorted()
+            let signature = items.joined(separator: ",")
+            let lastSignature = userData?["lastCVSignature"] as? String
+            if lastSignature != signature {
+                userData?["lastCVSignature"] = signature
+                Task { @MainActor in
+                    // Small delay to batch multiple frame updates
+                    try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+                    bridge.validateAllPieces()
+                }
+            }
         }
+        
+        // Mirror physical pieces into a top-panel layer (topMirrorContent)
+        let mirror = topMirrorContent!
+        // Clear old ghosts that are not present in current frame (preserve nudges)
+        let frameIds = Set(frame.objects.map { pieceIdFromCVName($0.name) })
+        mirror.enumerateChildNodes(withName: "mirror_*") { node, _ in
+            guard let name = node.name else { return }
+            // Keep nudge overlays
+            if name.hasPrefix("mirror_nudge_") { return }
+            let id = String(name.dropFirst(7))
+            if !frameIds.contains(id) { node.removeFromParent() }
+        }
+        // Scale physical space uniformly into top panel space; both origins are centered, so no translation needed
+        let physSize = physicalBounds.size
+        let topSize = CGSize(width: targetBounds.width, height: targetBounds.height)
+        guard physSize.width > 0, physSize.height > 0, topSize.width > 0, topSize.height > 0 else { return }
+        let sx = topSize.width / physSize.width
+        let sy = topSize.height / physSize.height
+        let uniform = min(sx, sy)
+        topMirrorContent.setScale(uniform)
+        topMirrorContent.position = .zero
+        // Origin alignment: map physical origin (center of physicalWorldSection) to center of targetSection
+        // We'll convert via scene space and then into targetSection (mirror is at targetSection origin)
+        for object in frame.objects {
+            let pieceId = pieceIdFromCVName(object.name)
+            let nodeName = "mirror_\(pieceId)"
+            var ghost = mirror.childNode(withName: nodeName) as? SKShapeNode
+
+            // Resolve piece type and flip directly from the physical piece to ensure color/flip parity
+            let physicalPiece = availablePieces.first(where: { $0.name == pieceId })
+            let resolvedType: TangramPieceType = {
+                if let t = physicalPiece?.pieceType { return t }
+                // Fallback: parse from pieceId (e.g., "piece_smallTriangle1")
+                let raw = pieceId.hasPrefix("piece_") ? String(pieceId.dropFirst(6)) : pieceId
+                return TangramPieceType(rawValue: raw) ?? .smallTriangle1
+            }()
+            let isFlippedPiece = physicalPiece?.isFlipped ?? false
+
+            if ghost == nil {
+                ghost = createGhostPiece(pieceType: resolvedType, at: CGPoint.zero, rotation: 0)
+                ghost?.name = nodeName
+                mirror.addChild(ghost!)
+            }
+            guard let g = ghost else { continue }
+
+            // Position mapping phys → scene → targetSection → scaled into mirror
+            let physPosPoint = CGPoint(
+                x: object.pose.translation.first ?? 0,
+                y: object.pose.translation.dropFirst().first ?? 0
+            )
+            // Ensure mirror ghost is positioned at the same centroid coordinates as the physical piece
+            g.position = physPosPoint
+            g.setScale(1.0)
+            // Apply flip parity with the physical piece
+            g.xScale = isFlippedPiece ? -abs(g.xScale) : abs(g.xScale)
+            // Rotation
+            g.zRotation = CGFloat(object.pose.rotationDegrees) * .pi / 180
+
+            // Base visual at 10–20% (use 0.2 = 20% for tracked mirror)
+            var fillAlpha: CGFloat = 0.2
+            var orientationIsCorrect = false
+            // Orientation-only correctness bumps to 40% and triggers top checkmark once
+            if let puz = puzzle {
+                // Compute feature angle for piece
+                let pieceRad = CGFloat(object.pose.rotationDegrees) * .pi / 180
+                let canonicalPiece: CGFloat = resolvedType.isTriangle ? (3 * .pi / 4) : 0
+                let pieceFeature = TangramRotationValidator.normalizeAngle(
+                    pieceRad + (isFlippedPiece ? -canonicalPiece : canonicalPiece)
+                )
+                // Check against same-type targets
+                let targets = puz.targetPieces.filter { $0.pieceType == resolvedType }
+                for t in targets {
+                    let raw = TangramPoseMapper.rawAngle(from: t.transform)
+                    let targRot = TangramPoseMapper.spriteKitAngle(fromRawAngle: raw)
+                    let canonicalTarget: CGFloat = resolvedType.isTriangle ? (.pi / 4) : 0
+                    let targetFeature = TangramRotationValidator.normalizeAngle(targRot + canonicalTarget)
+                    let symDiff = TangramRotationValidator.rotationDifferenceToNearest(
+                        currentRotation: pieceFeature,
+                        targetRotation: targetFeature,
+                        pieceType: resolvedType,
+                        isFlipped: isFlippedPiece
+                    )
+                    let deltaDeg = abs(symDiff) * 180 / .pi
+                    var flipOK = true
+                    if resolvedType == .parallelogram {
+                        let det = t.transform.a * t.transform.d - t.transform.b * t.transform.c
+                        let targetIsFlipped = det < 0
+                        flipOK = (isFlippedPiece != targetIsFlipped)
+                    }
+                    if deltaDeg <= 5.0 && flipOK {
+                        fillAlpha = 0.4
+                        orientationIsCorrect = true
+                        break
+                    }
+                }
+            }
+            // Apply color matching the physical piece's type with lower fill
+            g.fillColor = TangramColors.Sprite.uiColor(for: resolvedType).withAlphaComponent(fillAlpha)
+            g.strokeColor = TangramColors.Sprite.uiColor(for: resolvedType).withAlphaComponent(0.5)
+            g.lineWidth = 1.0
+
+            // No checkmark overlays; fillAlpha is the only orientation feedback here
+        }
+
+        // Remove old nodes path for mini display no longer used
 
         // 3) Update or create each CV piece visualization using proper shape and color
-        for object in frame.objects {
-            updateCVPiece(object)
-        }
+        for _ in frame.objects { /* no-op */ }
     }
     
     private func updateCVPiece(_ cvPiece: CVPieceEvent) {
@@ -226,7 +330,7 @@ extension TangramPuzzleScene {
     // MARK: - CV Frame Emission
     
     func emitCVFrameUpdate() {
-        // Emit current state as CV frame event
+        // Mini display disabled; still emit frame for engine processing
         var cvObjects: [CVPieceEvent] = []
         
         for piece in availablePieces {
