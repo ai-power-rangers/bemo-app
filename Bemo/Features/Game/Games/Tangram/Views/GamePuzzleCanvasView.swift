@@ -31,7 +31,7 @@ struct GamePuzzleCanvasView: View {
             ZStack {
                 // Background
                 RoundedRectangle(cornerRadius: 20)
-                    .fill(Color(UIColor.secondarySystemBackground))
+                    .fill(Color("AppBackground"))
                     .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
                 
                 // Target puzzle silhouettes
@@ -184,8 +184,8 @@ struct GamePuzzleCanvasView: View {
         }
         .font(.caption2)
         .padding(8)
-        .background(Color.black.opacity(0.7))
-        .foregroundColor(.white)
+        .background(Color("AppBackground").opacity(0.9))
+        .foregroundColor(Color("AppPrimaryTextColor"))
         .cornerRadius(8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding()

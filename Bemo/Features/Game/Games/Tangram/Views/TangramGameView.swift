@@ -47,13 +47,25 @@ struct TangramGameView: View {
             .background(Color("AppBackground"))
         }
         .onAppear {
-            // Remove navigation bar shadow
+            // Configure navigation bar with app colors
             let appearance = UINavigationBarAppearance()
             appearance.configureWithOpaqueBackground()
+            appearance.backgroundColor = UIColor(Color("AppBackground"))
+            appearance.titleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
+            appearance.largeTitleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
             appearance.shadowColor = .clear
             appearance.shadowImage = UIImage()
+            
+            // Configure button appearance
+            let buttonAppearance = UIBarButtonItemAppearance()
+            buttonAppearance.normal.titleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
+            appearance.buttonAppearance = buttonAppearance
+            appearance.backButtonAppearance = buttonAppearance
+            
             UINavigationBar.appearance().standardAppearance = appearance
             UINavigationBar.appearance().scrollEdgeAppearance = appearance
+            UINavigationBar.appearance().compactAppearance = appearance
+            UINavigationBar.appearance().tintColor = UIColor(Color("AppPrimaryTextColor"))
         }
     }
     
