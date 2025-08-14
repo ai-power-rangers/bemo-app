@@ -20,6 +20,7 @@ class DeveloperService {
     /// Known developer email domains and specific addresses
     private static let developerEmails: Set<String> = [
         "roosh.Bemo",           // Roosh's developer Apple ID
+        "com.roosh.Bemo",
         "com.mitchellwhite.Bemo", // Mitchell's developer Apple ID  
         "com.bemo.services",     // Bemo services account (unclear but included)
         "000767.d1fc3d632c26450c9435e21be79649d3.0250", // Mitchell's actual Apple ID from database
