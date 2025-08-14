@@ -209,17 +209,6 @@ class GameLobbyViewModel {
                 )
             )
             
-            // Add Tangram Progress Test Tool
-            let tangramProgressTool = TangramProgressTool()
-            availableGames.append(
-                GameItem(
-                    devTool: tangramProgressTool,
-                    iconName: "chart.line.uptrend.xyaxis",
-                    color: .green,
-                    badge: "Dev Tool"
-                )
-            )
-            
             // Add Tangram Progress Service Tool
             let tangramProgressServiceTool = TangramProgressServiceTool()
             availableGames.append(
