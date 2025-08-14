@@ -282,29 +282,30 @@ class CVValidationBridge {
         //     }
         // }
 
-        // Buffer latest per-piece nudges and flush on settle
+        // Show immediate "Good job" when orientation-only correct; buffer rotate/flip/directed until settled
         let now = CACurrentMediaTime()
         for (pieceId, content) in result.pieceNudges {
-            pendingPieceNudges[pieceId] = content
-        }
-        // Try to flush buffered nudges for settled pieces
-        for (pieceId, content) in pendingPieceNudges {
-            guard scene.isPieceSettled(pieceId, now: now) else { continue }
-            if let last = lastPieceNudgeShownAt[pieceId], (now - last) < pieceNudgeCooldown { continue }
-            // If this is a Good job, only show when orientation signature changed
-            let isGoodJob = content.message.contains("Good job")
-            if isGoodJob {
+            if content.level == .gentle {
+                if let last = lastPieceNudgeShownAt[pieceId], (now - last) < pieceNudgeCooldown { continue }
+                // De-duplicate by orientation signature
                 if let piece = scene.availablePieces.first(where: { $0.name == pieceId }) {
                     let deg = Int((piece.zRotation * 180 / .pi).rounded())
                     let sig = (deg: deg, flip: piece.isFlipped)
                     if let lastSig = lastOrientationSignature[pieceId], lastSig.deg == sig.deg && lastSig.flip == sig.flip {
-                        // Same orientation as before; skip re-show
                         continue
-                    } else {
-                        lastOrientationSignature[pieceId] = sig
                     }
+                    lastOrientationSignature[pieceId] = sig
                 }
+                scene.showTopNudgeNearMirror(pieceId: pieceId, content: content)
+                lastPieceNudgeShownAt[pieceId] = now
+            } else {
+                pendingPieceNudges[pieceId] = content
             }
+        }
+        // Flush buffered nudges only for settled pieces
+        for (pieceId, content) in pendingPieceNudges {
+            guard scene.isPieceSettled(pieceId, now: now) else { continue }
+            if let last = lastPieceNudgeShownAt[pieceId], (now - last) < pieceNudgeCooldown { continue }
             scene.showTopNudgeNearMirror(pieceId: pieceId, content: content)
             lastPieceNudgeShownAt[pieceId] = now
             pendingPieceNudges.removeValue(forKey: pieceId)

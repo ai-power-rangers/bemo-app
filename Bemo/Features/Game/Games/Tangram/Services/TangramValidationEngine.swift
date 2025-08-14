@@ -200,17 +200,24 @@ class TangramValidationEngine {
                 print("[NUDGE] flip piece=\(obs.pieceId) target=\(picked.id)")
                 #endif
             } else if picked.rotDeg > options.orientationToleranceDeg && picked.rotDeg < options.rotationNudgeUpperDeg {
-                // Direction to rotate: sign of angle difference
-                let signed = TangramRotationValidator.rotationDifferenceToNearest(
-                    currentRotation: pieceFeature,
-                    targetRotation: picked.targetFeature,
-                    pieceType: obs.pieceType,
-                    isFlipped: obs.isFlipped
+                // Compute target node zRotation that satisfies feature-angle equality
+                // targetNodeZ = targetExpectedZ + canonicalTarget - sign(canonicalPiece)
+                let raw = TangramPoseMapper.rawAngle(from: puzzle.targetPieces.first { $0.id == picked.id }?.transform ?? .identity)
+                let targetExpectedZ = TangramPoseMapper.spriteKitAngle(fromRawAngle: raw)
+                let canonicalTarget: CGFloat = obs.pieceType.isTriangle ? (.pi / 4) : 0
+                let canonicalPiece: CGFloat = obs.pieceType.isTriangle ? (3 * .pi / 4) : 0
+                let signAdjustedCanonicalPiece: CGFloat = obs.isFlipped ? -canonicalPiece : canonicalPiece
+                let desiredNodeZ = TangramRotationValidator.normalizeAngle(targetExpectedZ + canonicalTarget - signAdjustedCanonicalPiece)
+
+                // Emit rotation demo visual hint (animate current → target orientation)
+                pieceNudges[obs.pieceId] = NudgeContent(
+                    level: .specific,
+                    message: "🔄 Try rotating",
+                    visualHint: .rotationDemo(current: obs.rotation, target: desiredNodeZ),
+                    duration: 2.0
                 )
-                let direction = signed >= 0 ? 1.0 : -1.0
-                pieceNudges[obs.pieceId] = NudgeContent(level: .specific, message: "🔄 Try rotating", visualHint: .arrow(direction: CGFloat(direction)), duration: 2.0)
                 #if DEBUG
-                print("[NUDGE] rotate piece=\(obs.pieceId) delta=\(Int(picked.rotDeg))° target=\(picked.id)")
+                print("[NUDGE] rotate-demo piece=\(obs.pieceId) delta=\(Int(picked.rotDeg))° target=\(picked.id) currZ=\(Int(obs.rotation * 180 / .pi))° desiredZ=\(Int(desiredNodeZ * 180 / .pi))°")
                 #endif
             }
         }

@@ -652,6 +652,31 @@ class TangramPuzzleScene: SKScene {
                 let flipBack = SKAction.scaleX(to: 1.0, duration: 0.25)
                 let wait = SKAction.wait(forDuration: 0.2)
                 ghost.run(SKAction.sequence([flipOut, wait, flipBack]))
+            } else if let visual = content.visualHint, case .rotationDemo(let current, let target) = visual {
+                // Rotation demo at silhouette: show current orientation ghost then rotate to expected
+                let targetCentroid = (targetNode.userData?["centroidSK"] as? NSValue)?.cgPointValue ?? .zero
+                let currentGhost = createGhostPiece(pieceType: pieceType, at: targetCentroid, rotation: current)
+                currentGhost.alpha = 0.35
+                nudgeNode.addChild(currentGhost)
+                // Draw arc path around centroid
+                let arc = SKShapeNode()
+                let path = CGMutablePath()
+                let radius: CGFloat = 60
+                func norm(_ a: CGFloat) -> CGFloat { var x = a; while x > .pi { x -= 2 * .pi }; while x < -.pi { x += 2 * .pi }; return x }
+                let a0 = norm(current)
+                let a1 = norm(target)
+                var d = a1 - a0; if d > .pi { d -= 2 * .pi }; if d < -.pi { d += 2 * .pi }
+                let clockwise = d < 0
+                path.addArc(center: targetCentroid, radius: radius, startAngle: a0, endAngle: a1, clockwise: clockwise)
+                arc.path = path
+                let arcColor = TangramColors.Sprite.uiColor(for: pieceType)
+                arc.strokeColor = arcColor
+                arc.lineWidth = 2
+                nudgeNode.addChild(arc)
+                // Animate rotation
+                let rotate = SKAction.rotate(toAngle: target, duration: 0.8, shortestUnitArc: true)
+                rotate.timingMode = .easeOut
+                currentGhost.run(rotate)
             }
 
         case .directed:
@@ -780,7 +805,7 @@ class TangramPuzzleScene: SKScene {
         nudgeNode.position = CGPoint(x: mirrorNode.position.x, y: mirrorNode.position.y + 50)
         nudgeNode.zPosition = (mirrorNode.zPosition + 10)
 
-        // Visual content similar to target nudges, simplified for mirror
+        // Visual content similar to target nudges, with optional demos
         switch content.level {
         case .visual, .gentle, .specific, .directed, .solution:
             let label = SKLabelNode(text: content.message.isEmpty ? "Hint" : content.message)
@@ -800,6 +825,65 @@ class TangramPuzzleScene: SKScene {
 
             nudgeNode.addChild(background)
             nudgeNode.addChild(label)
+
+            // Render rotation/flip demos near the mirrored piece when provided
+            if let visual = content.visualHint {
+                switch visual {
+                case .rotationDemo(let current, let target):
+                    // Determine piece type and color
+                    let resolvedType: TangramPieceType = availablePieces.first(where: { $0.name == pieceId })?.pieceType ?? .smallTriangle1
+                    let ghost = createGhostPiece(pieceType: resolvedType, at: mirrorNode.position, rotation: current)
+                    ghost.alpha = 0.35
+                    ghost.zPosition = (mirrorNode.zPosition + 5)
+                    topMirrorContent?.addChild(ghost)
+
+                    // Draw arc indicating rotation direction (shortest path)
+                    let arc = SKShapeNode()
+                    let path = CGMutablePath()
+                    let radius: CGFloat = 60
+                    // Normalize angles to [-pi, pi]
+                    func norm(_ a: CGFloat) -> CGFloat { var x = a; while x > .pi { x -= 2 * .pi }; while x < -.pi { x += 2 * .pi }; return x }
+                    let a0 = norm(current)
+                    let a1 = norm(target)
+                    var delta = a1 - a0
+                    if delta > .pi { delta -= 2 * .pi }
+                    if delta < -.pi { delta += 2 * .pi }
+                    let clockwise = delta < 0
+                    path.addArc(center: mirrorNode.position, radius: radius, startAngle: a0, endAngle: a1, clockwise: clockwise)
+                    arc.path = path
+                    let arcColor = TangramColors.Sprite.uiColor(for: resolvedType)
+                    arc.strokeColor = arcColor
+                    arc.lineWidth = 2
+                    arc.zPosition = ghost.zPosition + 1
+                    topMirrorContent?.addChild(arc)
+
+                    // Animate rotation demo then fade out
+                    let rotate = SKAction.rotate(toAngle: target, duration: 0.8, shortestUnitArc: true)
+                    rotate.timingMode = .easeOut
+                    let hold = SKAction.wait(forDuration: max(0.2, content.duration - 1.2))
+                    let fade = SKAction.fadeOut(withDuration: 0.2)
+                    let remove = SKAction.removeFromParent()
+                    ghost.run(SKAction.sequence([rotate, hold, fade, remove]))
+                    arc.run(SKAction.sequence([SKAction.wait(forDuration: content.duration - 0.2), fade, remove]))
+
+                case .flipDemo:
+                    // Show flip demonstration using a ghost aligned to the mirror
+                    let resolvedType: TangramPieceType = availablePieces.first(where: { $0.name == pieceId })?.pieceType ?? .smallTriangle1
+                    let ghost = createGhostPiece(pieceType: resolvedType, at: mirrorNode.position, rotation: (mirrorNode.zRotation))
+                    ghost.alpha = 0.35
+                    ghost.zPosition = (mirrorNode.zPosition + 5)
+                    topMirrorContent?.addChild(ghost)
+                    let flipOut = SKAction.scaleX(to: -1.0, duration: 0.25)
+                    let wait = SKAction.wait(forDuration: 0.2)
+                    let flipBack = SKAction.scaleX(to: 1.0, duration: 0.25)
+                    let fade = SKAction.fadeOut(withDuration: 0.2)
+                    let remove = SKAction.removeFromParent()
+                    ghost.run(SKAction.sequence([flipOut, wait, flipBack, SKAction.wait(forDuration: max(0.2, content.duration - 0.7)), fade, remove]))
+
+                default:
+                    break
+                }
+            }
         default:
             break
         }
@@ -863,9 +947,10 @@ class TangramPuzzleScene: SKScene {
         }
 
         let ghost = SKShapeNode(path: path)
-        ghost.strokeColor = .systemGreen
+        let color = TangramColors.Sprite.uiColor(for: pieceType)
+        ghost.strokeColor = color
         ghost.lineWidth = 2
-        ghost.fillColor = .systemGreen.withAlphaComponent(0.2)
+        ghost.fillColor = color.withAlphaComponent(0.2)
         ghost.position = position
         ghost.zRotation = rotation
         ghost.name = "ghost_\(pieceType.rawValue)"
@@ -1047,22 +1132,36 @@ class TangramPuzzleScene: SKScene {
         hintPiece.isUserInteractionEnabled = false
         hintPiece.zPosition = 500
         
-        // Find starting position - look for an existing piece of this type or use default
-        let startPos: CGPoint
-        if let existingPiece = availablePieces.first(where: { 
+        // Determine starting pose from the mirrored piece in the TOP panel when possible
+        var startPos: CGPoint = CGPoint(x: pose.centroidInContainer.x, y: -100)
+        var startRotation: CGFloat = 0
+        var startIsFlipped: Bool = false
+        if let physPiece = availablePieces.first(where: {
+            ($0.userData?["pieceType"] as? String) == hint.targetPiece.rawValue &&
+            !($0.userData?["validatedTargetId"] != nil)
+        }), let pieceId = physPiece.name, let mirror = topMirrorContent?.childNode(withName: "mirror_\(pieceId)") as? SKShapeNode {
+            // Convert mirror position into container space
+            let inSection = topMirrorContent.convert(mirror.position, to: targetSection)
+            if let container = targetSection.childNode(withName: "puzzleContainer") {
+                startPos = container.convert(inSection, from: targetSection)
+            } else {
+                startPos = inSection
+            }
+            startRotation = mirror.zRotation
+            startIsFlipped = mirror.xScale < 0
+        } else if let existingPiece = availablePieces.first(where: {
             ($0.userData?["pieceType"] as? String) == hint.targetPiece.rawValue &&
             !($0.userData?["validatedTargetId"] != nil)
         }) {
-            // Start from actual piece position, converted into puzzleContainer space
+            // Fallback to bottom piece converted into container space
             let pieceScenePos = physicalWorldSection.convert(existingPiece.position, to: self)
             if let container = targetSection.childNode(withName: "puzzleContainer") {
                 startPos = container.convert(pieceScenePos, from: self)
             } else {
                 startPos = self.convert(pieceScenePos, to: targetSection)
             }
-        } else {
-            // Start from a default position below the silhouette
-            startPos = CGPoint(x: pose.centroidInContainer.x, y: -100)
+            startRotation = existingPiece.zRotation
+            startIsFlipped = existingPiece.isFlipped
         }
         
         hintPiece.position = startPos
@@ -1073,11 +1172,9 @@ class TangramPuzzleScene: SKScene {
         }
         // Scale hint to match silhouette display scale so rotation visually matches
         hintPiece.setScale(pose.displayScale)
-        
-        // Apply flip if needed for parallelogram BEFORE animation
-        if hint.targetPiece == .parallelogram && pose.isFlipped {
-            hintPiece.flip()
-        }
+        // Initialize rotation/flip from current mirrored/bottom state
+        hintPiece.zRotation = startRotation
+        if startIsFlipped { hintPiece.flip() }
         
         // Create animation sequence showing the solution path
         let fadeIn = SKAction.fadeAlpha(to: 0.6, duration: 0.3)
@@ -1104,16 +1201,18 @@ class TangramPuzzleScene: SKScene {
         let fadeOut = SKAction.fadeAlpha(to: 0.0, duration: 0.4)
         let remove = SKAction.removeFromParent()
         
-        // Run full animation sequence
-        let fullAnimation = SKAction.sequence([
-            fadeIn,
-            rotateAction,
-            moveAction,
-            pulseRepeat,
-            wait,
-            fadeOut,
-            remove
-        ])
+        // Optional Step 0: Flip demo first if needed (parallelogram parity logic)
+        var actions: [SKAction] = [fadeIn]
+        if hint.targetPiece == .parallelogram {
+            // Flip is needed when current parity matches target parity (inverted logic)
+            if startIsFlipped == pose.isFlipped {
+                let flipOut = SKAction.scaleX(to: -hintPiece.xScale, duration: 0.25)
+                let waitFlip = SKAction.wait(forDuration: 0.1)
+                actions.append(contentsOf: [flipOut, waitFlip])
+            }
+        }
+        actions.append(contentsOf: [rotateAction, moveAction, pulseRepeat, wait, fadeOut, remove])
+        let fullAnimation = SKAction.sequence(actions)
         
         hintPiece.run(fullAnimation) { [weak self] in
             self?.hintNode = nil
