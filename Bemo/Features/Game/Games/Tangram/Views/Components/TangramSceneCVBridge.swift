@@ -139,7 +139,6 @@ extension TangramPuzzleScene {
                 x: object.pose.translation.first ?? 0,
                 y: object.pose.translation.dropFirst().first ?? 0
             )
-            // Ensure mirror ghost is positioned at the same centroid coordinates as the physical piece
             g.position = physPosPoint
             g.setScale(1.0)
             // Apply flip parity with the physical piece
@@ -149,7 +148,6 @@ extension TangramPuzzleScene {
 
             // Base visual at 10–20% (use 0.2 = 20% for tracked mirror)
             var fillAlpha: CGFloat = 0.2
-            var orientationIsCorrect = false
             // Orientation-only correctness bumps to 40% and triggers top checkmark once
             if let puz = puzzle {
                 // Compute feature angle for piece
@@ -180,7 +178,6 @@ extension TangramPuzzleScene {
                     }
                     if deltaDeg <= 5.0 && flipOK {
                         fillAlpha = 0.4
-                        orientationIsCorrect = true
                         break
                     }
                 }

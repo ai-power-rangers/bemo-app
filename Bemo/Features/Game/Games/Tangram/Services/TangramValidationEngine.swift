@@ -57,6 +57,7 @@ class TangramValidationEngine {
         let groupMappings: [UUID: AnchorMapping]
         let failureReasons: [String: ValidationFailure]
         let orientedTargets: Set<String> // targets that match orientation-only (50% fill)
+        let anchorPieceIds: Set<String>
     }
     
     struct PieceValidationState {
@@ -93,6 +94,9 @@ class TangramValidationEngine {
     private var pieceAttempts: [String: Int] = [:]
     private var lastObservedPose: [String: (pos: CGPoint, rot: CGFloat)] = [:]
     private var groupRunState: [UUID: (lastRunAt: TimeInterval, poseHash: Int)] = [:]
+    // Primary two-piece anchor group for relative-world validation
+    private var mainGroupId: UUID? = nil
+    private var anchorPieceIds: Set<String> = []
     
     // MARK: - Initialization
     
@@ -123,6 +127,8 @@ class TangramValidationEngine {
         difficulty: UserPreferences.DifficultySetting,
         options: ValidationOptions = .default
     ) -> ValidationResult {
+        // Follow plan doc: two-piece rigid mapping commit, then relative validation
+        let enableAnchorMapping = true
         
         // Filter observations to significant pose deltas (only track pieces once moved)
         let significant: [PieceObservation] = frame.filter { obs in
@@ -135,11 +141,239 @@ class TangramValidationEngine {
         }
         // Update pose cache for all observations
         for obs in frame { lastObservedPose[obs.pieceId] = (obs.position, obs.rotation) }
-        // SIMPLE ORIENTATION-ONLY MODE
+        // SIMPLE TWO-PIECE ANCHOR + ORIENTATION-ONLY FEEDBACK
         var orientedTargets: Set<String> = []
-        let pieceStates: [String: PieceValidationState] = [:]
+        var pieceStates: [String: PieceValidationState] = [:]
         var nudge: (targetId: String, content: NudgeContent)? = nil
         var pieceNudges: [String: NudgeContent] = [:]
+        var groupMappingsOut: [UUID: AnchorMapping] = [:]
+        var failureReasons: [String: ValidationFailure] = [:]
+        var anchorIds: Set<String> = []
+
+        // Establish or maintain a two-piece anchor mapping if possible
+        if enableAnchorMapping && frame.count >= 2 {
+            // Map for quick lookup
+            let idToObs: [String: PieceObservation] = Dictionary(uniqueKeysWithValues: frame.map { ($0.pieceId, $0) })
+
+            // Prefer existing anchor pair if still present; otherwise choose best oriented pair (then closest)
+            var candidatePair: (PieceObservation, PieceObservation)? = nil
+            if anchorPieceIds.count == 2,
+               let a = anchorPieceIds.first, let b = anchorPieceIds.dropFirst().first,
+               let obsA = idToObs[a], let obsB = idToObs[b] {
+                candidatePair = (obsA, obsB)
+            } else {
+                // Compute orientation deltas to pick a pair likely to be aligned to targets
+                struct OrientInfo { let obs: PieceObservation; let bestTargetId: String; let deltaDeg: CGFloat; let flipOK: Bool }
+                var oriented: [OrientInfo] = []
+                for obs in frame {
+                    let candidates = puzzle.targetPieces.filter { $0.pieceType == obs.pieceType }
+                    guard !candidates.isEmpty else { continue }
+                    let canonicalPiece: CGFloat = obs.pieceType.isTriangle ? (3 * .pi / 4) : 0
+                    let pieceFeature = TangramRotationValidator.normalizeAngle(
+                        obs.rotation + (obs.isFlipped ? -canonicalPiece : canonicalPiece)
+                    )
+                    var best: (id: String, deltaDeg: CGFloat, flippedOK: Bool)?
+                    for t in candidates {
+                        let raw = TangramPoseMapper.rawAngle(from: t.transform)
+                        let targRot = TangramPoseMapper.spriteKitAngle(fromRawAngle: raw)
+                        let canonicalTarget: CGFloat = obs.pieceType.isTriangle ? (.pi / 4) : 0
+                        let targetFeature = TangramRotationValidator.normalizeAngle(targRot + canonicalTarget)
+                        let symDiff = TangramRotationValidator.rotationDifferenceToNearest(
+                            currentRotation: pieceFeature,
+                            targetRotation: targetFeature,
+                            pieceType: obs.pieceType,
+                            isFlipped: obs.isFlipped
+                        )
+                        let delta = abs(symDiff) * 180 / .pi
+                        let det = t.transform.a * t.transform.d - t.transform.b * t.transform.c
+                        let targFlipped = det < 0
+                        let flipOK = (obs.pieceType != .parallelogram) || (obs.isFlipped != targFlipped)
+                        if best == nil || delta < best!.deltaDeg { best = (t.id, delta, flipOK) }
+                    }
+                    if let b = best, b.flippedOK, b.deltaDeg <= max(5, options.orientationToleranceDeg) {
+                        oriented.append(OrientInfo(obs: obs, bestTargetId: b.id, deltaDeg: b.deltaDeg, flipOK: b.flippedOK))
+                    }
+                }
+                if oriented.count >= 2 {
+                    // Choose closest pair among oriented
+                    var bestPair: (PieceObservation, PieceObservation)? = nil
+                    var bestDist: CGFloat = .infinity
+                    for i in 0..<(oriented.count - 1) {
+                        for j in (i + 1)..<oriented.count {
+                            let p = oriented[i].obs.position
+                            let q = oriented[j].obs.position
+                            let d = hypot(p.x - q.x, p.y - q.y)
+                            if d < bestDist { bestDist = d; bestPair = (oriented[i].obs, oriented[j].obs) }
+                        }
+                    }
+                    candidatePair = bestPair
+                    #if DEBUG
+                    if let cp = candidatePair {
+                        print("[ANCHOR] Oriented pair selected: \(cp.0.pieceId), \(cp.1.pieceId) (closest among oriented)")
+                    }
+                    #endif
+                }
+                if candidatePair == nil {
+                    // Fallback to closest pair in frame
+                    var bestPair: (PieceObservation, PieceObservation)? = nil
+                    var bestDist: CGFloat = .infinity
+                    for i in 0..<(frame.count - 1) {
+                        for j in (i + 1)..<frame.count {
+                            let p = frame[i].position
+                            let q = frame[j].position
+                            let d = hypot(p.x - q.x, p.y - q.y)
+                            if d < bestDist { bestDist = d; bestPair = (frame[i], frame[j]) }
+                        }
+                    }
+                    candidatePair = bestPair
+                    #if DEBUG
+                    if let cp = candidatePair {
+                        print("[ANCHOR] Fallback closest pair selected: \(cp.0.pieceId), \(cp.1.pieceId)")
+                    }
+                    #endif
+                }
+            }
+
+            if let pair = candidatePair {
+                let groupId: UUID = mainGroupId ?? UUID()
+                // Compute mapping using plan doc method (pair-centric centroid + relative rotation)
+                let mapping = computePairDocMapping(pair: pair, puzzle: puzzle)
+
+                if let mapping = mapping, let anchorObs = idToObs[mapping.anchorPieceId] {
+                    // Validate both pieces under this mapping
+                    let pairObs: [PieceObservation] = [pair.0, pair.1]
+                    var localStates: [String: PieceValidationState] = [:]
+                    var localValidatedTargets: Set<String> = []
+                    for obs in pairObs {
+                        let st = validateMappedPiece(
+                            observation: obs,
+                            mapping: mapping,
+                            anchorPosition: anchorObs.position,
+                            puzzle: puzzle,
+                            difficulty: difficulty
+                        )
+                        localStates[obs.pieceId] = st
+                        if st.isValid, let tid = st.targetId { localValidatedTargets.insert(tid) }
+                    }
+
+                    // Anchor is established only if both are valid
+                    if pairObs.allSatisfy({ localStates[$0.pieceId]?.isValid == true }) {
+                        mainGroupId = groupId
+                        anchorPieceIds = Set(pairObs.map { $0.pieceId })
+                        anchorIds = anchorPieceIds
+                        groupMappingsOut[groupId] = mapping
+                        // Merge into engine-level state
+                        for (pid, st) in localStates {
+                            pieceStates[pid] = st
+                            if let tid = st.targetId {
+                                pieceBindings[pid] = tid
+                                validatedTargets.insert(tid)
+                            }
+                        }
+                        #if DEBUG
+                        let deg = mapping.rotationDelta * 180 / .pi
+                        print("[ANCHOR] Committed group=\(groupId) theta=\(Int(deg))° pieces=\(pair.0.pieceId),\(pair.1.pieceId)")
+                        for obs in pairObs {
+                            if let st = localStates[obs.pieceId], let tid = st.targetId,
+                               let target = puzzle.targetPieces.first(where: { $0.id == tid }) {
+                                // Compute residuals for log
+                                let mapped = mappingService.mapPieceToTargetSpace(
+                                    piecePositionScene: obs.position,
+                                    pieceRotation: obs.rotation,
+                                    pieceIsFlipped: obs.isFlipped,
+                                    mapping: mapping,
+                                    anchorPositionScene: anchorObs.position
+                                )
+                                let verts = TangramBounds.computeSKTransformedVertices(for: target)
+                                let centroid = CGPoint(
+                                    x: verts.map { $0.x }.reduce(0, +) / CGFloat(max(1, verts.count)),
+                                    y: verts.map { $0.y }.reduce(0, +) / CGFloat(max(1, verts.count))
+                                )
+                                let posDist = hypot(mapped.positionSK.x - centroid.x, mapped.positionSK.y - centroid.y)
+                                let canonicalPiece: CGFloat = obs.pieceType.isTriangle ? (3 * .pi / 4) : 0
+                                let canonicalTarget: CGFloat = obs.pieceType.isTriangle ? (.pi / 4) : 0
+                                let pieceFeature = TangramRotationValidator.normalizeAngle(
+                                    mapped.rotationSK + (mapped.isFlipped ? -canonicalPiece : canonicalPiece)
+                                )
+                                let targetFeature = TangramRotationValidator.normalizeAngle(
+                                    TangramPoseMapper.spriteKitAngle(fromRawAngle: TangramPoseMapper.rawAngle(from: target.transform)) + canonicalTarget
+                                )
+                                let rotDiffDeg = abs(angleDifference(pieceFeature, targetFeature)) * 180 / .pi
+                                print("[VALIDATION-DETAIL] piece=\(obs.pieceId) target=\(tid) posDist=\(Int(posDist)) rotDiff=\(Int(rotDiffDeg))°")
+                            }
+                        }
+                        #endif
+                    } else {
+                        // Soft failure: keep anchor for a bit, but emit failure reasons for UI feedback
+                        for obs in pairObs {
+                            if localStates[obs.pieceId]?.isValid != true {
+                                failureReasons[obs.pieceId] = .wrongPiece
+                            }
+                        }
+                        #if DEBUG
+                        print("[ANCHOR] Not committed — pair failed validation")
+                        for obs in pairObs {
+                            if let st = localStates[obs.pieceId] {
+                                print("  - piece=\(obs.pieceId) valid=\(st.isValid) target=\(st.targetId ?? "nil")")
+                                if let tid = st.targetId, let target = puzzle.targetPieces.first(where: { $0.id == tid }) {
+                                    let mapped = mappingService.mapPieceToTargetSpace(
+                                        piecePositionScene: obs.position,
+                                        pieceRotation: obs.rotation,
+                                        pieceIsFlipped: obs.isFlipped,
+                                        mapping: mapping,
+                                        anchorPositionScene: anchorObs.position
+                                    )
+                                    let verts = TangramBounds.computeSKTransformedVertices(for: target)
+                                    let centroid = CGPoint(
+                                        x: verts.map { $0.x }.reduce(0, +) / CGFloat(max(1, verts.count)),
+                                        y: verts.map { $0.y }.reduce(0, +) / CGFloat(max(1, verts.count))
+                                    )
+                                    let posDist = hypot(mapped.positionSK.x - centroid.x, mapped.positionSK.y - centroid.y)
+                                    let canonicalPiece: CGFloat = obs.pieceType.isTriangle ? (3 * .pi / 4) : 0
+                                    let canonicalTarget: CGFloat = obs.pieceType.isTriangle ? (.pi / 4) : 0
+                                    let pieceFeature = TangramRotationValidator.normalizeAngle(
+                                        mapped.rotationSK + (mapped.isFlipped ? -canonicalPiece : canonicalPiece)
+                                    )
+                                    let targetFeature = TangramRotationValidator.normalizeAngle(
+                                        TangramPoseMapper.spriteKitAngle(fromRawAngle: TangramPoseMapper.rawAngle(from: target.transform)) + canonicalTarget
+                                    )
+                                    let rotDiffDeg = abs(angleDifference(pieceFeature, targetFeature)) * 180 / .pi
+                                    print("    · residuals posDist=\(Int(posDist)) rotDiff=\(Int(rotDiffDeg))°")
+                                }
+                            }
+                        }
+                        #endif
+                    }
+                }
+            }
+        }
+
+        // If we have an established anchor mapping, validate all observed pieces relative to it
+        if enableAnchorMapping, let gid = mainGroupId, let mapping = mappingService.mapping(for: gid) {
+            // Find current anchor observation (fallback to first anchor id present)
+            let anchorId = mapping.anchorPieceId
+            let anchorObs: PieceObservation? = frame.first(where: { $0.pieceId == anchorId })
+            if let anchorObs = anchorObs {
+                for obs in frame {
+                    // Skip if already populated (e.g., anchor pair itself)
+                    if pieceStates[obs.pieceId] != nil { continue }
+                    let st = validateMappedPiece(
+                        observation: obs,
+                        mapping: mapping,
+                        anchorPosition: anchorObs.position,
+                        puzzle: puzzle,
+                        difficulty: difficulty
+                    )
+                    pieceStates[obs.pieceId] = st
+                    if st.isValid, let tid = st.targetId {
+                        pieceBindings[obs.pieceId] = tid
+                        validatedTargets.insert(tid)
+                    }
+                }
+                groupMappingsOut[gid] = mapping
+                anchorIds = anchorPieceIds
+            }
+        }
         
         for obs in significant {
             // Candidates by type
@@ -192,8 +426,10 @@ class TangramValidationEngine {
             )
             if rotOK && flipOK {
                 orientedTargets.insert(picked.id)
-                // Positive reinforcement; clear conflicting suggestions for this piece
-                pieceNudges[obs.pieceId] = NudgeContent(level: .gentle, message: "✅ Good job!", visualHint: .pulse(intensity: 0.4), duration: 1.2)
+                // Positive reinforcement unless already validated as part of anchor
+                if pieceStates[obs.pieceId]?.isValid != true {
+                    pieceNudges[obs.pieceId] = NudgeContent(level: .gentle, message: "✅ Good job!", visualHint: .pulse(intensity: 0.4), duration: 1.2)
+                }
             } else if obs.pieceType == .parallelogram && !flipOK {
                 pieceNudges[obs.pieceId] = NudgeContent(level: .specific, message: "🔁 Try flipping", visualHint: .flipDemo, duration: 2.0)
                 #if DEBUG
@@ -222,6 +458,22 @@ class TangramValidationEngine {
             }
         }
         
+        // Absolute validation (no anchor): evaluate each observed piece directly against silhouettes
+        if groupMappingsOut.isEmpty {
+            var usedTargets: Set<String> = []
+            for obs in frame {
+                let st = validateAbsolutePiece(observation: obs, puzzle: puzzle, difficulty: difficulty, usedTargets: &usedTargets)
+                pieceStates[obs.pieceId] = st
+                if st.isValid, let tid = st.targetId {
+                    pieceBindings[obs.pieceId] = tid
+                }
+            }
+        }
+
+        // Recompute validatedTargets strictly from current pieceStates to allow invalidation on movement
+        let currentValidated: Set<String> = Set(pieceStates.values.compactMap { $0.isValid ? $0.targetId : nil })
+        validatedTargets = currentValidated
+
         // Update lastValidationTime when anything processed
         if !significant.isEmpty { lastValidationTime = CACurrentMediaTime() }
         
@@ -231,9 +483,89 @@ class TangramValidationEngine {
             bindings: pieceBindings,
             nudgeContent: nudge,
             pieceNudges: pieceNudges,
-            groupMappings: [:],
-            failureReasons: [:],
-            orientedTargets: orientedTargets
+            groupMappings: groupMappingsOut,
+            failureReasons: failureReasons,
+            orientedTargets: orientedTargets,
+            anchorPieceIds: anchorIds
+        )
+    }
+
+    // MARK: - Absolute Validation Helper (Stage 1)
+    private func validateAbsolutePiece(
+        observation: PieceObservation,
+        puzzle: GamePuzzleData,
+        difficulty: UserPreferences.DifficultySetting,
+        usedTargets: inout Set<String>
+    ) -> PieceValidationState {
+        let candidates = puzzle.targetPieces.filter { $0.pieceType == observation.pieceType && !usedTargets.contains($0.id) }
+        guard !candidates.isEmpty else {
+            return PieceValidationState(pieceId: observation.pieceId, isValid: false, confidence: 0, targetId: nil, optimalTransform: nil)
+        }
+
+        let canonicalPiece: CGFloat = observation.pieceType.isTriangle ? (3 * .pi / 4) : 0
+        let pieceFeatureAngle = TangramRotationValidator.normalizeAngle(
+            observation.rotation + (observation.isFlipped ? -canonicalPiece : canonicalPiece)
+        )
+
+        var best: (target: GamePuzzleData.TargetPiece, isValid: Bool, conf: CGFloat, cost: CGFloat, transform: CGAffineTransform)? = nil
+        for target in candidates {
+            // Target centroid and rotation in SK space
+            let verts = TangramBounds.computeSKTransformedVertices(for: target)
+            let centroid = CGPoint(
+                x: verts.map { $0.x }.reduce(0, +) / CGFloat(max(1, verts.count)),
+                y: verts.map { $0.y }.reduce(0, +) / CGFloat(max(1, verts.count))
+            )
+            let targetRawAngle = TangramPoseMapper.rawAngle(from: target.transform)
+            let targetRotationSK = TangramPoseMapper.spriteKitAngle(fromRawAngle: targetRawAngle)
+            let canonicalTarget: CGFloat = observation.pieceType.isTriangle ? (.pi / 4) : 0
+            let targetFeatureAngle = TangramRotationValidator.normalizeAngle(targetRotationSK + canonicalTarget)
+
+            // Validate
+            let tuple = validator.validateForSpriteKitWithFeatures(
+                piecePosition: observation.position,
+                pieceFeatureAngle: pieceFeatureAngle,
+                targetFeatureAngle: targetFeatureAngle,
+                pieceType: observation.pieceType,
+                isFlipped: observation.isFlipped,
+                targetTransform: target.transform,
+                targetWorldPos: centroid
+            )
+
+            // Confidence and cost
+            let posDist = hypot(observation.position.x - centroid.x, observation.position.y - centroid.y)
+            let rotDiff = angleDifference(pieceFeatureAngle, targetFeatureAngle)
+            let posConf = max(0, 1 - posDist / 100)
+            let rotConf = max(0, 1 - abs(rotDiff) / .pi)
+            let conf = (posConf + rotConf) / 2
+            let tolerances = TangramGameConstants.Validation.tolerances(for: difficulty)
+            let cost = posDist / max(1, tolerances.position) + (abs(rotDiff) / max(0.0001, tolerances.rotationDeg * .pi / 180))
+
+            let isValid = tuple.positionValid && tuple.rotationValid && tuple.flipValid
+            if best == nil {
+                best = (target, isValid, conf, cost, target.transform)
+            } else {
+                // Prefer valid targets; among valids choose lower cost; among invalids also choose lower cost
+                if isValid {
+                    if !(best!.isValid) || cost < best!.cost { best = (target, true, conf, cost, target.transform) }
+                } else if !(best!.isValid) && cost < best!.cost {
+                    best = (target, false, conf, cost, target.transform)
+                }
+            }
+        }
+
+        guard let match = best else {
+            return PieceValidationState(pieceId: observation.pieceId, isValid: false, confidence: 0, targetId: nil, optimalTransform: nil)
+        }
+
+        if match.isValid {
+            usedTargets.insert(match.target.id)
+        }
+        return PieceValidationState(
+            pieceId: observation.pieceId,
+            isValid: match.isValid,
+            confidence: match.conf,
+            targetId: match.isValid ? match.target.id : nil,
+            optimalTransform: match.transform
         )
     }
     
@@ -481,6 +813,57 @@ class TangramValidationEngine {
         while diff > .pi { diff -= 2 * .pi }
         while diff < -.pi { diff += 2 * .pi }
         return diff
+    }
+
+    // MARK: - Pair Mapping per plan doc (centroid + relative)
+    private func computePairDocMapping(
+        pair: (TangramValidationEngine.PieceObservation, TangramValidationEngine.PieceObservation),
+        puzzle: GamePuzzleData
+    ) -> AnchorMapping? {
+        let p0 = pair.0
+        let p1 = pair.1
+        guard let t0 = puzzle.targetPieces.first(where: { $0.pieceType == p0.pieceType }),
+              let t1 = puzzle.targetPieces.first(where: { $0.pieceType == p1.pieceType }) else {
+            return nil
+        }
+        // Compute target centroids in SK space
+        func centroid(of verts: [CGPoint]) -> CGPoint {
+            guard !verts.isEmpty else { return .zero }
+            let sx = verts.reduce(0) { $0 + $1.x }
+            let sy = verts.reduce(0) { $0 + $1.y }
+            return CGPoint(x: sx / CGFloat(verts.count), y: sy / CGFloat(verts.count))
+        }
+        let c0 = centroid(of: TangramBounds.computeSKTransformedVertices(for: t0))
+        let c1 = centroid(of: TangramBounds.computeSKTransformedVertices(for: t1))
+        // Pair centroids
+        let Cp = CGPoint(x: (p0.position.x + p1.position.x) / 2, y: (p0.position.y + p1.position.y) / 2)
+        let Ct = CGPoint(x: (c0.x + c1.x) / 2, y: (c0.y + c1.y) / 2)
+        // Relative vectors from centroids
+        let rp0 = CGVector(dx: p0.position.x - Cp.x, dy: p0.position.y - Cp.y)
+        let rp1 = CGVector(dx: p1.position.x - Cp.x, dy: p1.position.y - Cp.y)
+        let rt0 = CGVector(dx: c0.x - Ct.x, dy: c0.y - Ct.y)
+        let rt1 = CGVector(dx: c1.x - Ct.x, dy: c1.y - Ct.y)
+        // Least squares rotation using two correspondences
+        let sumDot = rp0.dx * rt0.dx + rp0.dy * rt0.dy + rp1.dx * rt1.dx + rp1.dy * rt1.dy
+        let sumCross = rp0.dx * rt0.dy - rp0.dy * rt0.dx + rp1.dx * rt1.dy - rp1.dy * rt1.dx
+        let theta = atan2(sumCross, sumDot)
+        // Translation aligns centroids (in SK space since positions are SK)
+        let cosT = cos(theta), sinT = sin(theta)
+        let CpRot = CGPoint(x: Cp.x * cosT - Cp.y * sinT, y: Cp.x * sinT + Cp.y * cosT)
+        let Tdx = Ct.x - CpRot.x
+        let Tdy = Ct.y - CpRot.y
+        // Build mapping (anchor first piece)
+        let mapping = AnchorMapping(
+            translationOffset: CGVector(dx: Tdx, dy: Tdy),
+            rotationDelta: theta,
+            flipParity: false,
+            anchorPieceId: p0.pieceId,
+            anchorTargetId: t0.id,
+            version: 1,
+            pairCount: 2,
+            confidence: 1.0
+        )
+        return mapping
     }
     
     // MARK: - Nudge Generation

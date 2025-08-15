@@ -222,6 +222,15 @@ class CVValidationBridge {
             scene.onValidatedTargetsChanged?(result.validatedTargets)
         }
         
+        // Persist main anchor mapping for mirror/relative rendering when present
+        if let mapping = result.groupMappings.values.first {
+            scene.userData = scene.userData ?? NSMutableDictionary()
+            scene.userData?["mainGroupMapping"] = mapping
+            if let firstAnchor = result.anchorPieceIds.first {
+                scene.userData?["mainAnchorPieceId"] = firstAnchor
+            }
+        }
+
         // Update piece states and emit events
         for (pieceId, validationState) in result.pieceStates {
             guard let piece = scene.availablePieces.first(where: { $0.name == pieceId }) else { continue }
@@ -252,11 +261,19 @@ class CVValidationBridge {
                         scene.eventBus.emit(.validationChanged(pieceId: targetId, isValid: true))
                     }
                 }
+                // Darken validated anchor pieces slightly for visual lock-in
+                if result.anchorPieceIds.contains(pieceId), let shape = piece.shapeNode {
+                    shape.fillColor = shape.fillColor.darker(by: 20)
+                }
             } else {
                 pieceState.markAsInvalid(reason: ValidationFailure.wrongPiece)
                 scene.pieceStates[pieceId] = pieceState
                 piece.pieceState = pieceState
                 piece.updateStateIndicator()
+                // Restore normal fill if previously darkened
+                if let shape = piece.shapeNode, let pt = piece.pieceType {
+                    shape.fillColor = TangramColors.Sprite.uiColor(for: pt)
+                }
                 
                 // Show failure reason if this is the focus piece
                 if piece == focusPiece,
