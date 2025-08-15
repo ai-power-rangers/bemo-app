@@ -151,7 +151,7 @@ private struct ZenJuniorHeaderView: View {
         }
         .background(
             Color.white
-                .opacity(0.95)
+                .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
                 .ignoresSafeArea(edges: .top)
         )
     }

@@ -68,7 +68,7 @@ private struct ZenHeaderView: View {
                     Text("Exit")
                 }
                 .font(.body)
-                .foregroundColor(.primary)
+                .foregroundColor(Color("AppPrimaryTextColor"))
             }
             
             Spacer()
@@ -78,12 +78,12 @@ private struct ZenHeaderView: View {
                 if let currentPuzzle = viewModel.currentPuzzles[safe: viewModel.currentPuzzleIndex] {
                     Text("Zen Mode")
                         .font(.headline)
-                        .foregroundColor(.green)
+                        .foregroundColor(Color("AppPrimaryTextColor"))
                     
                     if let title = currentPuzzle.displayTitle {
                         Text(title)
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
                     }
                 }
             }
@@ -97,17 +97,17 @@ private struct ZenHeaderView: View {
                 VStack {
                     Image(systemName: "lightbulb.fill")
                         .font(.title2)
-                        .foregroundColor(.yellow)
+                        .foregroundColor(.orange)
                     Text("Hint")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
                 }
             }
         }
         .padding()
         .background(
-            Color(UIColor.systemBackground)
-                .opacity(0.95)
+            Color.white
+                .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
                 .ignoresSafeArea(edges: .top)
         )
     }

@@ -95,6 +95,11 @@ class SpellQuestGameViewModel {
     func selectMode(_ mode: SpellQuestGameMode) {
         selectedMode = mode
         navigationState = .librarySelect
+        
+        // Fetch remote albums when entering library selection
+        Task {
+            await contentService.refreshFromRemote()
+        }
     }
     
     func selectAlbums(_ albumIds: Set<String>) {
@@ -121,7 +126,7 @@ class SpellQuestGameViewModel {
         wordsCompleted = 0
         currentPuzzleIndex = 0
         
-        // Get puzzles for selected albums
+        // Get puzzles for selected albums (already fetched when entering library)
         currentPuzzles = contentService.getPuzzlesForMode(
             mode,
             albumIds: selectedAlbumIds,

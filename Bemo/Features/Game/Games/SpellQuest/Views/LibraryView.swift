@@ -26,7 +26,7 @@ struct LibraryView: View {
                         }) {
                             Image(systemName: "chevron.left")
                                 .font(.title2)
-                                .foregroundColor(.primary)
+                                .foregroundColor(Color("AppPrimaryTextColor"))
                         }
                         
                         Spacer()
@@ -34,6 +34,7 @@ struct LibraryView: View {
                         Text("Select Albums")
                             .font(.title2)
                             .fontWeight(.bold)
+                            .foregroundColor(Color("AppPrimaryTextColor"))
                         
                         Spacer()
                         
@@ -45,7 +46,7 @@ struct LibraryView: View {
                     
                     Text("Choose puzzle collections to play")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
                 }
                 .padding(.top)
                 .padding(.bottom, 20)
@@ -57,7 +58,7 @@ struct LibraryView: View {
                         VStack(alignment: .leading, spacing: 15) {
                             Text("Installed Albums")
                                 .font(.headline)
-                                .foregroundColor(.primary)
+                                .foregroundColor(Color("AppPrimaryTextColor"))
                                 .padding(.horizontal)
                             
                             VStack(spacing: 12) {
@@ -78,17 +79,17 @@ struct LibraryView: View {
                         VStack(alignment: .leading, spacing: 15) {
                             Text("Discover More")
                                 .font(.headline)
-                                .foregroundColor(.primary)
+                                .foregroundColor(Color("AppPrimaryTextColor"))
                                 .padding(.horizontal)
                             
                             HStack {
                                 Image(systemName: "plus.circle.fill")
                                     .font(.title)
-                                    .foregroundColor(.gray)
+                                    .foregroundColor(Color("AppPrimaryTextColor").opacity(0.4))
                                 
                                 Text("More albums coming soon!")
                                     .font(.subheadline)
-                                    .foregroundColor(.gray)
+                                    .foregroundColor(Color("AppPrimaryTextColor").opacity(0.4))
                                 
                                 Spacer()
                             }
@@ -153,17 +154,17 @@ private struct AlbumRow: View {
                 // Checkbox
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title2)
-                    .foregroundColor(isSelected ? .blue : .gray)
+                    .foregroundColor(isSelected ? .green : Color("AppPrimaryTextColor").opacity(0.4))
                 
                 // Album info
                 VStack(alignment: .leading, spacing: 4) {
                     Text(album.title)
                         .font(.headline)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color("AppPrimaryTextColor"))
                     
                     Text("\(album.puzzles.count) puzzles")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
                 }
                 
                 Spacer()
@@ -182,10 +183,10 @@ private struct AlbumRow: View {
             .padding()
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(UIColor.secondarySystemBackground))
+                    .fill(Color.white)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
+                            .stroke(isSelected ? Color.green : Color.clear, lineWidth: 2)
                     )
             )
         }
