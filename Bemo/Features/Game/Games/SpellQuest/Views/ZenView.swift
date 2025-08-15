@@ -15,18 +15,14 @@ struct ZenView: View {
     let viewModel: SpellQuestGameViewModel
     
     var body: some View {
-        VStack {
+        VStack(spacing: 0) {
             // Header
             ZenHeaderView(viewModel: viewModel)
-            
-            Spacer()
             
             // Board
             if let playerVM = viewModel.playerViewModel {
                 BoardView(viewModel: playerVM, isZenJunior: false)
             }
-            
-            Spacer()
             
             // Next button (shown after completion)
             if viewModel.playerViewModel?.boardState.isComplete == true {

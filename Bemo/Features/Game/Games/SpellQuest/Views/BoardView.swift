@@ -24,7 +24,7 @@ struct BoardView: View {
     
     var body: some View {
         GeometryReader { geometry in
-            ScrollView {
+            ScrollView(showsIndicators: false) {
                 VStack(spacing: 20 * scaleFactor) {
                     // Puzzle Image
                     puzzleImageView
@@ -32,7 +32,8 @@ struct BoardView: View {
                     
                     // Letter Slots
                     letterSlotsView
-                        .frame(maxWidth: geometry.size.width)
+                        .frame(maxWidth: geometry.size.width - 20)
+                        .padding(.horizontal, 10)
                     
                     // Error feedback
                     if showingIncorrectFeedback, let letter = incorrectLetter {
@@ -48,12 +49,13 @@ struct BoardView: View {
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(Color.red.opacity(0.1))
                         )
+                        .padding(.horizontal)
                         .transition(.scale.combined(with: .opacity))
                     }
                     
                     // Letter Rack
                     letterRackView
-                        .frame(maxWidth: min(geometry.size.width - 20, 600))
+                        .frame(maxWidth: geometry.size.width)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical)
@@ -130,6 +132,7 @@ struct BoardView: View {
                         letterTile(for: letter)
                     }
                 }
+                .padding(.horizontal, 4)
             }
             
             // Second row: J-R
@@ -139,6 +142,7 @@ struct BoardView: View {
                         letterTile(for: letter)
                     }
                 }
+                .padding(.horizontal, 4)
             }
             
             // Third row: S-Z
@@ -148,6 +152,7 @@ struct BoardView: View {
                         letterTile(for: letter)
                     }
                 }
+                .padding(.horizontal, 4)
             }
         }
         .padding()
@@ -155,7 +160,7 @@ struct BoardView: View {
             RoundedRectangle(cornerRadius: 15)
                 .fill(Color(UIColor.secondarySystemBackground))
         )
-        .padding(.horizontal)
+        .padding(.horizontal, 10)
     }
     
     // MARK: - Letter Tile

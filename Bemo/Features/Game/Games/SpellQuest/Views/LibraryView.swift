@@ -16,107 +16,123 @@ struct LibraryView: View {
     @State private var selectedAlbums: Set<String> = []
     
     var body: some View {
-        VStack(spacing: 20) {
-            // Header
-            VStack(spacing: 8) {
-                HStack {
-                    Button(action: {
-                        viewModel.backToModeSelect()
-                    }) {
-                        Image(systemName: "chevron.left")
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                // Header
+                VStack(spacing: 8) {
+                    HStack {
+                        Button(action: {
+                            viewModel.backToModeSelect()
+                        }) {
+                            Image(systemName: "chevron.left")
+                                .font(.title2)
+                                .foregroundColor(.primary)
+                        }
+                        
+                        Spacer()
+                        
+                        Text("Select Albums")
                             .font(.title2)
-                            .foregroundColor(.primary)
+                            .fontWeight(.bold)
+                        
+                        Spacer()
+                        
+                        // Placeholder for balance
+                        Color.clear
+                            .frame(width: 30, height: 30)
                     }
-                    
-                    Spacer()
-                    
-                    Text("Select Albums")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                    
-                    Spacer()
-                    
-                    // Placeholder for balance
-                    Color.clear
-                        .frame(width: 30, height: 30)
-                }
-                .padding(.horizontal)
-                
-                Text("Choose puzzle collections to play")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.top, 30)
-            
-            // Installed Albums Section
-            VStack(alignment: .leading, spacing: 15) {
-                Text("Installed Albums")
-                    .font(.headline)
-                    .foregroundColor(.primary)
                     .padding(.horizontal)
+                    
+                    Text("Choose puzzle collections to play")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top)
+                .padding(.bottom, 20)
                 
+                // Content
                 ScrollView {
-                    VStack(spacing: 12) {
-                        ForEach(viewModel.installedAlbums) { album in
-                            AlbumRow(
-                                album: album,
-                                isSelected: selectedAlbums.contains(album.id),
-                                action: {
-                                    toggleAlbum(album.id)
+                    VStack(spacing: 20) {
+                        // Installed Albums Section
+                        VStack(alignment: .leading, spacing: 15) {
+                            Text("Installed Albums")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                                .padding(.horizontal)
+                            
+                            VStack(spacing: 12) {
+                                ForEach(viewModel.installedAlbums) { album in
+                                    AlbumRow(
+                                        album: album,
+                                        isSelected: selectedAlbums.contains(album.id),
+                                        action: {
+                                            toggleAlbum(album.id)
+                                        }
+                                    )
                                 }
-                            )
+                            }
+                            .padding(.horizontal)
+                        }
+                        
+                        // Discover More Section (disabled for Stage 1)
+                        VStack(alignment: .leading, spacing: 15) {
+                            Text("Discover More")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                                .padding(.horizontal)
+                            
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.title)
+                                    .foregroundColor(.gray)
+                                
+                                Text("More albums coming soon!")
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                                
+                                Spacer()
+                            }
+                            .padding()
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(12)
+                            .padding(.horizontal)
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.bottom, 100) // Space for button
                 }
-            }
-            
-            // Discover More Section (disabled for Stage 1)
-            VStack(alignment: .leading, spacing: 15) {
-                Text("Discover More")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                    .padding(.horizontal)
                 
-                HStack {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title)
-                        .foregroundColor(.gray)
-                    
-                    Text("More albums coming soon!")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                    
-                    Spacer()
+                Spacer(minLength: 0)
+            }
+            
+            // Continue Button - Fixed at bottom
+            VStack {
+                Spacer()
+                
+                Button(action: {
+                    if !selectedAlbums.isEmpty {
+                        viewModel.selectAlbums(selectedAlbums)
+                    }
+                }) {
+                    Text("Continue")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(selectedAlbums.isEmpty ? Color.gray : Color.blue)
+                        )
                 }
-                .padding()
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(12)
+                .disabled(selectedAlbums.isEmpty)
                 .padding(.horizontal)
+                .padding(.bottom)
+                .background(
+                    Color(UIColor.systemBackground)
+                        .ignoresSafeArea(edges: .bottom)
+                )
             }
-            
-            Spacer()
-            
-            // Continue Button
-            Button(action: {
-                if !selectedAlbums.isEmpty {
-                    viewModel.selectAlbums(selectedAlbums)
-                }
-            }) {
-                Text("Continue")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(selectedAlbums.isEmpty ? Color.gray : Color.blue)
-                    )
-            }
-            .disabled(selectedAlbums.isEmpty)
-            .padding(.horizontal)
-            .padding(.bottom, 20)
         }
+        .edgesIgnoringSafeArea(.bottom)
     }
     
     private func toggleAlbum(_ albumId: String) {

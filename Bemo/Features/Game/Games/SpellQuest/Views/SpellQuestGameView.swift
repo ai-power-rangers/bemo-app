@@ -19,37 +19,42 @@ struct SpellQuestGameView: View {
     }
     
     var body: some View {
-        ZStack {
-            // Background gradient
-            LinearGradient(
-                colors: [Color.purple.opacity(0.1), Color.blue.opacity(0.1)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-            
-            // Navigation
-            switch viewModel.navigationState {
-            case .modeSelect:
-                ModeSelectView(viewModel: viewModel)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing),
-                        removal: .move(edge: .leading)
-                    ))
+        GeometryReader { geometry in
+            ZStack {
+                // Background gradient
+                LinearGradient(
+                    colors: [Color.purple.opacity(0.1), Color.blue.opacity(0.1)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
                 
-            case .librarySelect:
-                LibraryView(viewModel: viewModel)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing),
-                        removal: .move(edge: .leading)
-                    ))
-                
-            case .playing:
-                GameplayContainerView(viewModel: viewModel)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing),
-                        removal: .move(edge: .leading)
-                    ))
+                // Navigation
+                VStack {
+                    switch viewModel.navigationState {
+                    case .modeSelect:
+                        ModeSelectView(viewModel: viewModel)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .trailing),
+                                removal: .move(edge: .leading)
+                            ))
+                        
+                    case .librarySelect:
+                        LibraryView(viewModel: viewModel)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .trailing),
+                                removal: .move(edge: .leading)
+                            ))
+                        
+                    case .playing:
+                        GameplayContainerView(viewModel: viewModel)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .trailing),
+                                removal: .move(edge: .leading)
+                            ))
+                    }
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
             }
         }
         .animation(.easeInOut(duration: 0.3), value: viewModel.navigationState)

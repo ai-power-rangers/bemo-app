@@ -15,33 +15,38 @@ struct ModeSelectView: View {
     let viewModel: SpellQuestGameViewModel
     
     var body: some View {
-        VStack(spacing: 30) {
-            // Title
-            Text("Choose Your Quest")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-            
-            Text("Select a game mode to begin")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            
-            // Mode cards
-            VStack(spacing: 20) {
-                ForEach(SpellQuestGameMode.allCases, id: \.self) { mode in
-                    ModeCard(
-                        mode: mode,
-                        action: {
-                            viewModel.selectMode(mode)
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 30) {
+                    // Title
+                    Text("Choose Your Quest")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                        .padding(.top, 50)
+                    
+                    Text("Select a game mode to begin")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    // Mode cards
+                    VStack(spacing: 20) {
+                        ForEach(SpellQuestGameMode.allCases, id: \.self) { mode in
+                            ModeCard(
+                                mode: mode,
+                                action: {
+                                    viewModel.selectMode(mode)
+                                }
+                            )
                         }
-                    )
+                    }
+                    .padding(.horizontal)
+                    
+                    Spacer(minLength: 50)
                 }
+                .frame(minHeight: geometry.size.height)
             }
-            .padding(.horizontal)
-            
-            Spacer()
         }
-        .padding(.top, 50)
     }
 }
 
