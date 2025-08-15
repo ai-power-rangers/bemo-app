@@ -296,10 +296,27 @@ class CVValidationBridge {
                     }
                     lastOrientationSignature[pieceId] = sig
                 }
+                // Clear any pending rotate/flip/directed for this piece upon success
+                pendingPieceNudges.removeValue(forKey: pieceId)
                 scene.showTopNudgeNearMirror(pieceId: pieceId, content: content)
                 lastPieceNudgeShownAt[pieceId] = now
             } else {
-                pendingPieceNudges[pieceId] = content
+                // Prefer flip over rotate when both appear around the same time (parallelogram)
+                if let existing = pendingPieceNudges[pieceId] {
+                    switch (existing.visualHint, content.visualHint) {
+                    case (.some(.flipDemo), .some(.rotationDemo)), (.some(.flipDemo), .some(.arrow)):
+                        // Keep flip, ignore rotate
+                        break
+                    case (.some(.rotationDemo), .some(.flipDemo)), (.some(.arrow), .some(.flipDemo)):
+                        // Replace rotate with flip
+                        pendingPieceNudges[pieceId] = content
+                    default:
+                        // Overwrite with the latest to keep guidance fresh
+                        pendingPieceNudges[pieceId] = content
+                    }
+                } else {
+                    pendingPieceNudges[pieceId] = content
+                }
             }
         }
         // Flush buffered nudges only for settled pieces

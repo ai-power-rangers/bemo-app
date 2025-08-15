@@ -192,7 +192,7 @@ class TangramValidationEngine {
             )
             if rotOK && flipOK {
                 orientedTargets.insert(picked.id)
-                // Piece-focused positive reinforcement (engine as single producer)
+                // Positive reinforcement; clear conflicting suggestions for this piece
                 pieceNudges[obs.pieceId] = NudgeContent(level: .gentle, message: "✅ Good job!", visualHint: .pulse(intensity: 0.4), duration: 1.2)
             } else if obs.pieceType == .parallelogram && !flipOK {
                 pieceNudges[obs.pieceId] = NudgeContent(level: .specific, message: "🔁 Try flipping", visualHint: .flipDemo, duration: 2.0)
