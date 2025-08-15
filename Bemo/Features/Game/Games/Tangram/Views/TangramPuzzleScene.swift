@@ -240,8 +240,49 @@ class TangramPuzzleScene: SKScene {
         // Create physical pieces
         createPhysicalPieces(puzzle)
         
+        // Pre-populate top mirror from current physical piece poses so the top panel is populated immediately
+        prepopulateTopMirrorFromPhysical()
+        
         // Emit initial CV frame
         emitCVFrameUpdate()
+    }
+    
+    /// Create top mirror ghosts at puzzle load based on physical piece positions
+    private func prepopulateTopMirrorFromPhysical() {
+        guard let mirror = topMirrorContent else { return }
+        
+        // Clear existing ghosts (keep any nudge overlays if present)
+        mirror.enumerateChildNodes(withName: "mirror_*") { node, _ in node.removeFromParent() }
+        
+        // Compute uniform scale mapping physical bounds to target bounds (same as CV bridge)
+        let physSize = physicalBounds.size
+        let topSize = CGSize(width: targetBounds.width, height: targetBounds.height)
+        guard physSize.width > 0, physSize.height > 0, topSize.width > 0, topSize.height > 0 else { return }
+        let sx = topSize.width / physSize.width
+        let sy = topSize.height / physSize.height
+        let uniform = min(sx, sy)
+        topMirrorContent.setScale(uniform)
+        topMirrorContent.position = .zero
+        
+        // Create a ghost for each physical piece at its current pose
+        for piece in availablePieces {
+            guard let pieceId = piece.name, let pieceType = piece.pieceType else { continue }
+            let nodeName = "mirror_\(pieceId)"
+            if let existing = mirror.childNode(withName: nodeName) as? SKShapeNode { existing.removeFromParent() }
+            let ghost = createGhostPiece(pieceType: pieceType, at: .zero, rotation: 0)
+            ghost.name = nodeName
+            // Position uses physical world coordinates; origins are both centered
+            ghost.position = piece.position
+            ghost.setScale(1.0)
+            ghost.xScale = piece.isFlipped ? -abs(ghost.xScale) : abs(ghost.xScale)
+            ghost.zRotation = piece.zRotation
+            // Visual parity with live mirror rendering
+            let baseColor = TangramColors.Sprite.uiColor(for: pieceType)
+            ghost.fillColor = baseColor.withAlphaComponent(0.2)
+            ghost.strokeColor = baseColor.withAlphaComponent(0.5)
+            ghost.lineWidth = 1.0
+            mirror.addChild(ghost)
+        }
     }
     
     private func clearAllSections() {

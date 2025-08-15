@@ -92,15 +92,8 @@ extension TangramPuzzleScene {
         
         // Mirror physical pieces into a top-panel layer (topMirrorContent)
         let mirror = topMirrorContent!
-        // Clear old ghosts that are not present in current frame (preserve nudges)
-        let frameIds = Set(frame.objects.map { pieceIdFromCVName($0.name) })
-        mirror.enumerateChildNodes(withName: "mirror_*") { node, _ in
-            guard let name = node.name else { return }
-            // Keep nudge overlays
-            if name.hasPrefix("mirror_nudge_") { return }
-            let id = String(name.dropFirst(7))
-            if !frameIds.contains(id) { node.removeFromParent() }
-        }
+        // Do not remove existing ghosts when a frame omits them; keep the last-known pose
+        // Pre-populated ghosts created at load are named "mirror_<pieceId>" and should persist
         // Scale physical space uniformly into top panel space; both origins are centered, so no translation needed
         let physSize = physicalBounds.size
         let topSize = CGSize(width: targetBounds.width, height: targetBounds.height)

@@ -16,7 +16,7 @@ T∈R2: The global translation vector to apply to the entire solved puzzle.
 Derived Final State: The final position and rotation of each piece are determined by applying the global transformation (T,Θ) to the target configuration.
 fi​(T,Θ)=R(Θ)pi′​+T: The final position of piece i.
 ϕi,final​(Θ)=ψi,target′​+Θ: The final rotation of piece i.
-R(Θ) is the 2D rotation matrix: R(Θ)=(cosΘsinΘ​−sinΘcosΘ​).
+R(Θ) is the 2D rotation matrix: R(Θ) = (cos Θ  -sin Θ; sin Θ  cos Θ).
 2. The Objective Function
 The goal is to minimize the total cost function, J(T,Θ), which is the weighted sum of all squared translational distances and all squared angular distances for the pieces.
 T,Θmin​J(T,Θ)=i=1∑N​(wt​∥fi​(T,Θ)−si​∥22​+wr​⋅dθ​(ϕi,final​(Θ),ϕi,start​)2)

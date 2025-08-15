@@ -159,7 +159,6 @@ class TangramValidationEngine {
         // SIMPLE TWO-PIECE ANCHOR + ORIENTATION-ONLY FEEDBACK
         var orientedTargets: Set<String> = []
         var pieceStates: [String: PieceValidationState] = [:]
-        let nudge: (targetId: String, content: NudgeContent)? = nil
         var pieceNudges: [String: NudgeContent] = [:]
         var groupMappingsOut: [UUID: AnchorMapping] = [:]
         var failureReasons: [String: ValidationFailure] = [:]
@@ -478,8 +477,7 @@ class TangramValidationEngine {
             let anchorObs: PieceObservation? = frame.first(where: { $0.pieceId == anchorId })
             if let anchorObs = anchorObs {
                 for obs in frame {
-                    // Skip only the two anchor pieces (they were already validated on commit)
-                    if anchorPieceIds.contains(obs.pieceId) { continue }
+                    // Evaluate all pieces including anchors for lock maintenance
                     let st = validateMappedPiece(
                         observation: obs,
                         mapping: mapping,
@@ -488,9 +486,73 @@ class TangramValidationEngine {
                         difficulty: difficulty
                     )
                     pieceStates[obs.pieceId] = st
+                    if let lock = lockedValidations[obs.pieceId], let target = puzzle.targetPieces.first(where: { $0.id == lock.targetId }) {
+                        // Check sustained violation beyond slack
+                        let mapped = mappingService.mapPieceToTargetSpace(
+                            piecePositionScene: obs.position,
+                            pieceRotation: obs.rotation,
+                            pieceIsFlipped: obs.isFlipped,
+                            mapping: mapping,
+                            anchorPositionScene: anchorObs.position
+                        )
+                        let targetPoly = TangramBounds.computeSKTransformedVertices(for: target)
+                        let centroid = CGPoint(
+                            x: targetPoly.map { $0.x }.reduce(0, +) / CGFloat(max(1, targetPoly.count)),
+                            y: targetPoly.map { $0.y }.reduce(0, +) / CGFloat(max(1, targetPoly.count))
+                        )
+                        let canonicalPiece: CGFloat = obs.pieceType.isTriangle ? (3 * .pi / 4) : 0
+                        let pieceFeature = TangramRotationValidator.normalizeAngle(mapped.rotationSK + (mapped.isFlipped ? -canonicalPiece : canonicalPiece))
+                        let targetRawAngle = TangramPoseMapper.rawAngle(from: target.transform)
+                        let targetRotationSK = TangramPoseMapper.spriteKitAngle(fromRawAngle: targetRawAngle)
+                        let canonicalTarget: CGFloat = obs.pieceType.isTriangle ? (.pi / 4) : 0
+                        let targetFeature = TangramRotationValidator.normalizeAngle(targetRotationSK + canonicalTarget)
+                        let posDist = hypot(mapped.positionSK.x - centroid.x, mapped.positionSK.y - centroid.y)
+                        let rotDiffDeg = abs(angleDifference(pieceFeature, targetFeature)) * 180 / .pi
+                        let tol = TangramGameConstants.Validation.tolerances(for: difficulty)
+                        let posLimit = tol.position + invalidationSlackPosition
+                        let rotLimit = tol.rotationDeg + invalidationSlackRotationDeg
+                        if posDist <= posLimit && rotDiffDeg <= rotLimit {
+                            // Refresh lock
+                            lockedValidations[obs.pieceId]?.lastValidPose = (mapped.positionSK, mapped.rotationSK, mapped.isFlipped)
+                            invalidationStartAt.removeValue(forKey: obs.pieceId)
+                            pieceBindings[obs.pieceId] = lock.targetId
+                            pieceStates[obs.pieceId] = PieceValidationState(pieceId: obs.pieceId, isValid: true, confidence: 1.0, targetId: lock.targetId, optimalTransform: target.transform)
+                        } else {
+                            let now = CACurrentMediaTime()
+                            if invalidationStartAt[obs.pieceId] == nil {
+                                invalidationStartAt[obs.pieceId] = now
+                                // Keep valid during dwell
+                                pieceBindings[obs.pieceId] = lock.targetId
+                                pieceStates[obs.pieceId] = PieceValidationState(pieceId: obs.pieceId, isValid: true, confidence: 0.9, targetId: lock.targetId, optimalTransform: target.transform)
+                            } else if let start = invalidationStartAt[obs.pieceId], (now - start) < invalidationDwellSeconds {
+                                // Still dwelling: keep valid
+                                pieceBindings[obs.pieceId] = lock.targetId
+                                pieceStates[obs.pieceId] = PieceValidationState(pieceId: obs.pieceId, isValid: true, confidence: 0.85, targetId: lock.targetId, optimalTransform: target.transform)
+                            } else {
+                                // Dwell exceeded: unlock
+                                lockedValidations.removeValue(forKey: obs.pieceId)
+                                invalidationStartAt.removeValue(forKey: obs.pieceId)
+                                // Fall through to normal st state below
+                            }
+                        }
+                        continue
+                    }
                     if st.isValid, let tid = st.targetId {
                         pieceBindings[obs.pieceId] = tid
-                        validatedTargets.insert(tid)
+                        // Lock new validation
+                        let mapped = mappingService.mapPieceToTargetSpace(
+                            piecePositionScene: obs.position,
+                            pieceRotation: obs.rotation,
+                            pieceIsFlipped: obs.isFlipped,
+                            mapping: mapping,
+                            anchorPositionScene: anchorObs.position
+                        )
+                        lockedValidations[obs.pieceId] = LockedValidation(
+                            pieceId: obs.pieceId,
+                            targetId: tid,
+                            lastValidPose: (mapped.positionSK, mapped.rotationSK, mapped.isFlipped),
+                            lockedAt: CACurrentMediaTime()
+                        )
                     }
                 }
                 groupMappingsOut[gid] = mapping
@@ -583,7 +645,7 @@ class TangramValidationEngine {
         
         // Absolute fallback: removed to honor the plan doc (relative until anchor, target-space after anchor)
 
-        // Stable validatedTargets from locks; avoid per-frame oscillation
+        // Stable validatedTargets from locks only; removals propagate
         validatedTargets = Set(lockedValidations.values.map { $0.targetId })
 
         // Update lastValidationTime when anything processed
@@ -593,7 +655,7 @@ class TangramValidationEngine {
             validatedTargets: validatedTargets,
             pieceStates: pieceStates,
             bindings: pieceBindings,
-            nudgeContent: nudge,
+            nudgeContent: nil,
             pieceNudges: pieceNudges,
             groupMappings: groupMappingsOut,
             failureReasons: failureReasons,

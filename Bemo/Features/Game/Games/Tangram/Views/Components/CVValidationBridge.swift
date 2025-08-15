@@ -143,7 +143,7 @@ class CVValidationBridge {
     /// Request a hint
     func requestHint(lastMovedPiece: TangramPieceType? = nil) -> TangramHintEngine.HintData? {
         guard let scene = scene,
-              scene.puzzle != nil else { return nil }
+              let puzzle = scene.puzzle else { return nil }
         
         // Build hint context
         let placedPieces = scene.availablePieces.compactMap { piece -> PlacedPiece? in
@@ -152,11 +152,11 @@ class CVValidationBridge {
             // Convert to scene coordinates
             let scenePos = scene.physicalWorldSection.convert(piece.position, to: scene)
             
-                // Create PlacedPiece without puzzle parameter
-                var placed = PlacedPiece(
+            // Create PlacedPiece without puzzle parameter (consistent indentation)
+            var placed = PlacedPiece(
                 pieceType: pieceType,
                 position: scenePos,
-                    rotation: Double(piece.zRotation) * 180 / Double.pi,
+                rotation: Double(piece.zRotation) * 180 / Double.pi,
                 isFlipped: piece.isFlipped
             )
             
@@ -182,7 +182,7 @@ class CVValidationBridge {
             previousHints: scene.userData?["previousHints"] as? [TangramHintEngine.HintData] ?? []
         )
         
-        let hint = validationEngine.requestHint(puzzle: scene.puzzle!, context: context)
+        let hint = validationEngine.requestHint(puzzle: puzzle, context: context)
         if let hint = hint {
             scene.showStructuredHint(hint)
         }
@@ -221,6 +221,35 @@ class CVValidationBridge {
             scene.validatedTargets = result.validatedTargets
             scene.onValidatedTargetsChanged?(result.validatedTargets)
         }
+
+        // Reconcile silhouette fills against stable validated set
+        // Use scene.completedPieces as the currently filled set
+        let previousFilled = scene.completedPieces
+        let currentFilled = result.validatedTargets
+        // Added targets: fill and optional pulse
+        let added = currentFilled.subtracting(previousFilled)
+        // Removed targets: clear fill
+        let removed = previousFilled.subtracting(currentFilled)
+
+        for tid in added {
+            if let node = scene.targetSilhouettes[tid],
+               let rawType = node.userData?["pieceType"] as? String,
+               let type = TangramPieceType(rawValue: rawType) {
+                scene.applyValidatedFill(to: node, for: type)
+                // Small pulse on first fill
+                let pulse = SKAction.sequence([
+                    SKAction.scale(to: 1.1, duration: 0.1),
+                    SKAction.scale(to: 1.0, duration: 0.1)
+                ])
+                node.run(pulse)
+            }
+        }
+        for tid in removed {
+            if let node = scene.targetSilhouettes[tid] {
+                node.fillColor = .clear
+            }
+        }
+        scene.completedPieces = currentFilled
         
         // Persist main anchor mapping for mirror/relative rendering when present
         if let mapping = result.groupMappings.values.first {

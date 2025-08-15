@@ -75,7 +75,7 @@ The entire validation system flows through a single engine that implements the o
    - Adapter between scene (View) and engine (Service)
    - Converts scene state to engine format
    - Applies validation results back to scene
-   - Manages validation throttling (200ms for movement, 500ms for placement)
+   - Manages validation throttling (100ms for movement, 500ms for placement)
 
 3. **OptimizationValidator** (`Services/OptimizationValidator.swift`)
    - Implements global optimization from the plan
