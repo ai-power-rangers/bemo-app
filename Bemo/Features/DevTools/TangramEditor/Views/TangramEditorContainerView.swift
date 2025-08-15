@@ -34,9 +34,9 @@ struct TangramEditorContainerView: View {
                         // Settings view placeholder - to be implemented
                         Text("Settings")
                             .font(.title2)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(TangramTheme.Text.secondary)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(Color(.systemGroupedBackground))
+                            .background(TangramTheme.Backgrounds.panel)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -44,7 +44,7 @@ struct TangramEditorContainerView: View {
                 // Bottom bar
                 if viewModel.uiState.navigationState == .editor {
                     TangramEditorBottomBar(viewModel: viewModel)
-                        .background(Color(.systemBackground))
+                        .background(TangramTheme.Backgrounds.toolbar)
                 }
             }
             .animation(.easeInOut(duration: 0.3), value: viewModel.uiState.navigationState)
@@ -55,6 +55,7 @@ struct TangramEditorContainerView: View {
                 SavePuzzleDialog(viewModel: viewModel)
             }
             .toastOverlay(toastService: viewModel.toastService)
+            .background(TangramTheme.Backgrounds.editor)
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -73,6 +74,7 @@ struct TangramEditorContainerView: View {
                                 Text("Back")
                                     .font(.system(size: 16))
                             }
+                            .foregroundColor(TangramTheme.UI.primaryButton)
                         }
                     }
                     
@@ -85,7 +87,7 @@ struct TangramEditorContainerView: View {
                         Button(action: { viewModel.createNewPuzzle() }) {
                             Image(systemName: "plus.circle.fill")
                                 .font(.system(size: 20))
-                                .foregroundColor(.blue)
+                                .foregroundColor(TangramTheme.UI.primaryButton)
                         }
                     }
                 }

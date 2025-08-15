@@ -409,7 +409,7 @@ class LearningService {
 
                 // Basic mastery heuristic v1
                 var newState = existing?.mastery_state ?? "none"
-                var firstMasteredAt = existing?.first_mastered_at
+                let firstMasteredAt = existing?.first_mastered_at
                 var lastMasteryEventAt = existing?.last_mastery_event_at
                 var masteryScore = existing?.mastery_score ?? 0.0
 

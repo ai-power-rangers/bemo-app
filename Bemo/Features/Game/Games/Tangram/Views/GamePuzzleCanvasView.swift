@@ -21,17 +21,17 @@ struct GamePuzzleCanvasView: View {
     
     // Colors for rendering
     private let silhouetteColor = Color.black.opacity(0.3)
-    private let correctPieceColor = Color.green.opacity(0.7)
-    private let incorrectPieceColor = Color.red.opacity(0.5)
-    private let movingPieceColor = Color.blue.opacity(0.5)
-    private let hintColor = Color.yellow.opacity(0.5)
+    private let correctPieceColor = TangramTheme.Validation.correct
+    private let incorrectPieceColor = TangramTheme.Validation.incorrect
+    private let movingPieceColor = TangramTheme.Validation.active
+    private let hintColor = TangramTheme.Hint.highlight.opacity(0.5)
     
     var body: some View {
         GeometryReader { geometry in
             ZStack {
                 // Background
                 RoundedRectangle(cornerRadius: 20)
-                    .fill(Color("AppBackground"))
+                    .fill(TangramTheme.Backgrounds.panel)
                     .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
                 
                 // Target puzzle silhouettes
@@ -136,7 +136,7 @@ struct GamePuzzleCanvasView: View {
     
     private func anchorIndicator(for piece: PlacedPiece, size: CGSize) -> some View {
         Circle()
-            .stroke(Color.blue, lineWidth: 3)
+            .stroke(TangramTheme.UI.primaryButton, lineWidth: 3)
             .frame(width: 30, height: 30)
             .position(
                 x: piece.position.x * size.width / canvasSize.width,

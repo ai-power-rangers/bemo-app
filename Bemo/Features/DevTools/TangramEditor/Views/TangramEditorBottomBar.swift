@@ -38,10 +38,10 @@ struct TangramEditorBottomBar: View {
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .frame(width: 44, height: 44)
-                                .background(isPlaced ? Color.gray.opacity(0.1) : pieceType.color.opacity(0.2))
+                                .background(isPlaced ? TangramTheme.UI.disabled.opacity(0.1) : pieceType.color.opacity(0.2))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .stroke(isPlaced ? Color.gray : pieceType.color, lineWidth: 2)
+                                        .stroke(isPlaced ? TangramTheme.UI.disabled : pieceType.color, lineWidth: 2)
                                 )
                                 .cornerRadius(8)
                         }
@@ -56,7 +56,7 @@ struct TangramEditorBottomBar: View {
         }
         .padding(.vertical, 12)
         .background(
-            Color(.systemBackground).opacity(0.95)
+            TangramTheme.Backgrounds.toolbar
                 .background(.ultraThinMaterial)
         )
     }

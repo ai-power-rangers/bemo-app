@@ -57,26 +57,26 @@ class TangramPieceValidator {
         targetWorldPos: CGPoint
     ) -> ValidationResult {
         
-        // Validate position (allow polygon contact override)
+        // Validate position (centroid-only; polygon-contact fallback disabled per plan)
         let centroidDistance = hypot(piecePosition.x - targetWorldPos.x, piecePosition.y - targetWorldPos.y)
-        var positionValid = centroidDistance < positionTolerance
-        if !positionValid {
-            // Try polygon-to-polygon min distance as contact override
-            let targetVertsSK = TangramGeometryUtilities.transformedVertices(
-                for: pieceType,
-                isFlipped: detectFlip(from: targetTransform),
-                zRotation: TangramPoseMapper.spriteKitAngle(fromRawAngle: TangramPoseMapper.rawAngle(from: targetTransform)),
-                translation: targetWorldPos
-            )
-            let pieceVertsSK = TangramGeometryUtilities.transformedVertices(
-                for: pieceType,
-                isFlipped: isFlipped,
-                zRotation: pieceFeatureAngle, // approximate; feature angle differs by local baseline but fine for proximity check
-                translation: piecePosition
-            )
-            let minDist = TangramGeometryUtilities.minimumDistanceBetweenPolygons(targetVertsSK, pieceVertsSK)
-            positionValid = minDist < edgeContactTolerance
-        }
+        let positionValid = centroidDistance < positionTolerance
+        // if !positionValid {
+        //     // Polygon contact fallback disabled to keep a single robust system aligned with plan doc
+        //     let targetVertsSK = TangramGeometryUtilities.transformedVertices(
+        //         for: pieceType,
+        //         isFlipped: detectFlip(from: targetTransform),
+        //         zRotation: TangramPoseMapper.spriteKitAngle(fromRawAngle: TangramPoseMapper.rawAngle(from: targetTransform)),
+        //         translation: targetWorldPos
+        //     )
+        //     let pieceVertsSK = TangramGeometryUtilities.transformedVertices(
+        //         for: pieceType,
+        //         isFlipped: isFlipped,
+        //         zRotation: pieceFeatureAngle,
+        //         translation: piecePosition
+        //     )
+        //     let minDist = TangramGeometryUtilities.minimumDistanceBetweenPolygons(targetVertsSK, pieceVertsSK)
+        //     positionValid = minDist < edgeContactTolerance
+        // }
         
         // Validate rotation - feature angle comparison with symmetry
         let rotationValid = TangramRotationValidator.isRotationValid(
@@ -100,37 +100,10 @@ class TangramPieceValidator {
         return (positionValid, rotationValid, flipValid)
     }
     
-    // MARK: - Legacy Support (Deprecated)
-    
-    /// Legacy validation method - DEPRECATED, use validateForSpriteKitWithFeatures instead
-    /// This method mixes raw angles with feature angles and causes validation issues
-    @available(*, deprecated, message: "Use validateForSpriteKitWithFeatures for consistent feature-based validation")
-    func validateForSpriteKit(
-        piecePosition: CGPoint,
-        pieceRotation: CGFloat,
-        pieceType: TangramPieceType,
-        isFlipped: Bool,
-        targetTransform: CGAffineTransform,
-        targetWorldPos: CGPoint
-    ) -> ValidationResult {
-        // This legacy path should not be used
-        // Return false for all validations to force migration to feature-based validation
-        return (false, false, false)
-    }
-    
-    // MARK: - PlacedPiece Support
-    
-    /// Validates if a placed piece matches a target position within tolerances
-    /// DEPRECATED: This method uses raw angles instead of feature angles and causes validation issues.
-    /// Use GamePuzzleData.TargetPiece.matches() instead, which internally uses validateForSpriteKitWithFeatures
-    @available(*, deprecated, message: "Use GamePuzzleData.TargetPiece.matches() which uses feature-based validation")
-    func validate(placed: PlacedPiece, target: GamePuzzleData.TargetPiece) -> Bool {
-        // This method is deprecated - it mixes raw angles with validation logic
-        // The correct path is through GamePuzzleData.TargetPiece.matches() which uses feature angles
-        // Returning false to force migration to the correct validation path
-        print("[WARNING] TangramPieceValidator.validate(placed:target:) is deprecated. Use target.matches(placed) instead.")
-        return false
-    }
+    // MARK: - Legacy Methods Removed
+    // All deprecated validation methods have been removed.
+    // Use validateForSpriteKitWithFeatures for all validation needs.
+    // For placed piece validation, use the TangramValidationEngine instead.
     
     // MARK: - Helper Methods
     

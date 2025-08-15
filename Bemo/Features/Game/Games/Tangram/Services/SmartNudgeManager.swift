@@ -25,6 +25,8 @@ struct NudgeContent {
         case arrow(direction: CGFloat)  // Angle in radians
         case ghostPiece(position: CGPoint, rotation: CGFloat)
         case pulse(intensity: CGFloat)
+        case flipDemo  // Demonstrate flipping the piece
+        case rotationDemo(current: CGFloat, target: CGFloat) // Visualize rotation from current → target (radians)
     }
 }
 
