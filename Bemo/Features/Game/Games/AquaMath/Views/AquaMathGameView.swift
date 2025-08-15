@@ -46,7 +46,7 @@ struct AquaMathGameView: View {
                 // Tile tray at bottom
                 TileTrayView(viewModel: viewModel)
                     .frame(height: 100)
-                    .background(Color(UIColor.systemGray6))
+                    .background(Color(red: 0.85, green: 0.92, blue: 0.98))
             }
         }
         .onAppear {
@@ -199,20 +199,20 @@ struct TileView: View {
             viewModel.tapTile(kind)
         }) {
             ZStack {
-                // Tile visual
+                // White background tile
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.blue)
+                    .fill(Color.white)
                     .frame(width: 70, height: 70)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.blue.opacity(0.8), lineWidth: 2)
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                     )
+                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 2)
                 
-                // Tile content
+                // Colored number/content
                 Text(kind.displayValue)
-                    .font(kind.displayValue.count > 2 ? .body : .title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
+                    .font(kind.displayValue.count > 2 ? .body.bold() : .title.bold())
+                    .foregroundColor(kind.numberColor)
             }
         }
         .scaleEffect(isPressed ? 0.95 : 1.0)

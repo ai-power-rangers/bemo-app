@@ -53,7 +53,8 @@ class GameScene: SKScene {
     // MARK: - Setup
     
     private func setupScene() {
-        backgroundColor = .clear
+        // Light blue background for entire scene
+        backgroundColor = SKColor(cgColor: UIColor(red: 0.85, green: 0.92, blue: 0.98, alpha: 1.0).cgColor)
         scaleMode = .resizeFill
         
         // Setup container nodes
@@ -87,9 +88,10 @@ class GameScene: SKScene {
     }
     
     private func setupWorkspace() {
-        // Workspace background
-        workspaceBackground.fillColor = SKColor(cgColor: UIColor.systemGray6.cgColor)
-        workspaceBackground.strokeColor = SKColor(cgColor: UIColor.systemGray4.cgColor)
+        // Workspace background - light blue
+        let lightBlue = UIColor(red: 0.85, green: 0.92, blue: 0.98, alpha: 1.0)
+        workspaceBackground.fillColor = SKColor(cgColor: lightBlue.cgColor)
+        workspaceBackground.strokeColor = SKColor(cgColor: lightBlue.withAlphaComponent(0.8).cgColor)
         workspaceBackground.lineWidth = 2
         workspaceBackground.zPosition = -1
         workspaceNode.addChild(workspaceBackground)
@@ -225,57 +227,65 @@ class GameScene: SKScene {
     }
     
     private func createBubbleNode(for bubble: BubbleModel) -> SKSpriteNode {
-        let node = SKSpriteNode()
-        node.size = CGSize(width: 60, height: 60)
-        node.name = "bubble_\(bubble.id)"
+        // Load the single bubble image
+        let bubbleTexture = SKTexture(imageNamed: "bubble_1")
         
-        // Circle shape
-        let circle = SKShapeNode(circleOfRadius: 30)
+        let node = SKSpriteNode(texture: bubbleTexture)
+        node.size = CGSize(width: 80, height: 80)
+        node.name = "bubble_\(bubble.id)"
         
         switch bubble.type {
         case .normal:
-            circle.fillColor = SKColor.white.withAlphaComponent(0.25)
-            circle.strokeColor = SKColor.white.withAlphaComponent(0.6)
-            
-            // Add number label
+            // Add number label with better visibility
             let label = SKLabelNode(text: "\(bubble.value)")
             label.fontName = "Helvetica-Bold"
-            label.fontSize = 24
-            label.fontColor = .white
+            label.fontSize = 28
+            label.fontColor = .white  // White text on bubble
             label.verticalAlignmentMode = .center
-            label.zPosition = 2
+            label.horizontalAlignmentMode = .center
+            label.zPosition = 10  // Higher z-position to ensure it's on top
+            
+            // Add shadow for better readability
+            let shadowLabel = SKLabelNode(text: "\(bubble.value)")
+            shadowLabel.fontName = "Helvetica-Bold"
+            shadowLabel.fontSize = 28
+            shadowLabel.fontColor = .black.withAlphaComponent(0.3)
+            shadowLabel.verticalAlignmentMode = .center
+            shadowLabel.horizontalAlignmentMode = .center
+            shadowLabel.position = CGPoint(x: 1, y: -1)
+            shadowLabel.zPosition = 9
+            
+            node.addChild(shadowLabel)
             node.addChild(label)
             
         case .lightning:
-            circle.fillColor = SKColor.yellow.withAlphaComponent(0.3)
-            circle.strokeColor = SKColor.yellow
+            // Tint yellow for lightning
+            node.colorBlendFactor = 0.3
+            node.color = .yellow
             addLightningIcon(to: node)
             
         case .bomb:
-            circle.fillColor = SKColor.red.withAlphaComponent(0.3)
-            circle.strokeColor = SKColor.red
+            // Tint red for bomb
+            node.colorBlendFactor = 0.3
+            node.color = .red
             addBombIcon(to: node)
             
         case .sponge:
-            circle.fillColor = SKColor.orange.withAlphaComponent(0.3)
-            circle.strokeColor = SKColor.orange
+            // Tint orange for sponge
+            node.colorBlendFactor = 0.3
+            node.color = .orange
             addSpongeIcon(to: node)
             
         case .crate:
-            // Replace circle with crate shape
-            circle.removeFromParent()
-            let crate = SKSpriteNode(color: .brown, size: CGSize(width: 50, height: 50))
+            // Replace with crate shape
+            node.texture = nil
+            let crate = SKSpriteNode(color: .brown, size: CGSize(width: 60, height: 60))
             crate.zPosition = 1
             node.addChild(crate)
-            return node
         }
         
-        circle.lineWidth = 2
-        circle.zPosition = 1
-        node.addChild(circle)
-        
         // Add physics body for collisions
-        node.physicsBody = SKPhysicsBody(circleOfRadius: 30)
+        node.physicsBody = SKPhysicsBody(circleOfRadius: 35)
         node.physicsBody?.isDynamic = true
         node.physicsBody?.affectedByGravity = false
         node.physicsBody?.collisionBitMask = 0x1
@@ -333,31 +343,69 @@ class GameScene: SKScene {
             
             bubbleNodes.removeValue(forKey: bubble.id)
             
-            // Pop animation
+            // Remove any child labels before animation
+            node.children.forEach { $0.removeFromParent() }
+            
+            // Create a smooth pop animation without sprite frames
             let popSequence = SKAction.sequence([
+                // Expand and wobble
                 SKAction.group([
-                    SKAction.scale(to: 1.3, duration: 0.1),
-                    SKAction.fadeAlpha(to: 0.5, duration: 0.1)
+                    SKAction.sequence([
+                        SKAction.scale(to: 1.2, duration: 0.1),
+                        SKAction.scale(to: 1.4, duration: 0.1),
+                        SKAction.scale(to: 1.6, duration: 0.1)
+                    ]),
+                    SKAction.sequence([
+                        SKAction.rotate(byAngle: 0.1, duration: 0.05),
+                        SKAction.rotate(byAngle: -0.2, duration: 0.05),
+                        SKAction.rotate(byAngle: 0.2, duration: 0.05),
+                        SKAction.rotate(byAngle: -0.1, duration: 0.05)
+                    ]),
+                    SKAction.fadeAlpha(to: 0.7, duration: 0.2)
                 ]),
+                // Final pop
                 SKAction.group([
                     SKAction.scale(to: 0.1, duration: 0.2),
                     SKAction.fadeOut(withDuration: 0.2)
-                ])
+                ]),
+                SKAction.removeFromParent()
             ])
             
-            // Particle effect
-            if let particles = SKEmitterNode(fileNamed: "BubblePop") {
-                particles.position = node.position
-                aquariumNode.addChild(particles)
-                particles.run(SKAction.sequence([
-                    SKAction.wait(forDuration: 1.0),
+            // Create bubble particle burst effect
+            for i in 0..<12 {
+                let particle = SKShapeNode(circleOfRadius: 4)
+                particle.fillColor = .white.withAlphaComponent(0.8)
+                particle.strokeColor = .cyan.withAlphaComponent(0.5)
+                particle.lineWidth = 1
+                particle.position = node.position
+                particle.zPosition = node.zPosition + 1
+                aquariumNode.addChild(particle)
+                
+                let angle = (CGFloat(i) / 12.0) * 2.0 * .pi
+                let distance = CGFloat.random(in: 40...80)
+                let moveX = cos(angle) * distance
+                let moveY = sin(angle) * distance
+                
+                let particleAction = SKAction.sequence([
+                    SKAction.group([
+                        SKAction.moveBy(x: moveX, y: moveY, duration: 0.6),
+                        SKAction.sequence([
+                            SKAction.scale(to: 1.5, duration: 0.2),
+                            SKAction.scale(to: 0.1, duration: 0.4)
+                        ]),
+                        SKAction.fadeOut(withDuration: 0.6)
+                    ]),
                     SKAction.removeFromParent()
-                ]))
+                ])
+                particle.run(particleAction)
             }
             
-            node.run(popSequence) {
-                node.removeFromParent()
+            // Add a pop sound effect if audio service is available
+            if let vm = viewModel {
+                //vm.audioService.playSound("pop")
             }
+            
+            node.run(popSequence)
         }
     }
     
@@ -366,11 +414,15 @@ class GameScene: SKScene {
     func addTileToWorkspace(_ tile: Tile) {
         let node = createTileNode(for: tile)
         
-        // Position tiles in a row
+        // Position tiles in a row, centered in workspace
         let tileCount = tileNodes.count
         let spacing: CGFloat = 70
-        let startX = size.width / 2 - CGFloat(tileCount) * spacing / 2
-        let yPosition: CGFloat = 100  // Fixed height in workspace
+        let totalWidth = CGFloat(tileCount) * spacing
+        let startX = (size.width - totalWidth) / 2 + spacing / 2
+        
+        // Center vertically in the workspace area (which is 30% of screen height)
+        let workspaceHeight = size.height * 0.3
+        let yPosition: CGFloat = workspaceHeight / 2 - 50  // Center in workspace, accounting for tile tray
         
         node.position = CGPoint(x: startX + CGFloat(tileCount) * spacing, y: yPosition)
         node.setScale(0.1)
@@ -389,21 +441,28 @@ class GameScene: SKScene {
     }
     
     private func createTileNode(for tile: Tile) -> SKSpriteNode {
-        let node = SKSpriteNode(color: .white, size: CGSize(width: 60, height: 60))
+        let node = SKSpriteNode(color: .clear, size: CGSize(width: 60, height: 60))
         node.name = "tile_\(tile.id)"
         
-        // Background
+        // White background with subtle border
         let bg = SKShapeNode(rect: CGRect(x: -30, y: -30, width: 60, height: 60), cornerRadius: 8)
-        bg.fillColor = SKColor(cgColor: UIColor.systemBlue.cgColor)
-        bg.strokeColor = SKColor(cgColor: UIColor.systemBlue.withAlphaComponent(0.8).cgColor)
-        bg.lineWidth = 2
+        bg.fillColor = .white
+        bg.strokeColor = SKColor(cgColor: UIColor.systemGray5.cgColor)
+        bg.lineWidth = 1
         node.addChild(bg)
         
-        // Label
+        // Add shadow effect
+        let shadow = SKShapeNode(rect: CGRect(x: -28, y: -32, width: 60, height: 60), cornerRadius: 8)
+        shadow.fillColor = SKColor.black.withAlphaComponent(0.1)
+        shadow.strokeColor = .clear
+        shadow.zPosition = -1
+        node.addChild(shadow)
+        
+        // Colored label
         let label = SKLabelNode(text: tile.kind.displayValue)
         label.fontName = "Helvetica-Bold"
         label.fontSize = tile.kind.displayValue.count > 2 ? 16 : 28
-        label.fontColor = .white
+        label.fontColor = SKColor(cgColor: tile.kind.numberUIColor.cgColor)
         label.verticalAlignmentMode = .center
         label.zPosition = 1
         node.addChild(label)

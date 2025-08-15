@@ -52,11 +52,14 @@ class AquaMathGameViewModel {
     // MARK: - Computed Properties
     
     var equationString: String {
-        if equation.expression.isEmpty {
-            return ""
-        }
         if let result = equation.result {
-            return "\(equation.expression) = \(result)"
+            if equation.expression.isEmpty {
+                // Just show the result when there's no expression (single number)
+                return "\(result)"
+            } else {
+                // Show full equation with operators
+                return "\(equation.expression) = \(result)"
+            }
         }
         return equation.expression
     }

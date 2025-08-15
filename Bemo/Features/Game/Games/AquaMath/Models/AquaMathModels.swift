@@ -190,22 +190,34 @@ struct Equation {
         switch mode {
         case .count:
             let total = groups.reduce(0) { $0 + $1.value(for: mode) }
-            self.expression = "= \(total)"
+            self.expression = ""  // No expression needed for count mode
             self.result = total
             
         case .add:
             let values = groups.map { $0.value(for: mode) }
-            self.expression = values.map { "\($0)" }.joined(separator: " + ")
+            if values.count == 1 {
+                self.expression = ""  // Single number, no operator needed
+            } else {
+                self.expression = values.map { "\($0)" }.joined(separator: " + ")
+            }
             self.result = values.reduce(0, +)
             
         case .connect:
             let values = groups.map { $0.value(for: mode) }
-            self.expression = values.map { "\($0)" }.joined(separator: " + ")
+            if values.count == 1 {
+                self.expression = ""
+            } else {
+                self.expression = values.map { "\($0)" }.joined(separator: " + ")
+            }
             self.result = values.reduce(0, +)
             
         case .multiply:
             let values = groups.map { $0.value(for: mode) }
-            self.expression = values.map { "\($0)" }.joined(separator: " × ")
+            if values.count == 1 {
+                self.expression = ""
+            } else {
+                self.expression = values.map { "\($0)" }.joined(separator: " × ")
+            }
             self.result = values.reduce(1, *)
         }
     }
@@ -244,5 +256,49 @@ struct LevelConfig {
             powerUpProbability: powerUpChance,
             fishThresholds: thresholds
         )
+    }
+}
+
+// MARK: - Number Color Mapping
+
+import SwiftUI
+
+extension TileKind {
+    var numberColor: Color {
+        switch self {
+        case .numeral(let value), .dot(let value):
+            switch value {
+            case 1: return Color(red: 0.85, green: 0.35, blue: 0.45) // Pink/Red
+            case 2: return Color(red: 0.45, green: 0.35, blue: 0.70) // Purple
+            case 3: return Color(red: 0.30, green: 0.65, blue: 0.35) // Green
+            case 4: return Color(red: 0.25, green: 0.60, blue: 0.65) // Teal
+            case 5: return Color(red: 0.35, green: 0.50, blue: 0.75) // Blue
+            case 6: return Color(red: 0.55, green: 0.55, blue: 0.55) // Gray
+            case 7: return Color(red: 0.35, green: 0.45, blue: 0.70) // Dark Blue
+            case 8: return Color(red: 0.95, green: 0.55, blue: 0.25) // Orange
+            case 9: return Color(red: 0.85, green: 0.35, blue: 0.30) // Red
+            case 0: return Color(red: 0.50, green: 0.50, blue: 0.50) // Medium Gray
+            default: return Color.black
+            }
+        }
+    }
+    
+    var numberUIColor: UIColor {
+        switch self {
+        case .numeral(let value), .dot(let value):
+            switch value {
+            case 1: return UIColor(red: 0.85, green: 0.35, blue: 0.45, alpha: 1.0) // Pink/Red
+            case 2: return UIColor(red: 0.45, green: 0.35, blue: 0.70, alpha: 1.0) // Purple
+            case 3: return UIColor(red: 0.30, green: 0.65, blue: 0.35, alpha: 1.0) // Green
+            case 4: return UIColor(red: 0.25, green: 0.60, blue: 0.65, alpha: 1.0) // Teal
+            case 5: return UIColor(red: 0.35, green: 0.50, blue: 0.75, alpha: 1.0) // Blue
+            case 6: return UIColor(red: 0.55, green: 0.55, blue: 0.55, alpha: 1.0) // Gray
+            case 7: return UIColor(red: 0.35, green: 0.45, blue: 0.70, alpha: 1.0) // Dark Blue
+            case 8: return UIColor(red: 0.95, green: 0.55, blue: 0.25, alpha: 1.0) // Orange
+            case 9: return UIColor(red: 0.85, green: 0.35, blue: 0.30, alpha: 1.0) // Red
+            case 0: return UIColor(red: 0.50, green: 0.50, blue: 0.50, alpha: 1.0) // Medium Gray
+            default: return UIColor.black
+            }
+        }
     }
 }
