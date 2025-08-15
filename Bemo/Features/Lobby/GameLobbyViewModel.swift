@@ -161,6 +161,8 @@ class GameLobbyViewModel {
         
         let aquaMathGame = AquaMathGame()
         
+        let spellQuestGame = SpellQuestGame()
+        
         // Start with regular games (Tangram is now CV-ready)
         availableGames = [
             GameItem(
@@ -173,6 +175,12 @@ class GameLobbyViewModel {
                 game: aquaMathGame,
                 iconName: "drop.circle.fill",
                 color: .cyan,
+                badge: "New"
+            ),
+            GameItem(
+                game: spellQuestGame,
+                iconName: "textformat.abc",
+                color: .pink,
                 badge: "New"
             )
         ]
