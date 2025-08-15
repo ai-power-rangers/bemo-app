@@ -72,19 +72,19 @@ struct TangramProgressDebugView: View {
                         
                         if let nextPuzzle = progress.getNextUnlockedPuzzle(for: selectedDifficulty, from: samplePuzzles) {
                             Text("Next Puzzle: \(nextPuzzle.name)")
-                                .foregroundColor(.blue)
+                                .foregroundColor(TangramTheme.UI.primaryButton)
                         } else {
                             Text("All puzzles completed! 🎉")
-                                .foregroundColor(.green)
+                                .foregroundColor(TangramTheme.UI.success)
                         }
                         
                         if let nextDifficulty = progress.getNextDifficulty() {
                             Text("Next Difficulty: \(nextDifficulty.displayName)")
-                                .foregroundColor(.orange)
+                                .foregroundColor(TangramTheme.UI.warning)
                         }
                     }
                     .padding()
-                    .background(Color.gray.opacity(0.1))
+                    .background(TangramTheme.UI.disabled.opacity(0.1))
                     .cornerRadius(8)
                     
                     // Puzzle List
@@ -134,7 +134,7 @@ struct TangramProgressDebugView: View {
                         }
                     }
                     .padding()
-                    .background(Color.gray.opacity(0.05))
+                    .background(TangramTheme.UI.disabled.opacity(0.05))
                     .cornerRadius(8)
                 }
                 .padding()
@@ -202,7 +202,7 @@ struct DebugPuzzleRowView: View {
                     .fontWeight(.medium)
                 Text("\(puzzle.difficulty)⭐ • \(puzzle.category)")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(TangramTheme.Text.secondary)
             }
             
             Spacer()
@@ -213,8 +213,8 @@ struct DebugPuzzleRowView: View {
                     .font(.caption)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(isCompleted ? Color.green : Color.blue)
-                    .foregroundColor(.white)
+                    .background(isCompleted ? TangramTheme.UI.success : TangramTheme.UI.primaryButton)
+                    .foregroundColor(TangramTheme.Text.onColor)
                     .cornerRadius(4)
             }
             .disabled(!isUnlocked && !isCompleted)
@@ -235,11 +235,11 @@ struct DebugPuzzleRowView: View {
     
     private var statusColor: Color {
         if isCompleted {
-            return .green
+            return TangramTheme.UI.success
         } else if isUnlocked {
-            return .blue
+            return TangramTheme.UI.primaryButton
         } else {
-            return .gray
+            return TangramTheme.UI.disabled
         }
     }
 }

@@ -19,6 +19,7 @@ class TangramHintEngine {
     
     struct HintData: Equatable {
         let targetPiece: TangramPieceType
+        let targetId: String?
         let currentTransform: CGAffineTransform?
         let targetTransform: CGAffineTransform
         let hintType: HintType
@@ -87,10 +88,17 @@ class TangramHintEngine {
     // MARK: - Constants
     
     private let stuckThreshold: TimeInterval = 30.0  // 30 seconds without progress
-    private let rotationTolerance: Double = 15.0      // Degrees (will be superseded by difficulty when available)
-    private let positionTolerance: CGFloat = 50.0     // Points (will be superseded by difficulty when available)
+    
+    // MARK: - Properties
+    
+    private var currentDifficulty: UserPreferences.DifficultySetting = .normal
     
     // MARK: - Public Interface
+    
+    /// Set the difficulty for tolerance calculations
+    func setDifficulty(_ difficulty: UserPreferences.DifficultySetting) {
+        self.currentDifficulty = difficulty
+    }
     
     /// Determine the most appropriate hint based on current game state
     func determineNextHint(
@@ -103,34 +111,36 @@ class TangramHintEngine {
         difficultySetting: UserPreferences.DifficultySetting? = nil
     ) -> HintData? {
         
-        // Priority 1: Last moved piece was incorrect
-        if let lastMoved = lastMovedPiece,
-           let placed = placedPieces.first(where: { $0.pieceType == lastMoved }),
-           placed.validationState != .correct {
-            return createHintForIncorrectPiece(lastMoved, placed, puzzle)
-        }
-        
-        // Priority 2: Player stuck for too long
-        if timeSinceLastProgress > stuckThreshold {
-            return createHintForStuckPlayer(puzzle, placedPieces, timeSinceLastProgress)
-        }
-        
-        // Priority 3: If there are validated pieces, ALWAYS suggest a connected piece to the validated cluster
+        // Priority A: If there are validated pieces, ALWAYS suggest a connected piece to that cluster
+        // Adjacency is mandatory per learning design; do not override with other priorities
         if !validatedTargetIds.isEmpty {
-            if let pieceType = selectFrontierConnectedPiece(
+            if let targetId = selectFrontierConnectedTargetId(
                 puzzle: puzzle,
                 validated: validatedTargetIds,
                 placedPieces: placedPieces,
                 previousHints: previousHints,
                 difficultySetting: difficultySetting
             ) {
-                return createHintForPiece(pieceType, puzzle, reason: .userRequested)
+                return createHintForTargetId(targetId, puzzle, reason: .userRequested)
             }
             // If adjacency fails, do NOT fall back to disconnected nearest; wait or show none to avoid irrelevant hints
             return nil
         }
 
-        // Priority 4: No validated pieces yet
+        // Priority B: No validated pieces yet
+        // B1: If the last moved piece is incorrect, help with that piece to reinforce current intent
+        if let lastMoved = lastMovedPiece,
+           let placed = placedPieces.first(where: { $0.pieceType == lastMoved }),
+           placed.validationState != .correct {
+            return createHintForIncorrectPiece(lastMoved, placed, puzzle)
+        }
+
+        // B2: Player stuck for too long — show an easier starter
+        if timeSinceLastProgress > stuckThreshold {
+            return createHintForStuckPlayer(puzzle, placedPieces, timeSinceLastProgress)
+        }
+
+        // B3: No validated pieces yet
         if placedPieces.isEmpty {
             // Absolutely first action → show an easy starter
             return createHintForFirstPiece(puzzle)
@@ -141,7 +151,7 @@ class TangramHintEngine {
             return createHintForPiece(pieceType, puzzle, reason: .userRequested)
         }
 
-        // Last resort: easiest unplaced piece (only when no validated pieces exist)
+        // B4: Last resort: easiest unplaced piece (only when no validated pieces exist)
         let unplacedPieces = findUnplacedPieces(puzzle, placedPieces)
         if let easiestPiece = selectEasiestPiece(unplacedPieces) {
             return createHintForPiece(easiestPiece, puzzle, reason: .userRequested)
@@ -236,11 +246,11 @@ class TangramHintEngine {
     }
     
     // New frontier-based, connection-aware selection that avoids repeating the same disconnected piece
-    private func selectFrontierConnectedPiece(puzzle: GamePuzzleData,
-                                              validated: Set<String>,
-                                              placedPieces: [PlacedPiece],
-                                              previousHints: [HintData],
-                                              difficultySetting: UserPreferences.DifficultySetting? = nil) -> TangramPieceType? {
+    private func selectFrontierConnectedTargetId(puzzle: GamePuzzleData,
+                                                 validated: Set<String>,
+                                                 placedPieces: [PlacedPiece],
+                                                 previousHints: [HintData],
+                                                 difficultySetting: UserPreferences.DifficultySetting? = nil) -> String? {
         let adj = buildAdjacency(for: puzzle, difficultySetting: difficultySetting)
         let allIds = Set(puzzle.targetPieces.map { $0.id })
         let unvalidatedIds = allIds.subtracting(validated)
@@ -268,7 +278,7 @@ class TangramHintEngine {
         // Prefer candidates near any incorrectly placed piece the user is trying
         let incorrectTypesNearby: Set<TangramPieceType> = Set(placedPieces.filter { $0.validationState != .correct }.map { $0.pieceType })
 
-        var best: (type: TangramPieceType, score: CGFloat)?
+        var best: (id: String, score: CGFloat)?
         for id in frontier {
             guard let t = puzzle.targetPieces.first(where: { $0.id == id }) else { continue }
             let neighbors = adj[id] ?? []
@@ -289,10 +299,10 @@ class TangramHintEngine {
                      - diffPenalty
                      - repeatPenalty
 
-            if best == nil || score > best!.score { best = (t.pieceType, score) }
+            if best == nil || score > best!.score { best = (id, score) }
         }
 
-        return best?.type
+        return best?.id
     }
 
     private func largestValidatedComponent(validated: Set<String>, adjacency: [String: Set<String>]) -> Set<String> {
@@ -424,6 +434,7 @@ class TangramHintEngine {
         
         return HintData(
             targetPiece: pieceType,
+            targetId: target.id,
             currentTransform: currentTransform,
             targetTransform: target.transform,
             hintType: hintType,
@@ -465,6 +476,7 @@ class TangramHintEngine {
         
         return HintData(
             targetPiece: targetPieceType,
+            targetId: target.id,
             currentTransform: nil,
             targetTransform: target.transform,
             hintType: hintType,
@@ -500,6 +512,7 @@ class TangramHintEngine {
         
         return HintData(
             targetPiece: targetPieceType,
+            targetId: target.id,
             currentTransform: nil,
             targetTransform: target.transform,
             hintType: hintType,
@@ -535,6 +548,36 @@ class TangramHintEngine {
         
         return HintData(
             targetPiece: pieceType,
+            targetId: target.id,
+            currentTransform: nil,
+            targetTransform: target.transform,
+            hintType: hintType,
+            animationSteps: animationSteps,
+            difficulty: getPieceDifficulty(pieceType),
+            reason: reason
+        )
+    }
+
+    private func createHintForTargetId(
+        _ targetId: String,
+        _ puzzle: GamePuzzleData,
+        reason: HintReason
+    ) -> HintData? {
+        guard let target = puzzle.targetPieces.first(where: { $0.id == targetId }) else { return nil }
+        let pieceType = target.pieceType
+        let rawPos = TangramPoseMapper.rawPosition(from: target.transform)
+        let targetPosSK = TangramPoseMapper.spriteKitPosition(fromRawPosition: rawPos)
+        let startPos = getDefaultStartPosition(for: pieceType)
+        let hintType: HintType = .position(from: startPos, to: targetPosSK)
+        let animationSteps = createAnimationSteps(
+            from: nil,
+            to: target.transform,
+            pieceType: pieceType,
+            hintType: hintType
+        )
+        return HintData(
+            targetPiece: pieceType,
+            targetId: target.id,
             currentTransform: nil,
             targetTransform: target.transform,
             hintType: hintType,
@@ -547,6 +590,11 @@ class TangramHintEngine {
     // MARK: - Helper Methods
     
     private func determineHintType(current: PlacedPiece, target: GamePuzzleData.TargetPiece) -> HintType {
+        // Get tolerances from unified source based on difficulty
+        let tolerances = TangramGameConstants.Validation.tolerances(for: currentDifficulty)
+        let rotationTolerance = tolerances.rotationDeg
+        let positionTolerance = tolerances.position
+        
         // Convert target position to SK space for comparison
         let rawPosition = TangramPoseMapper.rawPosition(from: target.transform)
         let targetPositionSK = TangramPoseMapper.spriteKitPosition(fromRawPosition: rawPosition)
@@ -898,6 +946,7 @@ class TangramHintEngine {
         // Return a default hint for the first piece
         return createHintForFirstPiece(gameState.targetPuzzle) ?? HintData(
             targetPiece: .square,
+            targetId: nil,
             currentTransform: nil,
             targetTransform: .identity,
             hintType: .nudge,

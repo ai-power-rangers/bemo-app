@@ -31,7 +31,7 @@ struct SavePuzzleDialog: View {
                     if puzzleName.isEmpty {
                         Text("A name is required to save the puzzle")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(TangramTheme.Text.secondary)
                     }
                 }
                 
@@ -56,7 +56,7 @@ struct SavePuzzleDialog: View {
                                     ForEach(1...5, id: \.self) { star in
                                         Image(systemName: star <= difficulty.rawValue ? "star.fill" : "star")
                                             .font(.caption)
-                                            .foregroundColor(.orange)
+                                            .foregroundColor(TangramTheme.UI.warning)
                                     }
                                 }
                             }
@@ -73,7 +73,7 @@ struct SavePuzzleDialog: View {
                     
                     Text("Tags help with searching and organizing")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(TangramTheme.Text.secondary)
                 }
                 
                 
@@ -83,14 +83,14 @@ struct SavePuzzleDialog: View {
                         Text("Pieces")
                         Spacer()
                         Text("\(viewModel.puzzle.pieces.count)")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(TangramTheme.Text.secondary)
                     }
                     
                     HStack {
                         Text("Connections")
                         Spacer()
                         Text("\(viewModel.puzzle.connections.count)")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(TangramTheme.Text.secondary)
                     }
                     
                     HStack {
@@ -99,11 +99,11 @@ struct SavePuzzleDialog: View {
                         if viewModel.validationState.isValid {
                             Label("Valid", systemImage: "checkmark.circle.fill")
                                 .font(.caption)
-                                .foregroundColor(.green)
+                                .foregroundColor(TangramTheme.UI.success)
                         } else {
                             Label("Invalid", systemImage: "exclamationmark.triangle.fill")
                                 .font(.caption)
-                                .foregroundColor(.orange)
+                                .foregroundColor(TangramTheme.UI.warning)
                         }
                     }
                     
@@ -112,7 +112,7 @@ struct SavePuzzleDialog: View {
                         Spacer()
                         Label("Official", systemImage: "checkmark.seal.fill")
                             .font(.caption)
-                            .foregroundColor(.blue)
+                            .foregroundColor(TangramTheme.UI.primaryButton)
                     }
                 }
             }
@@ -142,7 +142,7 @@ struct SavePuzzleDialog: View {
                         .overlay {
                             ProgressView("Saving...")
                                 .padding()
-                                .background(Color(.systemBackground))
+                                .background(TangramTheme.Backgrounds.panel)
                                 .cornerRadius(12)
                                 .shadow(radius: 4)
                         }

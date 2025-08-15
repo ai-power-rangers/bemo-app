@@ -95,11 +95,25 @@ class TangramGameViewModel {
     private let supabaseService: SupabaseService?
     private var learningService: LearningService?
     var availablePuzzles: [GamePuzzleData] = []
+    
+    // Unified validation engine
+    private var _validationEngine: TangramValidationEngine?
+    private var validationEngine: TangramValidationEngine {
+        if let engine = _validationEngine { return engine }
+        let engine = TangramValidationEngine(difficulty: effectiveDifficulty)
+        _validationEngine = engine
+        return engine
+    }
 
     // MARK: - Difficulty
     private(set) var effectiveDifficulty: UserPreferences.DifficultySetting = .normal
+    var currentDifficulty: UserPreferences.DifficultySetting {
+        return effectiveDifficulty
+    }
     func setEffectiveDifficulty(_ difficulty: UserPreferences.DifficultySetting) {
         effectiveDifficulty = difficulty
+        // Update validation engine difficulty by recreating lazily
+        _validationEngine = TangramValidationEngine(difficulty: difficulty)
     }
     
     
@@ -255,16 +269,17 @@ class TangramGameViewModel {
         
         let timeSinceProgress = Date().timeIntervalSince(lastProgressTime)
         
-        // Get intelligent hint
-        let hint = container.hintEngine.determineNextHint(
-            puzzle: puzzle,
+        // Build hint context for validation engine
+        let context = TangramValidationEngine.HintContext(
+            validatedTargets: validatedTargetIdsCache.isEmpty ? validatedTargetIds() : validatedTargetIdsCache,
             placedPieces: placedPieces,
             lastMovedPiece: lastMovedPiece,
             timeSinceLastProgress: timeSinceProgress,
-            previousHints: hintHistory,
-            validatedTargetIds: validatedTargetIdsCache.isEmpty ? validatedTargetIds() : validatedTargetIdsCache,
-            difficultySetting: effectiveDifficulty
+            previousHints: hintHistory
         )
+        
+        // Get intelligent hint from validation engine and forward to scene for rendering
+        let hint = validationEngine.requestHint(puzzle: puzzle, context: context)
         
         if let hint = hint {
             // Set the hint directly - no need for nil pattern
@@ -575,141 +590,50 @@ class TangramGameViewModel {
     private func validatePieces() {
         guard let puzzle = selectedPuzzle else { return }
         
-        // Ensure we have an anchor
-        updateAnchorPiece()
-        guard let anchor = anchorPiece else { return }
-        
-        // Establish or refresh mapping for the CV group
-        let anchorRotationRad = CGFloat(anchor.rotation * .pi / 180)
-        let _ = container.mappingService.establishOrUpdateMapping(
-            groupId: cvGroupId,
-            groupPieceIds: Set(placedPieces.map { $0.id }),
-            pickAnchor: { () -> (anchorPieceId: String, anchorPositionScene: CGPoint, anchorRotation: CGFloat, anchorIsFlipped: Bool, anchorPieceType: TangramPieceType) in
-                return (anchor.id, anchor.position, anchorRotationRad, anchor.isFlipped, anchor.pieceType)
-            },
-            candidateTargets: { () -> [(target: GamePuzzleData.TargetPiece, centroidScene: CGPoint, expectedZ: CGFloat, isFlipped: Bool)] in
-                puzzle.targetPieces
-                    .filter { !self.container.mappingService.consumedTargets(groupId: self.cvGroupId).contains($0.id) && $0.pieceType == anchor.pieceType }
-                    .map { t in
-                        let verts = TangramBounds.computeSKTransformedVertices(for: t)
-                        let centroid = CGPoint(x: verts.map{$0.x}.reduce(0,+)/CGFloat(verts.count), y: verts.map{$0.y}.reduce(0,+)/CGFloat(verts.count))
-                        let rawAng = TangramPoseMapper.rawAngle(from: t.transform)
-                        let expectedZ = TangramPoseMapper.spriteKitAngle(fromRawAngle: rawAng)
-                        let det = t.transform.a * t.transform.d - t.transform.b * t.transform.c
-                        return (t, centroid, expectedZ, det < 0)
-                    }
-            }
-        )
-        
-        // Resolve difficulty tolerances
-        let tol = TangramGameConstants.Validation.tolerances(for: effectiveDifficulty)
-
-        // Swap in a difficulty-configured validator for this pass
-        let difficultyValidator = TangramPieceValidator(
-            positionTolerance: tol.position,
-            rotationTolerance: tol.rotationDeg,
-            edgeContactTolerance: tol.edgeContact
-        )
-
-        // Validate non-anchor pieces using mapped pose and instance-binding
-        // Require at least 2 pieces in the CV group before allowing any validations
-        guard placedPieces.count >= 2 else {
-            for i in 0..<placedPieces.count {
-                var piece = placedPieces[i]
-                if piece.id != anchor.id { piece.validationState = .pending }
-                placedPieces[i] = piece
-            }
-            return
-        }
-        for i in 0..<placedPieces.count {
-            var piece = placedPieces[i]
-            
-            // Only validate stationary pieces
-            guard piece.isPlacedLongEnough() else {
-                piece.validationState = .pending
-                placedPieces[i] = piece
-                continue
-            }
-            
-            // Skip anchor itself for counting (treat as accepted mapping)
-            if piece.id == anchor.id {
-                piece.validationState = .pending
-                placedPieces[i] = piece
-                continue
-            }
-            
-            guard let mapping = container.mappingService.mapping(for: cvGroupId) else {
-                // Fallback to absolute feature-angle validation if mapping is unavailable
-                if let assignedId = piece.assignedTargetId,
-                   let target = puzzle.targetPieces.first(where: { $0.id == assignedId }) {
-                    piece.validationState = target.matches(piece) ? .correct : .incorrect
-                } else {
-                    piece.validationState = .incorrect
-                }
-                placedPieces[i] = piece
-                continue
-            }
-            
-            // Compute mapped pose relative to anchor
-            let mapped = container.mappingService.mapPieceToTargetSpace(
-                piecePositionScene: piece.position,
-                pieceRotation: CGFloat(piece.rotation * .pi / 180),
-                pieceIsFlipped: piece.isFlipped,
-                mapping: mapping,
-                anchorPositionScene: anchor.position
+        // Convert placed pieces to validation engine observations
+        let observations = placedPieces.map { piece in
+            TangramValidationEngine.PieceObservation(
+                pieceId: piece.id,
+                pieceType: piece.pieceType,
+                position: piece.position,
+                rotation: CGFloat(piece.rotation * .pi / 180), // Convert to radians
+                isFlipped: piece.isFlipped,
+                velocity: piece.velocity,
+                timestamp: CACurrentMediaTime()
             )
-            
-            // Validate against assigned target only
-            if let assignedId = piece.assignedTargetId,
-               let target = puzzle.targetPieces.first(where: { $0.id == assignedId }) {
-                // Compute target centroid in SK space
-                let verts = TangramBounds.computeSKTransformedVertices(for: target)
-                let centroid = CGPoint(x: verts.map{$0.x}.reduce(0,+)/CGFloat(verts.count), y: verts.map{$0.y}.reduce(0,+)/CGFloat(verts.count))
-                let isValid = container.mappingService.validateMapped(
-                    mappedPose: (mapped.positionSK, mapped.rotationSK, mapped.isFlipped),
-                    pieceType: piece.pieceType,
-                    target: target,
-                    targetCentroidScene: centroid,
-                    validator: difficultyValidator
-                )
-                if isValid {
-                    piece.validationState = .correct
-                    container.mappingService.markTargetConsumed(groupId: cvGroupId, targetId: target.id)
-                } else {
-                    piece.validationState = .incorrect
-                }
-            } else {
-                // Try to assign to nearest valid unconsumed target of same type
-                var best: (id: String, dist: CGFloat)?
-                for t in puzzle.targetPieces where t.pieceType == piece.pieceType && !container.mappingService.consumedTargets(groupId: cvGroupId).contains(t.id) {
-                    let verts = TangramBounds.computeSKTransformedVertices(for: t)
-                    let centroid = CGPoint(x: verts.map{$0.x}.reduce(0,+)/CGFloat(verts.count), y: verts.map{$0.y}.reduce(0,+)/CGFloat(verts.count))
-                    let d = hypot(mapped.positionSK.x - centroid.x, mapped.positionSK.y - centroid.y)
-                    let isValid = container.mappingService.validateMapped(
-                        mappedPose: (mapped.positionSK, mapped.rotationSK, mapped.isFlipped),
-                        pieceType: piece.pieceType,
-                        target: t,
-                        targetCentroidScene: centroid,
-                        validator: difficultyValidator
-                    )
-                    if isValid {
-                        if best == nil || d < best!.dist { best = (t.id, d) }
-                    }
-                }
-                if let best = best,
-                   let target = puzzle.targetPieces.first(where: { $0.id == best.id }) {
-                    piece.assignedTargetId = target.id
-                    piece.validationState = .correct
-                    pieceAssignments[piece.id] = target.id
-                    container.mappingService.markTargetConsumed(groupId: cvGroupId, targetId: target.id)
-                } else {
-                    piece.validationState = .incorrect
+        }
+        
+        // Process through validation engine
+        let result = validationEngine.process(
+            frame: observations,
+            puzzle: puzzle,
+            difficulty: effectiveDifficulty,
+            options: .default
+        )
+        
+        // Apply validation results
+        for (pieceId, state) in result.pieceStates {
+            if let index = placedPieces.firstIndex(where: { $0.id == pieceId }) {
+                placedPieces[index].validationState = state.isValid ? .correct : .incorrect
+                if let targetId = state.targetId {
+                    placedPieces[index].assignedTargetId = targetId
+                    pieceAssignments[pieceId] = targetId
                 }
             }
-            
-            placedPieces[i] = piece
         }
+        
+        // Update validated targets cache
+        validatedTargetIdsCache = result.validatedTargets
+        
+        // Handle nudge if present (no UI here; scene displays nudges)
+        if let nudge = result.nudgeContent {
+            print("[NUDGE] targetId=\(nudge.targetId)")
+        }
+        
+        return
     }
+    
+    // Legacy validation method - REMOVED
     
     // MARK: - Hint System Tracking
     

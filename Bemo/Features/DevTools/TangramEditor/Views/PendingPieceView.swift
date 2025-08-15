@@ -63,7 +63,7 @@ struct PendingPieceView: View {
                     .fontWeight(.medium)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color(.systemBackground).opacity(0.9))
+                    .background(TangramTheme.Backgrounds.panel.opacity(0.9))
                     .cornerRadius(8)
                     .padding(.top, -20)  // Move closer to the piece
             }
@@ -87,7 +87,7 @@ struct PendingPieceView: View {
         Group {
             if viewModel.uiState.selectedCanvasPoints.isEmpty {
                 Text("Select connection points on canvas")
-                    .foregroundColor(.orange)
+                    .foregroundColor(TangramTheme.UI.warning)
             } else if !viewModel.uiState.hasValidConnectionPointMatching {
                 // Points selected but not matching properly
                 let canvasVertexCount = viewModel.uiState.selectedCanvasPoints.filter { 
@@ -99,19 +99,19 @@ struct PendingPieceView: View {
                 
                 if viewModel.uiState.selectedPendingPoints.count < viewModel.uiState.selectedCanvasPoints.count {
                     Text("Match \(viewModel.uiState.selectedCanvasPoints.count) point\(viewModel.uiState.selectedCanvasPoints.count == 1 ? "" : "s") on this piece")
-                        .foregroundColor(.blue)
+                        .foregroundColor(TangramTheme.UI.primaryButton)
                 } else {
                     Text("Type mismatch! Need \(canvasVertexCount) vertex + \(canvasEdgeCount) edge")
-                        .foregroundColor(.red)
+                        .foregroundColor(TangramTheme.UI.destructive)
                 }
             } else if !viewModel.uiState.hasValidPreview {
                 // Points match but no valid placement found
                 Text("No valid placement - try rotating")
-                    .foregroundColor(.orange)
+                    .foregroundColor(TangramTheme.UI.warning)
             } else {
                 // Everything is valid and ready
                 Text("Ready to place!")
-                    .foregroundColor(.green)
+                    .foregroundColor(TangramTheme.UI.success)
             }
         }
     }
@@ -250,7 +250,7 @@ struct PendingConnectionPoint: View {
     
     private var fillColor: Color {
         if isSelected { 
-            return .green.opacity(0.8)
+            return TangramTheme.UI.success.opacity(0.8)
         }
         if !isCompatible { 
             return .gray.opacity(0.2)
@@ -258,15 +258,15 @@ struct PendingConnectionPoint: View {
         // Match the canvas point colors - indicating what type this can connect to
         switch point.type {
         case .vertex: 
-            return .blue.opacity(0.6)
+            return TangramTheme.UI.primaryButton.opacity(0.6)
         case .edge: 
-            return .orange.opacity(0.6)
+            return TangramTheme.UI.warning.opacity(0.6)
         }
     }
     
     private var strokeColor: Color {
         if isSelected { 
-            return .green
+            return TangramTheme.UI.success
         }
         if !isCompatible { 
             return .gray.opacity(0.3)
@@ -274,9 +274,9 @@ struct PendingConnectionPoint: View {
         // Match the canvas point colors
         switch point.type {
         case .vertex: 
-            return .blue
+            return TangramTheme.UI.primaryButton
         case .edge: 
-            return .orange
+            return TangramTheme.UI.warning
         }
     }
 }

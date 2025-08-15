@@ -41,8 +41,7 @@ struct TangramSpriteView: View {
         GeometryReader { geometry in
             // Full-screen SpriteKit scene
             SpriteView(
-                scene: scene,
-                options: [.allowsTransparency]
+                scene: scene
             )
             .ignoresSafeArea()
             .onAppear {

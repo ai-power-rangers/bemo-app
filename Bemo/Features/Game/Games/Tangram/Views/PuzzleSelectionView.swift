@@ -27,7 +27,7 @@ struct PuzzleSelectionView: View {
             // Header with title and filters
             headerView
                 .padding()
-                .background(Color("AppBackground"))
+                .background(TangramTheme.Backgrounds.editor)
             
             Divider()
             
@@ -62,7 +62,7 @@ struct PuzzleSelectionView: View {
                 
                 Text("\(viewModel.filteredPuzzles.count) puzzles available")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(TangramTheme.Text.secondary)
             }
             
             Spacer()
@@ -93,7 +93,7 @@ struct PuzzleSelectionView: View {
     private var searchBar: some View {
         HStack {
             Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
+                .foregroundColor(TangramTheme.Text.secondary)
             
             TextField("Search puzzles...", text: $viewModel.searchText)
                 .textFieldStyle(.plain)
@@ -101,7 +101,7 @@ struct PuzzleSelectionView: View {
             if !viewModel.searchText.isEmpty {
                 Button(action: { viewModel.searchText = "" }) {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(TangramTheme.Text.secondary)
                 }
             }
             
@@ -128,13 +128,13 @@ struct PuzzleSelectionView: View {
                         .foregroundColor(difficultyModeColor(viewModel.childDifficultyMode))
                     Image(systemName: "chevron.down")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(TangramTheme.Text.secondary)
                 }
             }
             .buttonStyle(.plain)
         }
         .padding(8)
-        .background(Color("AppBackground").opacity(0.95))
+        .background(TangramTheme.Backgrounds.editor.opacity(0.95))
         .cornerRadius(8)
     }
     
@@ -183,8 +183,8 @@ struct PuzzleSelectionView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(viewModel.hasActiveFilters ? Color.accentColor : Color("AppBackground").opacity(0.95))
-                .foregroundColor(viewModel.hasActiveFilters ? .white : Color("AppPrimaryTextColor"))
+                .background(viewModel.hasActiveFilters ? TangramTheme.UI.primaryButton : TangramTheme.Backgrounds.editor.opacity(0.95))
+                .foregroundColor(viewModel.hasActiveFilters ? .white : TangramTheme.Text.primary)
                 .cornerRadius(15)
             }
             
@@ -212,7 +212,7 @@ struct PuzzleSelectionView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .background(Color.accentColor.opacity(0.2))
+        .background(TangramTheme.UI.primaryButton.opacity(0.2))
         .foregroundColor(.accentColor)
         .cornerRadius(12)
         .buttonStyle(.plain)
@@ -257,7 +257,7 @@ struct PuzzleSelectionView: View {
                 .scaleEffect(1.5)
             Text("Loading puzzles...")
                 .font(.headline)
-                .foregroundColor(.secondary)
+                .foregroundColor(TangramTheme.Text.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -266,7 +266,7 @@ struct PuzzleSelectionView: View {
         VStack(spacing: 20) {
             Image(systemName: "puzzlepiece.slash")
                 .font(.system(size: 60))
-                .foregroundColor(.secondary)
+                .foregroundColor(TangramTheme.Text.secondary)
             
             Text("No puzzles found")
                 .font(.title2)
@@ -274,7 +274,7 @@ struct PuzzleSelectionView: View {
             
             Text("Try adjusting your filters or search terms")
                 .font(.body)
-                .foregroundColor(.secondary)
+                .foregroundColor(TangramTheme.Text.secondary)
             
             Button("Clear Filters") {
                 viewModel.clearFilters()
@@ -377,15 +377,15 @@ struct PuzzleRowView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(puzzle.name)
                         .font(.headline)
-                        .foregroundColor(Color("AppPrimaryTextColor"))
+                        .foregroundColor(TangramTheme.Text.primary)
                     
                     HStack {
                         Label(puzzle.category.rawValue, systemImage: categoryIcon)
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(TangramTheme.Text.secondary)
                         
                         Text("•")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(TangramTheme.Text.secondary)
                         
                         Label(difficultyDisplayName(puzzle.difficulty), systemImage: "star.fill")
                             .font(.caption)
@@ -397,10 +397,10 @@ struct PuzzleRowView: View {
                 
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(TangramTheme.Text.secondary)
             }
             .padding()
-            .background(Color("AppBackground").opacity(0.95))
+            .background(TangramTheme.Backgrounds.editor.opacity(0.95))
             .cornerRadius(10)
         }
         .buttonStyle(.plain)

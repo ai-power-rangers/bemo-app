@@ -5,14 +5,14 @@
 //  Centralized color constants for Tangram game pieces
 //
 
-// WHAT: Defines the official colors for all tangram pieces
+// WHAT: Defines the official colors for all tangram pieces and integrates with TangramTheme
 // ARCHITECTURE: Constants in MVVM-S, used throughout Tangram game for consistent colors
-// USAGE: Reference TangramColors.pieceColor(for:) to get the color for any piece type
+// USAGE: Reference TangramColors.pieceColor(for:) for pieces, Game enum for UI states
 
 import SwiftUI
 
 enum TangramColors {
-    // Official piece colors from the editor
+    // Official piece colors from the editor - these remain constant
     private static let colors: [TangramPieceType: String] = [
         .smallTriangle1: "#C445A4",  // Purple-pink
         .smallTriangle2: "#02B7CD",  // Cyan
@@ -26,19 +26,19 @@ enum TangramColors {
     /// Get the color for a specific piece type
     static func pieceColor(for type: TangramPieceType) -> Color {
         guard let hexColor = colors[type] else {
-            return .gray // Fallback color
+            return TangramTheme.UI.disabled // Use theme fallback
         }
         return Color(hex: hexColor)
     }
     
-    // Additional game-specific colors
+    // Game-specific colors using TangramTheme
     enum Game {
         static let silhouette = Color.black.opacity(0.3)
-        static let correctPiece = Color.green.opacity(0.7)
-        static let incorrectPiece = Color.red.opacity(0.5)
-        static let movingPiece = Color.blue.opacity(0.5)
-        static let hint = Color.yellow.opacity(0.5)
-        static let anchor = Color.blue
+        static let correctPiece = TangramTheme.Validation.correct
+        static let incorrectPiece = TangramTheme.Validation.incorrect
+        static let movingPiece = TangramTheme.Validation.active
+        static let hint = TangramTheme.Hint.highlight
+        static let anchor = TangramTheme.UI.primaryButton
     }
     
     // SpriteKit colors (using UIColor for SKColor compatibility)
