@@ -144,7 +144,7 @@ class TangramValidationEngine {
         // SIMPLE TWO-PIECE ANCHOR + ORIENTATION-ONLY FEEDBACK
         var orientedTargets: Set<String> = []
         var pieceStates: [String: PieceValidationState] = [:]
-        var nudge: (targetId: String, content: NudgeContent)? = nil
+        let nudge: (targetId: String, content: NudgeContent)? = nil
         var pieceNudges: [String: NudgeContent] = [:]
         var groupMappingsOut: [UUID: AnchorMapping] = [:]
         var failureReasons: [String: ValidationFailure] = [:]
@@ -256,12 +256,58 @@ class TangramValidationEngine {
                         if st.isValid, let tid = st.targetId { localValidatedTargets.insert(tid) }
                     }
 
-                    // Anchor is established only if both are valid
-                    if pairObs.allSatisfy({ localStates[$0.pieceId]?.isValid == true }) {
+                    // Anchor is established if both pass strict validation, or
+                    // both pass relaxed gating based on residuals (doc spirit: enable when geometry matches)
+                    let bothStrict = pairObs.allSatisfy { localStates[$0.pieceId]?.isValid == true }
+                    var bothRelaxed = false
+                    if !bothStrict {
+                        // Compute residuals and apply relaxed thresholds
+                        let tolerances = TangramGameConstants.Validation.tolerances(for: difficulty)
+                        let posRelax = tolerances.position * 1.6
+                        let rotRelaxDeg = tolerances.rotationDeg * 1.2
+                        var okCount = 0
+                        for obs in pairObs {
+                            // Determine target from local state if available, else pick best by type
+                            var targetId: String? = localStates[obs.pieceId]?.targetId
+                            if targetId == nil {
+                                targetId = puzzle.targetPieces.first(where: { $0.pieceType == obs.pieceType })?.id
+                            }
+                            if let tid = targetId, let target = puzzle.targetPieces.first(where: { $0.id == tid }) {
+                                let mapped = mappingService.mapPieceToTargetSpace(
+                                    piecePositionScene: obs.position,
+                                    pieceRotation: obs.rotation,
+                                    pieceIsFlipped: obs.isFlipped,
+                                    mapping: mapping,
+                                    anchorPositionScene: anchorObs.position
+                                )
+                                let verts = TangramBounds.computeSKTransformedVertices(for: target)
+                                let centroid = CGPoint(
+                                    x: verts.map { $0.x }.reduce(0, +) / CGFloat(max(1, verts.count)),
+                                    y: verts.map { $0.y }.reduce(0, +) / CGFloat(max(1, verts.count))
+                                )
+                                let posDist = hypot(mapped.positionSK.x - centroid.x, mapped.positionSK.y - centroid.y)
+                                let canonicalPiece: CGFloat = obs.pieceType.isTriangle ? (3 * .pi / 4) : 0
+                                let canonicalTarget: CGFloat = obs.pieceType.isTriangle ? (.pi / 4) : 0
+                                let pieceFeature = TangramRotationValidator.normalizeAngle(
+                                    mapped.rotationSK + (mapped.isFlipped ? -canonicalPiece : canonicalPiece)
+                                )
+                                let targetFeature = TangramRotationValidator.normalizeAngle(
+                                    TangramPoseMapper.spriteKitAngle(fromRawAngle: TangramPoseMapper.rawAngle(from: target.transform)) + canonicalTarget
+                                )
+                                let rotDiffDeg = abs(angleDifference(pieceFeature, targetFeature)) * 180 / .pi
+                                if posDist <= posRelax && rotDiffDeg <= rotRelaxDeg { okCount += 1 }
+                            }
+                        }
+                        bothRelaxed = (okCount == pairObs.count)
+                    }
+
+                    if bothStrict || bothRelaxed {
                         mainGroupId = groupId
                         anchorPieceIds = Set(pairObs.map { $0.pieceId })
                         anchorIds = anchorPieceIds
                         groupMappingsOut[groupId] = mapping
+                        // Persist mapping so subsequent validations can retrieve it
+                        mappingService.setMapping(for: groupId, mapping: mapping)
                         // Merge into engine-level state
                         for (pid, st) in localStates {
                             pieceStates[pid] = st
@@ -272,7 +318,7 @@ class TangramValidationEngine {
                         }
                         #if DEBUG
                         let deg = mapping.rotationDelta * 180 / .pi
-                        print("[ANCHOR] Committed group=\(groupId) theta=\(Int(deg))° pieces=\(pair.0.pieceId),\(pair.1.pieceId)")
+                        print("[ANCHOR] Committed group=\(groupId) theta=\(Int(deg))° pieces=\(pair.0.pieceId),\(pair.1.pieceId) mode=\(bothStrict ? "strict" : "relaxed")")
                         for obs in pairObs {
                             if let st = localStates[obs.pieceId], let tid = st.targetId,
                                let target = puzzle.targetPieces.first(where: { $0.id == tid }) {
@@ -355,8 +401,8 @@ class TangramValidationEngine {
             let anchorObs: PieceObservation? = frame.first(where: { $0.pieceId == anchorId })
             if let anchorObs = anchorObs {
                 for obs in frame {
-                    // Skip if already populated (e.g., anchor pair itself)
-                    if pieceStates[obs.pieceId] != nil { continue }
+                    // Skip only the two anchor pieces (they were already validated on commit)
+                    if anchorPieceIds.contains(obs.pieceId) { continue }
                     let st = validateMappedPiece(
                         observation: obs,
                         mapping: mapping,

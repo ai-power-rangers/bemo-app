@@ -57,26 +57,26 @@ class TangramPieceValidator {
         targetWorldPos: CGPoint
     ) -> ValidationResult {
         
-        // Validate position (allow polygon contact override)
+        // Validate position (centroid-only; polygon-contact fallback disabled per plan)
         let centroidDistance = hypot(piecePosition.x - targetWorldPos.x, piecePosition.y - targetWorldPos.y)
         var positionValid = centroidDistance < positionTolerance
-        if !positionValid {
-            // Try polygon-to-polygon min distance as contact override
-            let targetVertsSK = TangramGeometryUtilities.transformedVertices(
-                for: pieceType,
-                isFlipped: detectFlip(from: targetTransform),
-                zRotation: TangramPoseMapper.spriteKitAngle(fromRawAngle: TangramPoseMapper.rawAngle(from: targetTransform)),
-                translation: targetWorldPos
-            )
-            let pieceVertsSK = TangramGeometryUtilities.transformedVertices(
-                for: pieceType,
-                isFlipped: isFlipped,
-                zRotation: pieceFeatureAngle, // approximate; feature angle differs by local baseline but fine for proximity check
-                translation: piecePosition
-            )
-            let minDist = TangramGeometryUtilities.minimumDistanceBetweenPolygons(targetVertsSK, pieceVertsSK)
-            positionValid = minDist < edgeContactTolerance
-        }
+        // if !positionValid {
+        //     // Polygon contact fallback disabled to keep a single robust system aligned with plan doc
+        //     let targetVertsSK = TangramGeometryUtilities.transformedVertices(
+        //         for: pieceType,
+        //         isFlipped: detectFlip(from: targetTransform),
+        //         zRotation: TangramPoseMapper.spriteKitAngle(fromRawAngle: TangramPoseMapper.rawAngle(from: targetTransform)),
+        //         translation: targetWorldPos
+        //     )
+        //     let pieceVertsSK = TangramGeometryUtilities.transformedVertices(
+        //         for: pieceType,
+        //         isFlipped: isFlipped,
+        //         zRotation: pieceFeatureAngle,
+        //         translation: piecePosition
+        //     )
+        //     let minDist = TangramGeometryUtilities.minimumDistanceBetweenPolygons(targetVertsSK, pieceVertsSK)
+        //     positionValid = minDist < edgeContactTolerance
+        // }
         
         // Validate rotation - feature angle comparison with symmetry
         let rotationValid = TangramRotationValidator.isRotationValid(

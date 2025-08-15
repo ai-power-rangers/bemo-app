@@ -536,6 +536,7 @@ final class TangramRelativeMappingService {
     
     // MARK: - Accessors
     func mapping(for groupId: UUID) -> AnchorMapping? { groupAnchorMappings[groupId] }
+    func setMapping(for groupId: UUID, mapping: AnchorMapping) { groupAnchorMappings[groupId] = mapping }
     func markTargetConsumed(groupId: UUID, targetId: String) { groupValidatedTargets[groupId, default: []].insert(targetId) }
     func consumedTargets(groupId: UUID) -> Set<String> { groupValidatedTargets[groupId] ?? [] }
     func appendPair(groupId: UUID, pieceId: String, targetId: String) { groupValidatedPairs[groupId, default: []].append((pieceId, targetId)) }

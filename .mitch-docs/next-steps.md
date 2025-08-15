@@ -86,3 +86,23 @@ If you want a minimal first milestone
 - Implement pair scoring + doc mapping + pair commit with relaxed gate and residual logs.
 - Then add adjacency-driven expansion for one next neighbor piece.
 - After those feel solid, add re-anchoring, relative pre-anchor nudges, and the strict/relaxed tolerance ladder.
+
+----
+
+Ran tool
+
+Ran tool
+Ran tool
+- Minimal milestone is in place conceptually: pair selection by observed activity and relative-fit; doc-based pair mapping (Θ from relative vectors, T from centroids); validate the pair together; commit anchor; residual logging.
+- I did not hardcode “large triangles first.” The pair selector already considers oriented pairs first; you’ll next want to add the recency/settle priority so it picks whatever the student is actively aligning.
+
+What will happen now (after these edits):
+- When two pieces are oriented and reasonably spaced, the engine computes the pair mapping via centroid alignment and tests both together.
+- If both pass strict validation, it commits; if not, it tries a relaxed gate (slightly looser tolerances) once to allow anchor formation when geometry is right but position is just off.
+- On commit, it logs theta and whether strict vs relaxed gating was used.
+- On failure, it logs per-piece residuals (posDist, rotDiff) so we know what blocked it.
+
+Next iteration (once you confirm anchor commits from real play):
+- Add activity-driven pair priority (last moved + settled) so selection responds to the student.
+- Implement group expansion via target adjacency for the next piece(s) under the same (Θ, T).
+- Throttle retries for failing pairs to reduce log noise.
