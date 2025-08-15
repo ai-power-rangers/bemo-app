@@ -82,10 +82,10 @@ struct BoardView: View {
                     VStack {
                         Image(systemName: "photo.fill")
                             .font(.system(size: 60))
-                            .foregroundColor(.gray.opacity(0.5))
+                            .foregroundColor(Color("AppPrimaryTextColor").opacity(0.3))
                         Text(viewModel.boardState.currentPuzzle.displayTitle ?? "")
                             .font(.title2)
-                            .foregroundColor(.gray)
+                            .foregroundColor(Color("AppPrimaryTextColor"))
                     }
                 }
             }

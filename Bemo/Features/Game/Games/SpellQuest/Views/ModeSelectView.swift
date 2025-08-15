@@ -22,12 +22,12 @@ struct ModeSelectView: View {
                     Text("Choose Your Quest")
                         .font(.largeTitle)
                         .fontWeight(.bold)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color("AppPrimaryTextColor"))
                         .padding(.top, 50)
                     
                     Text("Select a game mode to begin")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
                     
                     // Mode cards
                     VStack(spacing: 20) {
@@ -67,11 +67,11 @@ private struct ModeCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(mode.rawValue)
                         .font(.headline)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color("AppPrimaryTextColor"))
                     
                     Text(mode.description)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
                         .multilineTextAlignment(.leading)
                 }
                 
@@ -80,7 +80,7 @@ private struct ModeCard: View {
                 // Arrow
                 Image(systemName: "chevron.right")
                     .font(.system(size: 20))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color("AppPrimaryTextColor").opacity(0.4))
             }
             .padding()
             .background(cardBackground)
@@ -101,10 +101,11 @@ private struct ModeCard: View {
     
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 15)
-            .fill(Color(UIColor.secondarySystemBackground))
+            .fill(Color.white)
+            .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
             .overlay(
                 RoundedRectangle(cornerRadius: 15)
-                    .stroke(iconColor.opacity(0.3), lineWidth: 1)
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
             )
     }
 }
