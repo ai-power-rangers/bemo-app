@@ -14,7 +14,7 @@ import SwiftUI
 struct TangramProgressServiceDebugView: View {
     @State private var progressService = TangramProgressService()
     @State private var selectedChildId = "test-child-1"
-    @State private var selectedDifficulty: UserPreferences.DifficultySetting = .easy
+    @State private var selectedDifficulty: UserPreferences.DifficultySetting = UserPreferences.DifficultySetting.easy
     @State private var showingChildSelector = false
     @State private var testResults: String = ""
     @State private var testStatus: TestStatus = .notRun
@@ -287,11 +287,11 @@ struct TangramProgressServiceDebugView: View {
                                         .font(.caption)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                     
-                                    Text("Easy: \(childProgress.getCompletedCount(for: .easy))")
+                                    Text("Easy: \(childProgress.getCompletedCount(for: UserPreferences.DifficultySetting.easy))")
                                         .font(.caption2)
-                                    Text("Med: \(childProgress.getCompletedCount(for: .normal))")
+                                    Text("Med: \(childProgress.getCompletedCount(for: UserPreferences.DifficultySetting.normal))")
                                         .font(.caption2)
-                                    Text("Hard: \(childProgress.getCompletedCount(for: .hard))")
+                                    Text("Hard: \(childProgress.getCompletedCount(for: UserPreferences.DifficultySetting.hard))")
                                         .font(.caption2)
                                     
                                     Button("Select") {
@@ -401,7 +401,7 @@ struct TangramProgressServiceDebugView: View {
                                     .font(.caption)
                                     .fontWeight(.medium)
                                 
-                                ForEach([UserPreferences.DifficultySetting.easy, .normal, .hard], id: \.self) { difficulty in
+                                ForEach([UserPreferences.DifficultySetting.easy, UserPreferences.DifficultySetting.normal, UserPreferences.DifficultySetting.hard], id: \.self) { difficulty in
                                     HStack {
                                         Text("\(difficulty.displayName):")
                                             .font(.caption2)
@@ -434,7 +434,7 @@ struct TangramProgressServiceDebugView: View {
                                         .font(.caption)
                                         .fontWeight(.medium)
                                     
-                                    ForEach([UserPreferences.DifficultySetting.easy, .normal, .hard], id: \.self) { difficulty in
+                                    ForEach([UserPreferences.DifficultySetting.easy, UserPreferences.DifficultySetting.normal, UserPreferences.DifficultySetting.hard], id: \.self) { difficulty in
                                         Button(difficulty.displayName) {
                                             viewModel.selectDifficulty(difficulty)
                                         }
@@ -466,6 +466,38 @@ struct TangramProgressServiceDebugView: View {
                     .padding()
                     .background(Color.purple.opacity(0.1))
                     .cornerRadius(8)
+                    
+                    // DifficultySelectionView UI Testing (Task 2)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("🎨 DifficultySelectionView UI Testing:")
+                            .font(.headline)
+                        
+                        Text("Task 2 Implementation - Full UI with cards, animations, and accessibility")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        if let viewModel = difficultySelectionViewModel {
+                            DifficultySelectionView(viewModel: viewModel)
+                                .frame(maxHeight: 600)
+                                .border(Color.blue.opacity(0.3), width: 2)
+                        } else {
+                            VStack {
+                                Text("Create ViewModel first to test the UI")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Image(systemName: "arrow.up")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .frame(height: 100)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                    }
+                    .padding()
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
                 }
                 .padding()
             }
@@ -484,7 +516,7 @@ struct TangramProgressServiceDebugView: View {
     
     private func createDifficultySelectionViewModel() {
         // Create a mock PuzzleLibraryService with our sample puzzles
-        let mockPuzzleService = MockPuzzleLibraryService(puzzles: samplePuzzles)
+        let mockPuzzleService = MockTangramPuzzleLibraryService(puzzles: samplePuzzles)
         
         difficultySelectionViewModel = DifficultySelectionViewModel(
             childProfileId: selectedChildId,
@@ -572,9 +604,9 @@ struct TangramProgressServiceDebugView: View {
             results += "   ✅ Initial state correct\n"
             
             // Test puzzle completion
-            progress.markPuzzleCompleted(puzzleId: "test1", difficulty: .easy)
-            guard progress.isPuzzleCompleted(puzzleId: "test1", difficulty: .easy),
-                  progress.getCompletedCount(for: .easy) == 1 else {
+            progress.markPuzzleCompleted(puzzleId: "test1", difficulty: UserPreferences.DifficultySetting.easy)
+            guard progress.isPuzzleCompleted(puzzleId: "test1", difficulty: UserPreferences.DifficultySetting.easy),
+                  progress.getCompletedCount(for: UserPreferences.DifficultySetting.easy) == 1 else {
                 results += "   ❌ Puzzle completion tracking failed\n"
                 allPassed = false
                 throw TestError.failed
@@ -582,8 +614,8 @@ struct TangramProgressServiceDebugView: View {
             results += "   ✅ Puzzle completion tracking works\n"
             
             // Test difficulty setting
-            progress.setLastSelectedDifficulty(.normal)
-            guard progress.lastSelectedDifficulty == .normal else {
+            progress.setLastSelectedDifficulty(UserPreferences.DifficultySetting.normal)
+            guard progress.lastSelectedDifficulty == UserPreferences.DifficultySetting.normal else {
                 results += "   ❌ Difficulty setting failed\n"
                 allPassed = false
                 throw TestError.failed
@@ -614,9 +646,9 @@ struct TangramProgressServiceDebugView: View {
             results += "   ✅ Progress creation works\n"
             
             // Test puzzle completion through service
-            testService.markPuzzleCompleted(childId: testChild, puzzleId: "test1", difficulty: .easy)
+            testService.markPuzzleCompleted(childId: testChild, puzzleId: "test1", difficulty: UserPreferences.DifficultySetting.easy)
             let updatedProgress = testService.getProgress(for: testChild)
-            guard updatedProgress.isPuzzleCompleted(puzzleId: "test1", difficulty: .easy) else {
+            guard updatedProgress.isPuzzleCompleted(puzzleId: "test1", difficulty: UserPreferences.DifficultySetting.easy) else {
                 results += "   ❌ Service puzzle completion failed\n"
                 allPassed = false
                 throw TestError.failed
@@ -624,9 +656,9 @@ struct TangramProgressServiceDebugView: View {
             results += "   ✅ Service puzzle completion works\n"
             
             // Test difficulty setting
-            testService.setLastSelectedDifficulty(childId: testChild, difficulty: .hard)
+            testService.setLastSelectedDifficulty(childId: testChild, difficulty: UserPreferences.DifficultySetting.hard)
             let finalProgress = testService.getProgress(for: testChild)
-            guard finalProgress.lastSelectedDifficulty == .hard else {
+            guard finalProgress.lastSelectedDifficulty == UserPreferences.DifficultySetting.hard else {
                 results += "   ❌ Service difficulty setting failed\n"
                 allPassed = false
                 throw TestError.failed
@@ -671,9 +703,9 @@ struct TangramProgressServiceDebugView: View {
             results += "   ✅ Hard difficulty mapping correct\n"
             
             // Test forPuzzleLevel static method
-            guard UserPreferences.DifficultySetting.forPuzzleLevel(1) == .easy,
-                  UserPreferences.DifficultySetting.forPuzzleLevel(3) == .normal,
-                  UserPreferences.DifficultySetting.forPuzzleLevel(5) == .hard else {
+            guard UserPreferences.DifficultySetting.forPuzzleLevel(1) == UserPreferences.DifficultySetting.easy,
+                  UserPreferences.DifficultySetting.forPuzzleLevel(3) == UserPreferences.DifficultySetting.normal,
+                  UserPreferences.DifficultySetting.forPuzzleLevel(5) == UserPreferences.DifficultySetting.hard else {
                 results += "   ❌ forPuzzleLevel method failed\n"
                 allPassed = false
                 throw TestError.failed
@@ -694,7 +726,7 @@ struct TangramProgressServiceDebugView: View {
             let testChild = "test-unlock-child"
             
             // Initially only first puzzle should be unlocked
-            let initialUnlocked = testService.getUnlockedPuzzles(for: testChild, difficulty: .easy, from: samplePuzzles)
+            let initialUnlocked = testService.getUnlockedPuzzles(for: testChild, difficulty: UserPreferences.DifficultySetting.easy, from: samplePuzzles)
             guard initialUnlocked.count == 1,
                   initialUnlocked.first?.id == "easy-01" else {
                 results += "   ❌ Initial unlock state incorrect\n"
@@ -704,8 +736,8 @@ struct TangramProgressServiceDebugView: View {
             results += "   ✅ Initial unlock state correct (only first puzzle)\n"
             
             // Complete first puzzle
-            testService.markPuzzleCompleted(childId: testChild, puzzleId: "easy-01", difficulty: .easy)
-            let afterFirst = testService.getUnlockedPuzzles(for: testChild, difficulty: .easy, from: samplePuzzles)
+            testService.markPuzzleCompleted(childId: testChild, puzzleId: "easy-01", difficulty: UserPreferences.DifficultySetting.easy)
+            let afterFirst = testService.getUnlockedPuzzles(for: testChild, difficulty: UserPreferences.DifficultySetting.easy, from: samplePuzzles)
             guard afterFirst.count == 2,
                   afterFirst.last?.id == "easy-02" else {
                 results += "   ❌ Sequential unlock after completion failed\n"
@@ -715,7 +747,7 @@ struct TangramProgressServiceDebugView: View {
             results += "   ✅ Sequential unlock after completion works\n"
             
             // Test next puzzle logic
-            let nextPuzzle = testService.getNextPuzzle(for: testChild, difficulty: .easy, from: samplePuzzles)
+            let nextPuzzle = testService.getNextPuzzle(for: testChild, difficulty: UserPreferences.DifficultySetting.easy, from: samplePuzzles)
             guard nextPuzzle?.id == "easy-02" else {
                 results += "   ❌ Next puzzle logic failed\n"
                 allPassed = false
@@ -734,7 +766,7 @@ struct TangramProgressServiceDebugView: View {
         results += "🎯 Testing DifficultySelectionViewModel...\n"
         do {
             // Create a mock service for testing
-            let mockService = MockPuzzleLibraryService(puzzles: samplePuzzles)
+            let mockService = MockTangramPuzzleLibraryService(puzzles: samplePuzzles)
             let testChild = "test-viewmodel-child"
             
             // Create ViewModel
@@ -772,8 +804,8 @@ struct TangramProgressServiceDebugView: View {
             results += "   ✅ ViewModel data loading works\n"
             
             // Test difficulty selection
-            if viewModel.canSelectDifficulty(.easy) {
-                viewModel.selectDifficulty(.easy)
+            if viewModel.canSelectDifficulty(UserPreferences.DifficultySetting.easy) {
+                viewModel.selectDifficulty(UserPreferences.DifficultySetting.easy)
                 
                 // Give callback a moment to execute
                 try await Task.sleep(nanoseconds: 10_000_000) // 0.01 seconds
@@ -789,9 +821,9 @@ struct TangramProgressServiceDebugView: View {
             }
             
             // Test helper methods
-            let progressText = viewModel.getProgressText(for: .easy)
-            let percentage = viewModel.getCompletionPercentage(for: .easy)
-            let description = viewModel.getDifficultyDescription(.easy)
+            let progressText = viewModel.getProgressText(for: UserPreferences.DifficultySetting.easy)
+            let percentage = viewModel.getCompletionPercentage(for: UserPreferences.DifficultySetting.easy)
+            let description = viewModel.getDifficultyDescription(UserPreferences.DifficultySetting.easy)
             
             guard !progressText.isEmpty,
                   percentage >= 0.0,
@@ -832,7 +864,7 @@ struct TangramProgressServiceDebugView: View {
 
 // MARK: - MockPuzzleLibraryService for Testing
 
-class MockPuzzleLibraryService: PuzzleLibraryProviding {
+class MockTangramPuzzleLibraryService: PuzzleLibraryProviding {
     private let mockPuzzles: [GamePuzzleData]
     
     init(puzzles: [GamePuzzleData]) {
@@ -847,12 +879,12 @@ class MockPuzzleLibraryService: PuzzleLibraryProviding {
     
     func savePuzzle(_ puzzle: GamePuzzleData) async throws {
         // Mock implementation - not used in our testing
-        throw NSError(domain: "MockPuzzleLibraryService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Mock doesn't support saving"])
+        throw NSError(domain: "MockTangramPuzzleLibraryService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Mock doesn't support saving"])
     }
     
     func deletePuzzle(id: String) async throws {
         // Mock implementation - not used in our testing
-        throw NSError(domain: "MockPuzzleLibraryService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Mock doesn't support deleting"])
+        throw NSError(domain: "MockTangramPuzzleLibraryService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Mock doesn't support deleting"])
     }
 }
 

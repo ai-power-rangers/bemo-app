@@ -170,11 +170,11 @@ extension UserPreferences.DifficultySetting {
     var puzzleLevels: [Int] {
         switch self {
         case .easy:
-            return [1, 2]      // 1-2 star puzzles
+            return TangramGameConstants.DifficultyProgression.StarRating.easyStars
         case .normal:
-            return [3, 4]      // 3-4 star puzzles
+            return TangramGameConstants.DifficultyProgression.StarRating.mediumStars
         case .hard:
-            return [5]         // 5 star puzzles
+            return TangramGameConstants.DifficultyProgression.StarRating.hardStars
         }
     }
     

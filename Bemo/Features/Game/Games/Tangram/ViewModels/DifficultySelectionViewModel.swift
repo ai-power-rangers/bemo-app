@@ -42,7 +42,8 @@ class DifficultySelectionViewModel {
             self.totalPuzzles = totalPuzzles
             self.completedPuzzles = completedPuzzles
             self.isUnlocked = isUnlocked
-            self.completionPercentage = totalPuzzles > 0 ? Double(completedPuzzles) / Double(totalPuzzles) * 100.0 : 0.0
+            self.completionPercentage = totalPuzzles > 0 ? 
+                Double(completedPuzzles) / Double(totalPuzzles) * TangramGameConstants.DifficultyProgression.percentageMultiplier : 0.0
         }
     }
     
@@ -192,23 +193,16 @@ class DifficultySelectionViewModel {
     
     /// Determine if a difficulty should be unlocked for the current user
     private func isDifficultyUnlocked(_ difficulty: UserPreferences.DifficultySetting, progress: TangramProgress) -> Bool {
-        switch difficulty {
-        case .easy:
-            // Easy is always unlocked
-            return true
-            
-        case .normal:
-            // Normal unlocks when user has some progress in Easy
-            let easyCompleted = progress.getCompletedCount(for: .easy)
-            return easyCompleted > 0
-            
-        case .hard:
-            // Hard unlocks when user has completed at least half of Normal
-            let normalStats = difficultyStats[.normal]
-            let normalCompleted = progress.getCompletedCount(for: .normal)
-            let normalTotal = normalStats?.totalPuzzles ?? 0
-            return normalTotal > 0 && Double(normalCompleted) / Double(normalTotal) >= 0.5
-        }
+        let easyCompleted = progress.getCompletedCount(for: UserPreferences.DifficultySetting.easy)
+        let mediumCompleted = progress.getCompletedCount(for: UserPreferences.DifficultySetting.normal)
+        let mediumTotal = difficultyStats[UserPreferences.DifficultySetting.normal]?.totalPuzzles ?? 0
+        
+        return TangramGameConstants.DifficultyProgression.isDifficultyUnlocked(
+            difficulty,
+            easyCompleted: easyCompleted,
+            mediumCompleted: mediumCompleted,
+            mediumTotal: mediumTotal
+        )
     }
     
     /// Determine which difficulty should be recommended to the user
@@ -246,7 +240,8 @@ class DifficultySelectionViewModel {
         let totalPuzzles = difficultyStats.values.reduce(0) { $0 + $1.totalPuzzles }
         let completedPuzzles = difficultyStats.values.reduce(0) { $0 + $1.completedPuzzles }
         
-        return totalPuzzles > 0 ? Double(completedPuzzles) / Double(totalPuzzles) * 100.0 : 0.0
+        return totalPuzzles > 0 ? 
+            Double(completedPuzzles) / Double(totalPuzzles) * TangramGameConstants.DifficultyProgression.percentageMultiplier : 0.0
     }
 }
 
