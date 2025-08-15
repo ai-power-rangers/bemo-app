@@ -44,29 +44,60 @@ struct TangramGameView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color("AppBackground"))
+            .background(
+                viewModel.currentPhase == .selectingPuzzle 
+                    ? TangramTheme.Backgrounds.editor 
+                    : TangramTheme.Backgrounds.gameScene
+            )
         }
         .onAppear {
-            // Configure navigation bar with app colors
-            let appearance = UINavigationBarAppearance()
-            appearance.configureWithOpaqueBackground()
-            appearance.backgroundColor = UIColor(Color("AppBackground"))
-            appearance.titleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
-            appearance.largeTitleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
-            appearance.shadowColor = .clear
-            appearance.shadowImage = UIImage()
-            
-            // Configure button appearance
-            let buttonAppearance = UIBarButtonItemAppearance()
-            buttonAppearance.normal.titleTextAttributes = [.foregroundColor: UIColor(Color("AppPrimaryTextColor"))]
-            appearance.buttonAppearance = buttonAppearance
-            appearance.backButtonAppearance = buttonAppearance
-            
+            updateNavigationBarAppearance()
+        }
+        .onChange(of: viewModel.currentPhase) { _, _ in
+            updateNavigationBarAppearance()
+        }
+    }
+    
+    // MARK: - Navigation Bar Configuration
+    
+    private func updateNavigationBarAppearance() {
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        
+        // Set background color based on current phase
+        let backgroundColor = switch viewModel.currentPhase {
+        case .selectingPuzzle:
+            UIColor(TangramTheme.Backgrounds.editor)  // Beige for library
+        case .playingPuzzle, .puzzleComplete:
+            UIColor(TangramTheme.Backgrounds.gameScene)  // White for game
+        }
+        
+        appearance.backgroundColor = backgroundColor
+        appearance.titleTextAttributes = [.foregroundColor: UIColor(TangramTheme.Text.primary)]
+        appearance.largeTitleTextAttributes = [.foregroundColor: UIColor(TangramTheme.Text.primary)]
+        appearance.shadowColor = .clear
+        appearance.shadowImage = UIImage()
+        
+        // Configure button appearance
+        let buttonAppearance = UIBarButtonItemAppearance()
+        buttonAppearance.normal.titleTextAttributes = [.foregroundColor: UIColor(TangramTheme.Text.primary)]
+        appearance.buttonAppearance = buttonAppearance
+        appearance.backButtonAppearance = buttonAppearance
+        
+        // Force update current navigation controller
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first,
+           let navigationController = window.rootViewController?.presentedViewController as? UINavigationController {
+            navigationController.navigationBar.standardAppearance = appearance
+            navigationController.navigationBar.scrollEdgeAppearance = appearance
+            navigationController.navigationBar.compactAppearance = appearance
+        } else {
+            // Fallback to global appearance
             UINavigationBar.appearance().standardAppearance = appearance
             UINavigationBar.appearance().scrollEdgeAppearance = appearance
             UINavigationBar.appearance().compactAppearance = appearance
-            UINavigationBar.appearance().tintColor = UIColor(Color("AppPrimaryTextColor"))
         }
+        UINavigationBar.appearance().tintColor = UIColor(TangramTheme.Text.primary)
     }
     
     // MARK: - Puzzle Selection View
@@ -78,12 +109,11 @@ struct TangramGameView: View {
                 // Search field
                 HStack {
                     Image(systemName: "magnifyingglass")
-                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.5))
+                        .foregroundColor(TangramTheme.Text.secondary)
                     TextField("Search puzzles...", text: $searchText)
-                        .foregroundColor(Color("AppPrimaryTextColor"))
                 }
                 .padding(8)
-                .background(Color("AppBackground"))
+                .background(Color.white.opacity(0.95))
                 .cornerRadius(8)
 
                 // Student difficulty (Default/Easy/Medium/Hard) as icon-only menu
@@ -95,9 +125,10 @@ struct TangramGameView: View {
                     Button("Hard", action: { difficultyOverride = .hard; viewModel.applyDifficultyOverride(.hard) })
                 } label: {
                     Image(systemName: "slider.horizontal.3")
+                        .foregroundColor(TangramTheme.UI.primaryButton)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(Color("AppBackground"))
+                        .background(Color.white.opacity(0.95))
                         .cornerRadius(8)
                 }
 
@@ -124,14 +155,16 @@ struct TangramGameView: View {
                     }
                 } label: {
                     Image(systemName: "line.3.horizontal.decrease.circle")
+                        .foregroundColor(TangramTheme.UI.primaryButton)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(Color("AppBackground"))
+                        .background(Color.white.opacity(0.95))
                         .cornerRadius(8)
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
+            .background(TangramTheme.Backgrounds.editor)
             
             Divider()
             
@@ -142,7 +175,7 @@ struct TangramGameView: View {
                     ProgressView()
                         .scaleEffect(1.5)
                     Text("Loading puzzles...")
-                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
+                        .foregroundColor(TangramTheme.Text.primary.opacity(0.6))
                 }
                 Spacer()
             } else if filteredPuzzles.isEmpty {
@@ -150,16 +183,16 @@ struct TangramGameView: View {
                 VStack(spacing: 24) {
                     Image(systemName: "square.grid.3x3.square")
                         .font(.system(size: 80))
-                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.4))
+                        .foregroundColor(TangramTheme.Text.primary.opacity(0.4))
                     
                     VStack(spacing: 8) {
                         Text("No Puzzles Found")
                             .font(.title2)
                             .fontWeight(.semibold)
-                            .foregroundColor(Color("AppPrimaryTextColor"))
+                            .foregroundColor(TangramTheme.Text.primary)
                         
                         Text("Try adjusting your search or filters")
-                            .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
+                            .foregroundColor(TangramTheme.Text.primary.opacity(0.6))
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -183,9 +216,11 @@ struct TangramGameView: View {
                 }
             }
         }
-        .background(Color("AppBackground"))
+        .background(TangramTheme.Backgrounds.editor)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(TangramTheme.Backgrounds.editor, for: .navigationBar)
         .toolbar {
             // Difficulty override control (per-game)
             ToolbarItem(placement: .navigationBarLeading) {
@@ -195,18 +230,17 @@ struct TangramGameView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 16))
-                            .foregroundColor(Color("AppPrimaryTextColor"))
                         Text("Back")
                             .font(.system(size: 16))
-                            .foregroundColor(Color("AppPrimaryTextColor"))
                     }
+                    .foregroundColor(TangramTheme.UI.primaryButton)
                 }
             }
             
             ToolbarItem(placement: .principal) {
                 Text("Tangram")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(Color("AppPrimaryTextColor"))
+                    .foregroundColor(TangramTheme.Text.primary)
             }
         }
     }
@@ -295,12 +329,14 @@ struct TangramGameView: View {
                 .ignoresSafeArea(edges: .bottom) // Only ignore bottom
             } else {
                 Text("No puzzle selected")
-                    .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
+                    .foregroundColor(TangramTheme.Text.primary.opacity(0.6))
             }
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(TangramTheme.Backgrounds.gameScene, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: {
@@ -309,11 +345,10 @@ struct TangramGameView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 16))
-                            .foregroundColor(Color("AppPrimaryTextColor"))
                         Text("Back")
                             .font(.system(size: 16))
-                            .foregroundColor(Color("AppPrimaryTextColor"))
                     }
+                    .foregroundColor(TangramTheme.UI.primaryButton)
                 }
             }
             
@@ -325,7 +360,7 @@ struct TangramGameView: View {
                     Text(viewModel.formattedTime)
                         .font(.system(size: 16, weight: .medium, design: .monospaced))
                 }
-                .foregroundColor(Color("AppPrimaryTextColor"))
+                .foregroundColor(TangramTheme.Text.primary)
             }
             
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -343,7 +378,7 @@ struct TangramGameView: View {
                                 .foregroundColor(.yellow)
                         }
                     }
-                    .foregroundColor(viewModel.currentHint != nil ? .yellow : Color("AppPrimaryTextColor"))
+                    .foregroundColor(viewModel.currentHint != nil ? .yellow : TangramTheme.Text.primary)
                     .scaleEffect(viewModel.currentHint != nil ? 1.1 : 1.0)
                     .animation(.easeInOut(duration: 0.2), value: viewModel.currentHint != nil)
                 }
@@ -432,11 +467,11 @@ struct TangramGameView: View {
             Text("Puzzle Complete!")
                 .font(.largeTitle)
                 .fontWeight(.bold)
-                .foregroundColor(Color("AppPrimaryTextColor"))
+                .foregroundColor(TangramTheme.Text.primary)
             
             Text("Amazing work! You solved \"\(viewModel.selectedPuzzle?.name ?? "the puzzle")\"!")
                 .font(.title3)
-                .foregroundColor(Color("AppPrimaryTextColor").opacity(0.8))
+                .foregroundColor(TangramTheme.Text.primary.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
@@ -447,11 +482,11 @@ struct TangramGameView: View {
                     Image(systemName: "clock.fill")
                         .foregroundColor(.blue)
                     Text("Time:")
-                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
+                        .foregroundColor(TangramTheme.Text.primary.opacity(0.7))
                     Spacer()
                     Text(viewModel.formattedTime)
                         .font(.system(size: 18, weight: .semibold, design: .monospaced))
-                        .foregroundColor(Color("AppPrimaryTextColor"))
+                        .foregroundColor(TangramTheme.Text.primary)
                 }
                 .padding(.horizontal, 30)
                 
@@ -461,11 +496,11 @@ struct TangramGameView: View {
                         Image(systemName: "lightbulb.fill")
                             .foregroundColor(.yellow)
                         Text("Hints Used:")
-                            .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
+                            .foregroundColor(TangramTheme.Text.primary.opacity(0.7))
                         Spacer()
                         Text("\(viewModel.hintHistory.count)")
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(Color("AppPrimaryTextColor"))
+                            .foregroundColor(TangramTheme.Text.primary)
                     }
                     .padding(.horizontal, 30)
                 }
@@ -475,7 +510,7 @@ struct TangramGameView: View {
                     Image(systemName: "star.fill")
                         .foregroundColor(difficultyColor)
                     Text("Difficulty:")
-                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
+                        .foregroundColor(TangramTheme.Text.primary.opacity(0.7))
                     Spacer()
                     Text(difficultyName)
                         .font(.system(size: 18, weight: .semibold))
@@ -486,7 +521,7 @@ struct TangramGameView: View {
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color("AppBackground").opacity(0.95))
+                    .fill(TangramTheme.Backgrounds.panel.opacity(0.95))
             )
             .padding(.horizontal, 20)
             
@@ -527,10 +562,12 @@ struct TangramGameView: View {
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 20)
-                .fill(Color("AppBackground"))
+                .fill(TangramTheme.Backgrounds.panel)
                 .shadow(radius: 10)
         )
         .padding()
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(TangramTheme.Backgrounds.gameScene, for: .navigationBar)
     }
 }
 
@@ -563,13 +600,13 @@ struct FilterChip: View {
                 }
                 Text(title)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(Color("AppPrimaryTextColor"))
+                    .foregroundColor(TangramTheme.Text.primary)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 15)
-                    .fill(isSelected ? color.opacity(0.2) : Color("AppBackground").opacity(0.3))
+                    .fill(isSelected ? color.opacity(0.2) : TangramTheme.Backgrounds.panel.opacity(0.3))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 15)
@@ -651,13 +688,13 @@ struct PuzzleThumbnailView: View {
                     }
                     .padding(.vertical, 4)
                     .frame(maxWidth: .infinity)
-                    .background(Color("AppBackground"))
+                    .background(TangramTheme.Backgrounds.editor)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color("AppPrimaryTextColor").opacity(0.2), lineWidth: 1)
+                    .stroke(TangramTheme.Text.primary.opacity(0.2), lineWidth: 1)
             )
             .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
         }

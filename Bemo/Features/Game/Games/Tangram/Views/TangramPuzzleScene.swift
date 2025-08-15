@@ -24,7 +24,7 @@ class TangramPuzzleScene: SKScene {
     
     // MARK: - Section Bounds
     
-    private var targetBounds: CGRect = .zero
+    internal var targetBounds: CGRect = .zero
     private var cvMiniBounds: CGRect = .zero
     internal var physicalBounds: CGRect = .zero  // Internal for extensions
     
@@ -63,9 +63,17 @@ class TangramPuzzleScene: SKScene {
     internal var constructionGroups: [ConstructionGroup] = []  // Internal for extensions
     // Per-group anchor mapping and associations
     var mappingService: TangramRelativeMappingService = TangramRelativeMappingService()
+    
+    // MARK: - Unified Validation
+    internal var validationBridge: CVValidationBridge?  // Bridge to unified validation engine
+    internal var gameViewModel: TangramGameViewModel?  // Reference to view model for difficulty
     internal var pieceInvalidStreak: [String: Int] = [:]  // Internal for extensions
     internal let invalidStreakThreshold = 5  // Internal for extensions
     internal var targetDisplayScale: CGFloat = 0.8  // Internal for extensions
+    internal var topMirrorContent: SKNode!  // Top-panel mirror of physical world
+    // Orientation feedback handled by validation engine nudges only; no local overlays
+    internal var lastMotionAt: [String: TimeInterval] = [:]  // Per-piece last motion timestamp (position/rotation/flip)
+    internal let settleDwell: TimeInterval = 0.4  // Seconds to consider a piece settled after last motion
     
     // MARK: - Touch Tracking
     
@@ -122,6 +130,9 @@ class TangramPuzzleScene: SKScene {
         backgroundColor = SKColor(named: "GameBackground") ?? SKColor.systemBackground
         setupSections()
         setupSectionBackgrounds()
+        
+        // Initialize validation bridge with current difficulty
+        validationBridge = CVValidationBridge(scene: self, difficulty: difficultySetting)
     }
     
     private func setupSections() {
@@ -147,29 +158,16 @@ class TangramPuzzleScene: SKScene {
         
         targetBounds = CGRect(x: 0, y: topSectionY - sectionHeight/2, width: size.width, height: sectionHeight)
         
-        // MINI CV DISPLAY - Small display in top-right corner of top panel
-        let miniDisplaySize: CGFloat = min(size.width * 0.25, 150)  // 25% of width or 150px max
+        // Remove mini CV display: pieces render only in the main top panel now
         cvMiniDisplay = SKNode()
-        // Position relative to targetSection (which is centered).
-        // Place cvContent's origin (0,0) to map to the bottom-left corner of the mini square to avoid extra translation.
-        cvMiniDisplay.position = CGPoint(
-            x: (size.width / 2) - miniDisplaySize + 20,  // left edge of mini square inside targetSection
-            y: (sectionHeight / 2) - miniDisplaySize + 20   // bottom edge of mini square
-        )
-        cvMiniDisplay.zPosition = 10  // Above target content
-        targetSection.addChild(cvMiniDisplay)  // Add as child of target section
-        
-        cvMiniBounds = CGRect(
-            x: size.width - miniDisplaySize - 20,
-            y: topSectionY + sectionHeight/2 - miniDisplaySize - 20,
-            width: miniDisplaySize,
-            height: miniDisplaySize
-        )
-        // Add a dedicated content container for correct scaling/mapping
         cvContent = SKNode()
-        cvContent.name = "cvContent"
-        cvContent.position = .zero
-        cvMiniDisplay.addChild(cvContent)
+
+        // Top mirror content (shows mirrored physical pieces in the top panel)
+        topMirrorContent = SKNode()
+        topMirrorContent.name = "topMirrorContent"
+        topMirrorContent.position = .zero  // centered in targetSection
+        topMirrorContent.zPosition = 2     // above silhouettes so it's clearly visible
+        targetSection.addChild(topMirrorContent)
         
         // BOTTOM - Physical World Section
         physicalWorldSection = SKNode()
@@ -210,7 +208,7 @@ class TangramPuzzleScene: SKScene {
         // Add label for CV mini display
         let cvLabel = SKLabelNode(text: "CV")
         cvLabel.fontSize = 10
-        cvLabel.fontColor = SKColor.systemBlue.withAlphaComponent(0.7)
+        cvLabel.fontColor = SKColor(red: 0.18, green: 0.50, blue: 0.93, alpha: 0.7)
         cvLabel.position = CGPoint(x: 0, y: -miniDisplaySize/2 + 5)
         cvLabel.zPosition = 1
         cvMiniDisplay.addChild(cvLabel)
@@ -242,20 +240,67 @@ class TangramPuzzleScene: SKScene {
         // Create physical pieces
         createPhysicalPieces(puzzle)
         
+        // Pre-populate top mirror from current physical piece poses so the top panel is populated immediately
+        prepopulateTopMirrorFromPhysical()
+        
         // Emit initial CV frame
         emitCVFrameUpdate()
+    }
+    
+    /// Create top mirror ghosts at puzzle load based on physical piece positions
+    private func prepopulateTopMirrorFromPhysical() {
+        guard let mirror = topMirrorContent else { return }
+        
+        // Clear existing ghosts (keep any nudge overlays if present)
+        mirror.enumerateChildNodes(withName: "mirror_*") { node, _ in node.removeFromParent() }
+        
+        // Compute uniform scale mapping physical bounds to target bounds (same as CV bridge)
+        let physSize = physicalBounds.size
+        let topSize = CGSize(width: targetBounds.width, height: targetBounds.height)
+        guard physSize.width > 0, physSize.height > 0, topSize.width > 0, topSize.height > 0 else { return }
+        let sx = topSize.width / physSize.width
+        let sy = topSize.height / physSize.height
+        let uniform = min(sx, sy)
+        topMirrorContent.setScale(uniform)
+        topMirrorContent.position = .zero
+        
+        // Create a ghost for each physical piece at its current pose
+        for piece in availablePieces {
+            guard let pieceId = piece.name, let pieceType = piece.pieceType else { continue }
+            let nodeName = "mirror_\(pieceId)"
+            if let existing = mirror.childNode(withName: nodeName) as? SKShapeNode { existing.removeFromParent() }
+            let ghost = createGhostPiece(pieceType: pieceType, at: .zero, rotation: 0)
+            ghost.name = nodeName
+            // Position uses physical world coordinates; origins are both centered
+            ghost.position = piece.position
+            ghost.setScale(1.0)
+            ghost.xScale = piece.isFlipped ? -abs(ghost.xScale) : abs(ghost.xScale)
+            ghost.zRotation = piece.zRotation
+            // Visual parity with live mirror rendering
+            let baseColor = TangramColors.Sprite.uiColor(for: pieceType)
+            ghost.fillColor = baseColor.withAlphaComponent(0.2)
+            ghost.strokeColor = baseColor.withAlphaComponent(0.5)
+            ghost.lineWidth = 1.0
+            mirror.addChild(ghost)
+        }
     }
     
     private func clearAllSections() {
         // Only clear if sections have been initialized
         guard targetSection != nil else { return }
         
-        // Clear all child nodes except backgrounds and mini CV display
+        // Clear all child nodes except backgrounds, labels, CV mini display, and the top mirror container
         targetSection.children.forEach { node in
-            // Keep backgrounds, labels, and the CV mini display itself
-            if node !== cvMiniDisplay && !(node is SKShapeNode) && !(node is SKLabelNode) {
-                node.removeFromParent()
-            }
+            // Keep backgrounds, labels, the CV mini display itself, and the top mirror container
+            if node === cvMiniDisplay { return }
+            if node === topMirrorContent { return }
+            if (node is SKShapeNode) || (node is SKLabelNode) { return }
+            node.removeFromParent()
+        }
+        // Ensure top mirror container exists and is attached, then clear its mirrored children
+        if let mirror = topMirrorContent {
+            if mirror.parent == nil { targetSection.addChild(mirror) }
+            mirror.enumerateChildNodes(withName: "mirror_*") { node, _ in node.removeFromParent() }
         }
         
         // Clear CV mini display contents except its background and persistent content container
@@ -377,6 +422,9 @@ class TangramPuzzleScene: SKScene {
                         rotation: newRotation
                     ))
                     lastEmittedRotations[pieceId] = newRotation
+                    // Record motion for settle gating
+                    userData = userData ?? NSMutableDictionary()
+                    lastMotionAt[pieceId] = CACurrentMediaTime()
                     
                     // Also emit CV frame event
                     emitCVFrameUpdate()
@@ -433,6 +481,9 @@ class TangramPuzzleScene: SKScene {
                     rotation: selected.zRotation
                 ))
                 lastEmittedPositions[pieceId] = selected.position
+                // Record motion for settle gating
+                userData = userData ?? NSMutableDictionary()
+                lastMotionAt[pieceId] = CACurrentMediaTime()
                 
                 // Also emit CV frame event for top-right display
                 emitCVFrameUpdate()
@@ -493,6 +544,9 @@ class TangramPuzzleScene: SKScene {
             // Emit final position in CV frame
             lastEmittedPositions[pieceId] = selected.position
             lastEmittedRotations[pieceId] = selected.zRotation
+            // Record motion end time
+            userData = userData ?? NSMutableDictionary()
+            lastMotionAt[pieceId] = CACurrentMediaTime()
             emitCVFrameUpdate()
         }
         
@@ -545,6 +599,8 @@ class TangramPuzzleScene: SKScene {
                 piece.flip()
                 if let pieceId = piece.name {
                     eventBus.emit(.pieceFlipped(id: pieceId, isFlipped: piece.isFlipped))
+                    // Record motion for settle gating
+                    lastMotionAt[pieceId] = CACurrentMediaTime()
                 }
                 let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                 impactFeedback.impactOccurred()
@@ -612,7 +668,7 @@ class TangramPuzzleScene: SKScene {
             // Show text hint above the target
             let label = SKLabelNode(text: content.message)
             label.fontSize = 16
-            label.fontColor = .white
+            label.fontColor = SKColor.white
             label.fontName = "System-Bold"
             
             let background = SKShapeNode(rectOf: CGSize(width: label.frame.width + 20, height: 30), cornerRadius: 15)
@@ -624,7 +680,46 @@ class TangramPuzzleScene: SKScene {
             
             nudgeNode.addChild(background)
             nudgeNode.addChild(label)
-            
+            // Optional ghost demo for flip
+            if let visual = content.visualHint, case .flipDemo = visual {
+                // Align ghost to the target silhouette centroid and rotation for parity with the top panel
+                let targetCentroid = (targetNode.userData?["centroidSK"] as? NSValue)?.cgPointValue ?? .zero
+                let expectedRot = targetNode.userData?["expectedZRotationSK"] as? CGFloat ?? 0
+                let ghost = createGhostPiece(pieceType: pieceType, at: targetCentroid, rotation: expectedRot)
+                ghost.alpha = 0.35
+                nudgeNode.addChild(ghost)
+                // Flip demonstration: quick scaleX mirror animation relative to its own anchor
+                let flipOut = SKAction.scaleX(to: -1.0, duration: 0.25)
+                let flipBack = SKAction.scaleX(to: 1.0, duration: 0.25)
+                let wait = SKAction.wait(forDuration: 0.2)
+                ghost.run(SKAction.sequence([flipOut, wait, flipBack]))
+            } else if let visual = content.visualHint, case .rotationDemo(let current, let target) = visual {
+                // Rotation demo at silhouette: show current orientation ghost then rotate to expected
+                let targetCentroid = (targetNode.userData?["centroidSK"] as? NSValue)?.cgPointValue ?? .zero
+                let currentGhost = createGhostPiece(pieceType: pieceType, at: targetCentroid, rotation: current)
+                currentGhost.alpha = 0.35
+                nudgeNode.addChild(currentGhost)
+                // Draw arc path around centroid
+                let arc = SKShapeNode()
+                let path = CGMutablePath()
+                let radius: CGFloat = 60
+                func norm(_ a: CGFloat) -> CGFloat { var x = a; while x > .pi { x -= 2 * .pi }; while x < -.pi { x += 2 * .pi }; return x }
+                let a0 = norm(current)
+                let a1 = norm(target)
+                var d = a1 - a0; if d > .pi { d -= 2 * .pi }; if d < -.pi { d += 2 * .pi }
+                let clockwise = d < 0
+                path.addArc(center: targetCentroid, radius: radius, startAngle: a0, endAngle: a1, clockwise: clockwise)
+                arc.path = path
+                let arcColor = TangramColors.Sprite.uiColor(for: pieceType)
+                arc.strokeColor = arcColor
+                arc.lineWidth = 2
+                nudgeNode.addChild(arc)
+                // Animate rotation
+                let rotate = SKAction.rotate(toAngle: target, duration: 0.8, shortestUnitArc: true)
+                rotate.timingMode = .easeOut
+                currentGhost.run(rotate)
+            }
+
         case .directed:
             // Show arrow pointing to correct position
             if let visualHint = content.visualHint,
@@ -644,12 +739,14 @@ class TangramPuzzleScene: SKScene {
 
                 // Slide demonstration: show a ghost piece sliding along the indicated direction into place
                 let offset: CGFloat = 60
-                let start = CGPoint(x: -cos(direction) * offset, y: -sin(direction) * offset)
-                let ghost = createGhostPiece(pieceType: pieceType, at: start, rotation: 0)
+                let targetCentroid = (targetNode.userData?["centroidSK"] as? NSValue)?.cgPointValue ?? .zero
+                let start = CGPoint(x: targetCentroid.x - cos(direction) * offset, y: targetCentroid.y - sin(direction) * offset)
+                let expectedRot = targetNode.userData?["expectedZRotationSK"] as? CGFloat ?? 0
+                let ghost = createGhostPiece(pieceType: pieceType, at: start, rotation: expectedRot)
                 ghost.alpha = 0.35
                 nudgeNode.addChild(ghost)
 
-                let slide = SKAction.move(to: .zero, duration: 0.8)
+                let slide = SKAction.move(to: targetCentroid, duration: 0.8)
                 slide.timingMode = .easeOut
                 ghost.run(SKAction.sequence([
                     slide,
@@ -661,7 +758,7 @@ class TangramPuzzleScene: SKScene {
             if !content.message.isEmpty {
                 let label = SKLabelNode(text: content.message)
                 label.fontSize = 14
-                label.fontColor = .systemYellow
+                label.fontColor = TangramTheme.Hint.skColor
                 label.position = CGPoint(x: 0, y: 60)
                 nudgeNode.addChild(label)
             }
@@ -712,36 +809,182 @@ class TangramPuzzleScene: SKScene {
     private func showSmartNudge(for piece: PuzzlePieceNode, content: NudgeContent) { /* no-op for physical realism */ }
     
     private func nudgeLevelColor(_ level: NudgeLevel) -> SKColor {
-        switch level {
-        case .none: return .clear
-        case .visual: return .systemBlue
-        case .gentle: return .systemTeal
-        case .specific: return .systemOrange
-        case .directed: return .systemYellow
-        case .solution: return .systemGreen
+        return TangramTheme.Nudge.skColor(for: level)
+    }
+
+    // MARK: - Motion/Settlement Helpers
+
+    /// A piece is considered settled if it hasn't moved/rotated/flipped for at
+    /// least `settleDwell` seconds. Movement events record timestamps in
+    /// `lastMotionAt`.
+    internal func isPieceSettled(_ pieceId: String, now: TimeInterval = CACurrentMediaTime()) -> Bool {
+        if let last = lastMotionAt[pieceId] {
+            return (now - last) >= settleDwell
         }
+        return false
+    }
+
+    // MARK: - Top Mirror Feedback/Nudges
+
+    /// Shows a nudge bubble anchored near the mirrored piece in the top panel
+    internal func showTopNudgeNearMirror(pieceId: String, content: NudgeContent) {
+        guard let mirrorNode = topMirrorContent?.childNode(withName: "mirror_\(pieceId)") else { return }
+
+        // Remove any existing nudge for this piece
+        topMirrorContent?.childNode(withName: "mirror_nudge_\(pieceId)")?.removeFromParent()
+
+        let nudgeNode = SKNode()
+        nudgeNode.name = "mirror_nudge_\(pieceId)"
+        // Position slightly above the mirrored piece
+        nudgeNode.position = CGPoint(x: mirrorNode.position.x, y: mirrorNode.position.y + 50)
+        nudgeNode.zPosition = (mirrorNode.zPosition + 10)
+
+        // Visual content similar to target nudges, with optional demos
+        switch content.level {
+        case .visual, .gentle, .specific, .directed, .solution:
+            let label = SKLabelNode(text: content.message.isEmpty ? "Hint" : content.message)
+            label.fontSize = 16
+            label.fontColor = SKColor.white
+            label.fontName = "System-Bold"
+            label.verticalAlignmentMode = .center
+            label.horizontalAlignmentMode = .center
+
+            let padding: CGFloat = 14
+            // Use a fixed-height rounded rect, width based on label's calculated frame after alignment settings
+            let bgSize = CGSize(width: max(100, label.frame.width + padding * 2), height: 34)
+            let background = SKShapeNode(rectOf: bgSize, cornerRadius: 17)
+            background.fillColor = nudgeLevelColor(content.level)
+            background.strokeColor = .clear
+            background.zPosition = -1
+
+            nudgeNode.addChild(background)
+            nudgeNode.addChild(label)
+
+            // Render rotation/flip demos near the mirrored piece when provided
+            if let visual = content.visualHint {
+                switch visual {
+                case .rotationDemo(let current, let target):
+                    // Determine piece type and color
+                    let resolvedType: TangramPieceType = availablePieces.first(where: { $0.name == pieceId })?.pieceType ?? .smallTriangle1
+                    let ghost = createGhostPiece(pieceType: resolvedType, at: mirrorNode.position, rotation: current)
+                    ghost.alpha = 0.35
+                    ghost.zPosition = (mirrorNode.zPosition + 5)
+                    topMirrorContent?.addChild(ghost)
+
+                    // Draw arc indicating rotation direction (shortest path)
+                    let arc = SKShapeNode()
+                    let path = CGMutablePath()
+                    let radius: CGFloat = 60
+                    // Normalize angles to [-pi, pi]
+                    func norm(_ a: CGFloat) -> CGFloat { var x = a; while x > .pi { x -= 2 * .pi }; while x < -.pi { x += 2 * .pi }; return x }
+                    let a0 = norm(current)
+                    let a1 = norm(target)
+                    var delta = a1 - a0
+                    if delta > .pi { delta -= 2 * .pi }
+                    if delta < -.pi { delta += 2 * .pi }
+                    let clockwise = delta < 0
+                    path.addArc(center: mirrorNode.position, radius: radius, startAngle: a0, endAngle: a1, clockwise: clockwise)
+                    arc.path = path
+                    let arcColor = TangramColors.Sprite.uiColor(for: resolvedType)
+                    arc.strokeColor = arcColor
+                    arc.lineWidth = 2
+                    arc.zPosition = ghost.zPosition + 1
+                    topMirrorContent?.addChild(arc)
+
+                    // Animate rotation demo then fade out
+                    let rotate = SKAction.rotate(toAngle: target, duration: 0.8, shortestUnitArc: true)
+                    rotate.timingMode = .easeOut
+                    let hold = SKAction.wait(forDuration: max(0.2, content.duration - 1.2))
+                    let fade = SKAction.fadeOut(withDuration: 0.2)
+                    let remove = SKAction.removeFromParent()
+                    ghost.run(SKAction.sequence([rotate, hold, fade, remove]))
+                    arc.run(SKAction.sequence([SKAction.wait(forDuration: content.duration - 0.2), fade, remove]))
+
+                case .flipDemo:
+                    // Show flip demonstration using a ghost aligned to the mirror
+                    let resolvedType: TangramPieceType = availablePieces.first(where: { $0.name == pieceId })?.pieceType ?? .smallTriangle1
+                    let ghost = createGhostPiece(pieceType: resolvedType, at: mirrorNode.position, rotation: (mirrorNode.zRotation))
+                    ghost.alpha = 0.35
+                    ghost.zPosition = (mirrorNode.zPosition + 5)
+                    topMirrorContent?.addChild(ghost)
+                    let flipOut = SKAction.scaleX(to: -1.0, duration: 0.25)
+                    let wait = SKAction.wait(forDuration: 0.2)
+                    let flipBack = SKAction.scaleX(to: 1.0, duration: 0.25)
+                    let fade = SKAction.fadeOut(withDuration: 0.2)
+                    let remove = SKAction.removeFromParent()
+                    ghost.run(SKAction.sequence([flipOut, wait, flipBack, SKAction.wait(forDuration: max(0.2, content.duration - 0.7)), fade, remove]))
+
+                default:
+                    break
+                }
+            }
+        default:
+            break
+        }
+
+        topMirrorContent?.addChild(nudgeNode)
+
+        // Auto-remove after duration
+        let fadeOut = SKAction.sequence([
+            SKAction.wait(forDuration: max(1.2, content.duration - 0.3)),
+            SKAction.fadeOut(withDuration: 0.25),
+            SKAction.removeFromParent()
+        ])
+        nudgeNode.run(fadeOut)
+    }
+
+    /// Shows a brief checkmark near the mirrored piece when orientation (rotation/flip) is correct
+    internal func showMirrorCheckmark(for pieceId: String) {
+        guard let mirrorNode = topMirrorContent?.childNode(withName: "mirror_\(pieceId)") else { return }
+        let checkName = "mirror_check_\(pieceId)"
+        topMirrorContent?.childNode(withName: checkName)?.removeFromParent()
+
+        let checkmark = SKLabelNode(text: "✓")
+        checkmark.name = checkName
+        checkmark.fontSize = 28
+        checkmark.fontName = "System-Bold"
+        checkmark.fontColor = TangramTheme.Validation.correctSK
+        checkmark.position = CGPoint(x: mirrorNode.position.x, y: mirrorNode.position.y + 56)
+        checkmark.zPosition = mirrorNode.zPosition + 20
+        topMirrorContent?.addChild(checkmark)
+
+        let seq = SKAction.sequence([
+            SKAction.group([
+                SKAction.fadeAlpha(to: 1.0, duration: 0.08),
+                SKAction.scale(to: 1.25, duration: 0.08)
+            ]),
+            SKAction.wait(forDuration: 0.9),
+            SKAction.fadeOut(withDuration: 0.25),
+            SKAction.removeFromParent()
+        ])
+        checkmark.run(seq)
     }
     
     // MARK: - Helper Methods
     
-    private func createGhostPiece(pieceType: TangramPieceType, at position: CGPoint, rotation: CGFloat) -> SKShapeNode {
-        // Create a semi-transparent outline of the piece
+    func createGhostPiece(pieceType: TangramPieceType, at position: CGPoint, rotation: CGFloat) -> SKShapeNode {
+        // Create a semi-transparent outline of the piece (centered at origin by centroid so node.pos is centroid)
         let vertices = TangramGameGeometry.normalizedVertices(for: pieceType)
         let scaledVertices = TangramGameGeometry.scaleVertices(vertices, by: TangramGameConstants.visualScale * 0.8)
-        
+
+        // Center vertices around centroid to match bottom-piece positioning semantics
+        let centroid = TangramGameGeometry.centerOfVertices(scaledVertices)
+        let centeredVertices = scaledVertices.map { CGPoint(x: $0.x - centroid.x, y: $0.y - centroid.y) }
+
         let path = CGMutablePath()
-        if let first = scaledVertices.first {
+        if let first = centeredVertices.first {
             path.move(to: first)
-            for vertex in scaledVertices.dropFirst() {
+            for vertex in centeredVertices.dropFirst() {
                 path.addLine(to: vertex)
             }
             path.closeSubpath()
         }
-        
+
         let ghost = SKShapeNode(path: path)
-        ghost.strokeColor = .systemGreen
+        let color = TangramColors.Sprite.uiColor(for: pieceType)
+        ghost.strokeColor = color
         ghost.lineWidth = 2
-        ghost.fillColor = .systemGreen.withAlphaComponent(0.2)
+        ghost.fillColor = color.withAlphaComponent(0.2)
         ghost.position = position
         ghost.zRotation = rotation
         ghost.name = "ghost_\(pieceType.rawValue)"
@@ -923,22 +1166,36 @@ class TangramPuzzleScene: SKScene {
         hintPiece.isUserInteractionEnabled = false
         hintPiece.zPosition = 500
         
-        // Find starting position - look for an existing piece of this type or use default
-        let startPos: CGPoint
-        if let existingPiece = availablePieces.first(where: { 
+        // Determine starting pose from the mirrored piece in the TOP panel when possible
+        var startPos: CGPoint = CGPoint(x: pose.centroidInContainer.x, y: -100)
+        var startRotation: CGFloat = 0
+        var startIsFlipped: Bool = false
+        if let physPiece = availablePieces.first(where: {
+            ($0.userData?["pieceType"] as? String) == hint.targetPiece.rawValue &&
+            !($0.userData?["validatedTargetId"] != nil)
+        }), let pieceId = physPiece.name, let mirror = topMirrorContent?.childNode(withName: "mirror_\(pieceId)") as? SKShapeNode {
+            // Convert mirror position into container space
+            let inSection = topMirrorContent.convert(mirror.position, to: targetSection)
+            if let container = targetSection.childNode(withName: "puzzleContainer") {
+                startPos = container.convert(inSection, from: targetSection)
+            } else {
+                startPos = inSection
+            }
+            startRotation = mirror.zRotation
+            startIsFlipped = mirror.xScale < 0
+        } else if let existingPiece = availablePieces.first(where: {
             ($0.userData?["pieceType"] as? String) == hint.targetPiece.rawValue &&
             !($0.userData?["validatedTargetId"] != nil)
         }) {
-            // Start from actual piece position, converted into puzzleContainer space
+            // Fallback to bottom piece converted into container space
             let pieceScenePos = physicalWorldSection.convert(existingPiece.position, to: self)
             if let container = targetSection.childNode(withName: "puzzleContainer") {
                 startPos = container.convert(pieceScenePos, from: self)
             } else {
                 startPos = self.convert(pieceScenePos, to: targetSection)
             }
-        } else {
-            // Start from a default position below the silhouette
-            startPos = CGPoint(x: pose.centroidInContainer.x, y: -100)
+            startRotation = existingPiece.zRotation
+            startIsFlipped = existingPiece.isFlipped
         }
         
         hintPiece.position = startPos
@@ -949,11 +1206,9 @@ class TangramPuzzleScene: SKScene {
         }
         // Scale hint to match silhouette display scale so rotation visually matches
         hintPiece.setScale(pose.displayScale)
-        
-        // Apply flip if needed for parallelogram BEFORE animation
-        if hint.targetPiece == .parallelogram && pose.isFlipped {
-            hintPiece.flip()
-        }
+        // Initialize rotation/flip from current mirrored/bottom state
+        hintPiece.zRotation = startRotation
+        if startIsFlipped { hintPiece.flip() }
         
         // Create animation sequence showing the solution path
         let fadeIn = SKAction.fadeAlpha(to: 0.6, duration: 0.3)
@@ -980,16 +1235,18 @@ class TangramPuzzleScene: SKScene {
         let fadeOut = SKAction.fadeAlpha(to: 0.0, duration: 0.4)
         let remove = SKAction.removeFromParent()
         
-        // Run full animation sequence
-        let fullAnimation = SKAction.sequence([
-            fadeIn,
-            rotateAction,
-            moveAction,
-            pulseRepeat,
-            wait,
-            fadeOut,
-            remove
-        ])
+        // Optional Step 0: Flip demo first if needed (parallelogram parity logic)
+        var actions: [SKAction] = [fadeIn]
+        if hint.targetPiece == .parallelogram {
+            // Flip is needed when current parity matches target parity (inverted logic)
+            if startIsFlipped == pose.isFlipped {
+                let flipOut = SKAction.scaleX(to: -hintPiece.xScale, duration: 0.25)
+                let waitFlip = SKAction.wait(forDuration: 0.1)
+                actions.append(contentsOf: [flipOut, waitFlip])
+            }
+        }
+        actions.append(contentsOf: [rotateAction, moveAction, pulseRepeat, wait, fadeOut, remove])
+        let fullAnimation = SKAction.sequence(actions)
         
         hintPiece.run(fullAnimation) { [weak self] in
             self?.hintNode = nil

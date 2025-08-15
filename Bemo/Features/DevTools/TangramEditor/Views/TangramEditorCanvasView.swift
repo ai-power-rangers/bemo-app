@@ -20,12 +20,14 @@ struct TangramEditorCanvasView: View {
             // State indicator - shows current editor state
             Text(viewModel.currentStateDescription)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(TangramTheme.Text.secondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Capsule().fill(Color.blue.opacity(0.1)))
+                .background(Capsule().fill(Color.white))
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal)
                 .padding(.vertical, 8)
+                .background(Color.white)
             
             // Main Canvas
             ZStack {
@@ -34,7 +36,7 @@ struct TangramEditorCanvasView: View {
                         canvasView
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.white)
+                    .background(TangramTheme.Backgrounds.panel)
                     .onAppear {
                         canvasSize = geometry.size
                         viewModel.uiState.currentCanvasSize = geometry.size
@@ -52,20 +54,20 @@ struct TangramEditorCanvasView: View {
                     HStack {
                         Text("\(viewModel.uiState.selectedCanvasPoints.count) point(s) selected")
                             .font(.caption)
-                            .foregroundColor(.white)
+                            .foregroundColor(TangramTheme.Text.onColor)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .background(Color.blue.opacity(0.8))
+                            .background(TangramTheme.UI.primaryButton.opacity(0.8))
                             .cornerRadius(8)
                         
                         Button(action: { viewModel.proceedToPendingPiece() }) {
                             Text("Next")
                                 .font(.caption)
                                 .fontWeight(.medium)
-                                .foregroundColor(.white)
+                                .foregroundColor(TangramTheme.Text.onColor)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 6)
-                                .background(Color.green)
+                                .background(TangramTheme.UI.success)
                                 .cornerRadius(8)
                         }
                     }
@@ -152,7 +154,7 @@ struct TangramEditorCanvasView: View {
                     path.addLine(to: CGPoint(x: size.width, y: y))
                 }
             }
-            context.stroke(path, with: .color(.gray.opacity(0.1)), lineWidth: 0.5)
+            context.stroke(path, with: .color(TangramTheme.DevTools.gridLine), lineWidth: 0.5)
         }
     }
     
@@ -300,7 +302,7 @@ struct TangramEditorCanvasView: View {
     private func getConnectionPointColors(for point: TangramEditorViewModel.ConnectionPoint, isSelected: Bool) -> (fill: Color, stroke: Color) {
         if isSelected {
             // Selected points are green
-            return (fill: Color.green.opacity(0.8), stroke: Color.green)
+            return (fill: TangramTheme.UI.success.opacity(0.8), stroke: TangramTheme.UI.success)
         } else {
             // Check if we're in pending connection state and this type is needed
             if case .selectingPendingConnections = viewModel.editorState {
@@ -325,25 +327,25 @@ struct TangramEditorCanvasView: View {
                 case .vertex:
                     // Show as available if we need more vertices on pending piece
                     if pendingVertexCount < canvasVertexCount {
-                        return (fill: Color.blue.opacity(0.3), stroke: Color.blue.opacity(0.5))
+                        return (fill: TangramTheme.UI.primaryButton.opacity(0.3), stroke: TangramTheme.UI.primaryButton.opacity(0.5))
                     } else {
-                        return (fill: Color.gray.opacity(0.2), stroke: Color.gray.opacity(0.3))
+                        return (fill: TangramTheme.UI.disabled.opacity(0.2), stroke: TangramTheme.UI.disabled.opacity(0.3))
                     }
                 case .edge:
                     // Show as available if we need more edges on pending piece
                     if pendingEdgeCount < canvasEdgeCount {
-                        return (fill: Color.orange.opacity(0.3), stroke: Color.orange.opacity(0.5))
+                        return (fill: TangramTheme.UI.warning.opacity(0.3), stroke: TangramTheme.UI.warning.opacity(0.5))
                     } else {
-                        return (fill: Color.gray.opacity(0.2), stroke: Color.gray.opacity(0.3))
+                        return (fill: TangramTheme.UI.disabled.opacity(0.2), stroke: TangramTheme.UI.disabled.opacity(0.3))
                     }
                 }
             } else {
                 // Normal state - show type colors
                 switch point.type {
                 case .vertex:
-                    return (fill: Color.blue.opacity(0.6), stroke: Color.blue)
+                    return (fill: TangramTheme.UI.primaryButton.opacity(0.6), stroke: TangramTheme.UI.primaryButton)
                 case .edge:
-                    return (fill: Color.orange.opacity(0.6), stroke: Color.orange)
+                    return (fill: TangramTheme.UI.warning.opacity(0.6), stroke: TangramTheme.UI.warning)
                 }
             }
         }
@@ -382,7 +384,7 @@ struct TangramEditorCanvasView: View {
                     Button("Clear Puzzle") {
                         viewModel.clearPuzzle()
                     }
-                    .foregroundColor(.red)
+                    .foregroundColor(TangramTheme.UI.destructive)
                     
                     Button("Validate") {
                         viewModel.validate()
