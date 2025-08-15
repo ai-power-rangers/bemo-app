@@ -96,6 +96,9 @@ class PuzzlePieceNode: SKNode {
         shape.fillColor = TangramColors.Sprite.uiColor(for: pieceType)
         shape.strokeColor = shape.fillColor.darker(by: 20)
         shape.lineWidth = 2
+        // Persist original fill color for potential restores (though we avoid changing it)
+        if userData == nil { userData = [:] }
+        userData?["originalFillColor"] = shape.fillColor
         
         return shape
     }
@@ -145,6 +148,9 @@ class PuzzlePieceNode: SKNode {
         newShape.fillColor = TangramColors.Sprite.uiColor(for: pieceType)
         newShape.strokeColor = newShape.fillColor.darker(by: 20)
         newShape.lineWidth = 2
+        // Update original color reference
+        if userData == nil { userData = [:] }
+        userData?["originalFillColor"] = newShape.fillColor
         
         self.shapeNode = newShape
         addChild(newShape)
@@ -216,9 +222,8 @@ class PuzzlePieceNode: SKNode {
             // Validation visuals are shown in the target (silhouette) only. Keep piece visuals neutral.
             indicator.isHidden = true
             self.alpha = 1.0
-            if let fill = shapeNode?.fillColor {
-                shapeNode?.strokeColor = fill.darker(by: 20)
-            }
+            // Do not alter fill; keep subtle stroke
+            if let fill = shapeNode?.fillColor { shapeNode?.strokeColor = fill.darker(by: 20) }
             shapeNode?.lineWidth = 2
             shapeNode?.glowWidth = 0
             
@@ -226,7 +231,8 @@ class PuzzlePieceNode: SKNode {
             // Don't show indicator on the piece itself - nudges are shown in target section
             indicator.isHidden = true
             self.alpha = state.displayOpacity
-            shapeNode?.strokeColor = .systemRed.withAlphaComponent(0.5)  // Subtle red outline
+            // Keep physical realism: avoid red outlines on the bottom pieces
+            if let fill = shapeNode?.fillColor { shapeNode?.strokeColor = fill.darker(by: 20) }
             shapeNode?.lineWidth = 2
         }
     }

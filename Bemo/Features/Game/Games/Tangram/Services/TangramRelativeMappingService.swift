@@ -98,15 +98,29 @@ final class TangramRelativeMappingService {
 
     // MARK: - Map Piece -> Target Space
     func mapPieceToTargetSpace(piecePositionScene: CGPoint, pieceRotation: CGFloat, pieceIsFlipped: Bool, mapping: AnchorMapping, anchorPositionScene: CGPoint) -> (positionSK: CGPoint, rotationSK: CGFloat, isFlipped: Bool) {
-        let rel = CGVector(dx: piecePositionScene.x - anchorPositionScene.x, dy: piecePositionScene.y - anchorPositionScene.y)
         let cosD = cos(mapping.rotationDelta)
         let sinD = sin(mapping.rotationDelta)
-        let rotatedRel = CGVector(dx: rel.dx * cosD - rel.dy * sinD, dy: rel.dx * sinD + rel.dy * cosD)
-        let mappedPos = CGPoint(x: anchorPositionScene.x + mapping.translationOffset.dx + rotatedRel.dx,
-                                y: anchorPositionScene.y + mapping.translationOffset.dy + rotatedRel.dy)
-        let mappedRot = pieceRotation + mapping.rotationDelta
-        let mappedFlip = mapping.flipParity ? !pieceIsFlipped : pieceIsFlipped
-        return (mappedPos, mappedRot, mappedFlip)
+        if mapping.version >= 2 || mapping.pairCount >= 2 {
+            // Global doc mapping: p' = R * p + T (anchorPositionScene not used)
+            let rotated = CGPoint(
+                x: piecePositionScene.x * cosD - piecePositionScene.y * sinD,
+                y: piecePositionScene.x * sinD + piecePositionScene.y * cosD
+            )
+            let mappedPos = CGPoint(x: rotated.x + mapping.translationOffset.dx,
+                                    y: rotated.y + mapping.translationOffset.dy)
+            let mappedRot = pieceRotation + mapping.rotationDelta
+            let mappedFlip = mapping.flipParity ? !pieceIsFlipped : pieceIsFlipped
+            return (mappedPos, mappedRot, mappedFlip)
+        } else {
+            // Legacy anchor-relative mapping
+            let rel = CGVector(dx: piecePositionScene.x - anchorPositionScene.x, dy: piecePositionScene.y - anchorPositionScene.y)
+            let rotatedRel = CGVector(dx: rel.dx * cosD - rel.dy * sinD, dy: rel.dx * sinD + rel.dy * cosD)
+            let mappedPos = CGPoint(x: anchorPositionScene.x + mapping.translationOffset.dx + rotatedRel.dx,
+                                    y: anchorPositionScene.y + mapping.translationOffset.dy + rotatedRel.dy)
+            let mappedRot = pieceRotation + mapping.rotationDelta
+            let mappedFlip = mapping.flipParity ? !pieceIsFlipped : pieceIsFlipped
+            return (mappedPos, mappedRot, mappedFlip)
+        }
     }
 
     // MARK: - Validate via feature angles

@@ -1,3 +1,89 @@
+Immediate Next Steps:
+
+### What’s already covered vs `.mitch-docs/next-steps.md`
+- **Anchor mapping (pair-based)**: Implemented. `process()` selects an oriented pair and computes mapping via centroid + relative rotation (`computePairDocMapping`), commits with strict/relaxed gates, logs residuals.
+- **Orientation-first feedback**: Implemented. Orientation-only “Good job” nudges and flip/rotate demos; silhouette orientation fill is wired in the CV mirror, but the main silhouette fill in `CVValidationBridge.applyValidationResults` is commented out.
+- **Relative validation after anchor**: Implemented. Remaining pieces validated in mapped SK space.
+- **Global optimizer**: Implemented in `TangramRelativeMappingService.establishOrUpdateMappingOptimized`, but not yet used in the main flow.
+
+Gaps vs the doc and `next-steps`:
+- **Pair scoring using target pair library**: Not implemented (current selection is oriented-then-closest; no rotation/translation-invariant pair scoring).
+- **Adjacency-driven expansion**: Not implemented (engine validates all non-anchor pieces; no TargetAdjacencyGraph-driven order).
+- **Activity-driven priority (recency/settle)**: Not implemented for pair selection.
+- **Re-anchoring policy**: Not implemented beyond reselecting a pair when anchor missing.
+- **Nudge escalation using attempts/group confidence**: Skeleton exists (`generateNudge`) but not integrated; attempts not tracked.
+- **Orientation-only silhouette fill**: Commented out in `CVValidationBridge`.
+
+### Recommended next steps to reach the full vision
+1. **Precompute target relations once per puzzle**
+   - Add `TargetPairLibrary` and `TargetAdjacencyGraph` (e.g., `Bemo/Features/Game/Games/Tangram/Models/`).
+   - Build on puzzle load or first `process()` for a `puzzle.id`, and cache in `TangramValidationEngine`.
+   - Contents:
+     - Target pair entries: typeA/typeB, relative vector rAB in SK, feature angles, optional edge relation.
+     - Adjacency graph: target-id nodes, edges with relation metadata.
+
+2. **Observed pair scoring (replace current heuristic)**
+   - In `TangramValidationEngine.process()`: build observed pairs rPQ for settled/oriented pieces; include recency bonus for the last moved piece(s) and dwell status (use `PieceObservation.velocity` or pass `focusPieceId` via options).
+   - Score vs `TargetPairLibrary` with:
+     - angleResidual, lengthResidual, per-piece orientation residuals, adjacency hint match, recency bonus.
+   - Pick the top-scoring eligible pair.
+
+3. **Map to a specific target pair (not first-of-type)**
+   - Change `computePairDocMapping` to accept the chosen target pair ids (from step 2) and compute Θ/T against those two specific targets.
+   - During anchor commit, validate the two pieces only against those two targets; on success, lock those target ids and mark consumed via `TangramRelativeMappingService.markTargetConsumed`.
+
+4. **Activity-driven gating**
+   - Extend `ValidationOptions` to include `focusPieceId` and a settle threshold, or infer settle via velocity + pose deltas.
+   - Restrict candidate pairs to those involving recent/settled pieces per `next-steps`.
+
+5. **Adjacency-driven group expansion**
+   - After anchor commit, expand using `TargetAdjacencyGraph` neighbors of validated targets.
+   - For each neighbor target, consider matching-type observed pieces (prefer last moved + settled), validate in mapped space, add to group on success.
+   - Stop validating “all at once”; process 1–2 neighbors per run to keep UX focused.
+
+6. **Re-anchoring policy**
+   - If anchor not yet committed, or a new local cluster (≥3 oriented pieces) scores significantly better than current mapping, recompute mapping with that pair/cluster and switch anchors (with minimal visual notice).
+   - When group has ≥3 validated pieces, prefer re-establishing mapping via `establishOrUpdateMappingOptimized` for robustness.
+
+7. **Integrate optimizer/refinement**
+   - Use `TangramRelativeMappingService.refineMapping` as more pairs are validated.
+   - When group size ≥3, optionally upgrade to `establishOrUpdateMappingOptimized` to minimize global residuals.
+
+8. **Nudge escalation and attempts**
+   - Track `pieceAttempts` per piece in `process()` (increment when failing near a target with same-best match).
+   - Use `generateNudge` to produce a single primary nudge (`ValidationResult.nudgeContent`) in addition to per-piece nudges; respect cooldowns.
+   - Tie nudge reason to primary residual (flip > rotation > position) from `determineFailureReason`.
+
+9. **Orientation-only silhouette fill**
+   - Re-enable `orientedTargets` fill in `CVValidationBridge.applyValidationResults` with guards to avoid overriding validated targets.
+
+10. **Logging throttle and clarity**
+    - Add concise logs for pair scoring (top 3 with scores), anchor commit mode (strict/relaxed), adjacency expansions, and re-anchors.
+    - Throttle repeats per piece/pair signature.
+
+11. **Small correctness fixes**
+    - Ensure pair commit locks piece→target ids used for mapping, instead of letting `validateMappedPiece` reassign to a different same-type target.
+    - Clear/restore `validatedTargets` and group state on movement to keep state consistent.
+
+Where to implement
+- `TangramValidationEngine.process()`: steps 2–8, 10–11.
+- `TangramValidationEngine.computePairDocMapping(...)`: step 3 (accept target pair ids).
+- New `TargetRelationLibrary` (models/service) and caching in engine: step 1.
+- `CVValidationBridge.applyValidationResults(...)`: step 9.
+
+Acceptance criteria (per `next-steps.md`)
+- Two-piece commit happens from the pair the student is actually aligning (recency + scoring), not hardcoded order.
+- After anchor commit, neighbors are validated under the same mapping in adjacency order.
+- Re-anchoring triggers when a better local cluster emerges.
+- Nudges are specific, sparse, and tied to the actual blocking residual.
+
+- Implemented coverage: anchor mapping, relative validation, orientation feedback, optimizer available but unused.
+- Next work: precompute target relations, pair scoring with recency/settle, explicit target-pair mapping, adjacency expansion, re-anchoring, integrate optimizer + refined nudges, re-enable orientation fills, and improve logging.
+
+
+
+----------
+
 ### TL;DR
 - Don’t hardcode “large triangles first.” Select whatever the student is actually building by scoring observed pairs against target pairs using rotation/translation-invariant geometry.
 - Compute a single rigid transform (Θ, T) from the best observed pair using the plan-doc method (relative-vector rotation + centroid translation), validate that pair together, commit as anchor, then expand the group to adjacent pieces.

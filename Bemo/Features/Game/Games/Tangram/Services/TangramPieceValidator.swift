@@ -59,7 +59,7 @@ class TangramPieceValidator {
         
         // Validate position (centroid-only; polygon-contact fallback disabled per plan)
         let centroidDistance = hypot(piecePosition.x - targetWorldPos.x, piecePosition.y - targetWorldPos.y)
-        var positionValid = centroidDistance < positionTolerance
+        let positionValid = centroidDistance < positionTolerance
         // if !positionValid {
         //     // Polygon contact fallback disabled to keep a single robust system aligned with plan doc
         //     let targetVertsSK = TangramGeometryUtilities.transformedVertices(

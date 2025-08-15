@@ -249,31 +249,26 @@ class CVValidationBridge {
             if validationState.isValid {
                 pieceState.markAsValidated(connections: [])
                 
-                // Bind piece to target
+                // Bind piece to target (idempotent)
                 if let targetId = validationState.targetId {
-                    piece.userData?["assignedTargetId"] = targetId
-                    
-                    // Call scene's validation completion handler
-                    scene.completeValidation(piece: piece, targetId: targetId, state: pieceState)
-                    
-                    // Emit validation changed event
+                    let prevAssigned = piece.userData?["assignedTargetId"] as? String
+                    if prevAssigned != targetId {
+                        piece.userData?["assignedTargetId"] = targetId
+                        piece.userData?["validatedTargetId"] = targetId
+                    }
+                    // Only signal completion on transition to valid
                     if !wasValid {
+                        scene.completeValidation(piece: piece, targetId: targetId, state: pieceState)
                         scene.eventBus.emit(.validationChanged(pieceId: targetId, isValid: true))
                     }
                 }
-                // Darken validated anchor pieces slightly for visual lock-in
-                if result.anchorPieceIds.contains(pieceId), let shape = piece.shapeNode {
-                    shape.fillColor = shape.fillColor.darker(by: 20)
-                }
+                // Do not alter bottom-piece visuals; keep physical-world realism
             } else {
                 pieceState.markAsInvalid(reason: ValidationFailure.wrongPiece)
                 scene.pieceStates[pieceId] = pieceState
                 piece.pieceState = pieceState
                 piece.updateStateIndicator()
-                // Restore normal fill if previously darkened
-                if let shape = piece.shapeNode, let pt = piece.pieceType {
-                    shape.fillColor = TangramColors.Sprite.uiColor(for: pt)
-                }
+                // Do not modify bottom-piece fill or stroke on invalidation
                 
                 // Show failure reason if this is the focus piece
                 if piece == focusPiece,
@@ -285,6 +280,16 @@ class CVValidationBridge {
                 if wasValid {
                     if let targetId = piece.userData?["assignedTargetId"] as? String {
                         scene.eventBus.emit(.validationChanged(pieceId: targetId, isValid: false))
+                        // Invalidate scene-level completion state and visuals
+                        scene.completedPieces.remove(targetId)
+                        scene.validatedTargets.remove(targetId)
+                        scene.onValidatedTargetsChanged?(scene.validatedTargets)
+                        if let node = scene.targetSilhouettes[targetId] {
+                            node.fillColor = .clear
+                        }
+                        // Clear bindings on the piece
+                        piece.userData?["validatedTargetId"] = nil
+                        piece.userData?["assignedTargetId"] = nil
                     }
                 }
             }
