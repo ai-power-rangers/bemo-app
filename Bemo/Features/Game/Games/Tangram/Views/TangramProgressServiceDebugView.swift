@@ -19,6 +19,11 @@ struct TangramProgressServiceDebugView: View {
     @State private var testResults: String = ""
     @State private var testStatus: TestStatus = .notRun
     
+    // DifficultySelectionViewModel testing
+    @State private var difficultySelectionViewModel: DifficultySelectionViewModel?
+    @State private var viewModelTestStatus: TestStatus = .notRun
+    @State private var selectedDifficultyFromViewModel: UserPreferences.DifficultySetting?
+    
     enum TestStatus {
         case notRun, running, passed, failed
         
@@ -183,7 +188,7 @@ struct TangramProgressServiceDebugView: View {
                         Text("Puzzles for \(selectedDifficulty.displayName):")
                             .font(.headline)
                         
-                        let unlockedPuzzles = progressService.getUnlockedPuzzles(for: selectedChildId, difficulty: selectedDifficulty, from: samplePuzzles)
+                        let _ = progressService.getUnlockedPuzzles(for: selectedChildId, difficulty: selectedDifficulty, from: samplePuzzles)
                         let difficultyPuzzles = samplePuzzles
                             .filter { selectedDifficulty.containsPuzzleLevel($0.difficulty) }
                             .sorted { $0.id < $1.id }
@@ -347,6 +352,120 @@ struct TangramProgressServiceDebugView: View {
                     .padding()
                     .background(Color.orange.opacity(0.1))
                     .cornerRadius(8)
+                    
+                    // DifficultySelectionViewModel Testing
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("🎯 DifficultySelectionViewModel Testing:")
+                            .font(.headline)
+                        
+                        HStack {
+                            Button("Create ViewModel") {
+                                createDifficultySelectionViewModel()
+                            }
+                            .buttonStyle(.bordered)
+                            
+                            Button("Test ViewModel Logic") {
+                                testDifficultySelectionViewModel()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(difficultySelectionViewModel == nil)
+                            
+                            HStack {
+                                Image(systemName: viewModelTestStatus.icon)
+                                    .foregroundColor(viewModelTestStatus.color)
+                                Text(viewModelTestStatus.text)
+                                    .font(.caption)
+                                    .foregroundColor(viewModelTestStatus.color)
+                            }
+                        }
+                        
+                        if let viewModel = difficultySelectionViewModel {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("ViewModel State:")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                
+                                HStack {
+                                    Text("Loading: \(viewModel.isLoading ? "Yes" : "No")")
+                                        .font(.caption)
+                                    Text("New User: \(viewModel.isNewUser ? "Yes" : "No")")
+                                        .font(.caption)
+                                    if let recommended = viewModel.recommendedDifficulty {
+                                        Text("Recommended: \(recommended.displayName)")
+                                            .font(.caption)
+                                            .foregroundColor(.blue)
+                                    }
+                                }
+                                
+                                Text("Difficulty Stats:")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                
+                                ForEach([UserPreferences.DifficultySetting.easy, .normal, .hard], id: \.self) { difficulty in
+                                    HStack {
+                                        Text("\(difficulty.displayName):")
+                                            .font(.caption2)
+                                            .frame(width: 60, alignment: .leading)
+                                        
+                                        if let stats = viewModel.difficultyStats[difficulty] {
+                                            Text("\(stats.completedPuzzles)/\(stats.totalPuzzles)")
+                                                .font(.caption2)
+                                            Text("(\(Int(stats.completionPercentage))%)")
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                            Text(stats.isUnlocked ? "🔓" : "🔒")
+                                                .font(.caption2)
+                                            
+                                            if viewModel.isDifficultyRecommended(difficulty) {
+                                                Text("⭐ Recommended")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.blue)
+                                            }
+                                        } else {
+                                            Text("Loading...")
+                                                .font(.caption2)
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                }
+                                
+                                HStack {
+                                    Text("Test Difficulty Selection:")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                    
+                                    ForEach([UserPreferences.DifficultySetting.easy, .normal, .hard], id: \.self) { difficulty in
+                                        Button(difficulty.displayName) {
+                                            viewModel.selectDifficulty(difficulty)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .font(.caption)
+                                        .disabled(!viewModel.canSelectDifficulty(difficulty))
+                                    }
+                                }
+                                
+                                if let errorMessage = viewModel.errorMessage {
+                                    Text("Error: \(errorMessage)")
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                        .padding(.top, 4)
+                                }
+                                
+                                if let selectedDiff = selectedDifficultyFromViewModel {
+                                    Text("✅ Last Selected: \(selectedDiff.displayName)")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                        .padding(.top, 4)
+                                }
+                            }
+                            .padding()
+                            .background(Color.green.opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                    }
+                    .padding()
+                    .background(Color.purple.opacity(0.1))
+                    .cornerRadius(8)
                 }
                 .padding()
             }
@@ -363,6 +482,60 @@ struct TangramProgressServiceDebugView: View {
     
     // MARK: - Test Methods
     
+    private func createDifficultySelectionViewModel() {
+        // Create a mock PuzzleLibraryService with our sample puzzles
+        let mockPuzzleService = MockPuzzleLibraryService(puzzles: samplePuzzles)
+        
+        difficultySelectionViewModel = DifficultySelectionViewModel(
+            childProfileId: selectedChildId,
+            progressService: progressService,
+            puzzleLibraryService: mockPuzzleService,
+            onDifficultySelected: { [self] difficulty in
+                selectedDifficultyFromViewModel = difficulty
+                print("🎯 DifficultySelectionViewModel: User selected \(difficulty.displayName)")
+            }
+        )
+        
+        viewModelTestStatus = .notRun
+        selectedDifficultyFromViewModel = nil
+        print("✅ DifficultySelectionViewModel created for child: \(selectedChildId)")
+    }
+    
+    private func testDifficultySelectionViewModel() {
+        guard let viewModel = difficultySelectionViewModel else {
+            print("❌ No ViewModel to test. Create one first.")
+            return
+        }
+        
+        viewModelTestStatus = .running
+        
+        Task {
+            // Test async loading
+            await viewModel.loadDifficultyData()
+            
+            await MainActor.run {
+                // Validate the ViewModel state
+                let hasStats = !viewModel.difficultyStats.isEmpty
+                let hasRecommendation = viewModel.recommendedDifficulty != nil
+                let isConsistent = viewModel.isNewUser == (viewModel.difficultyStats.values.allSatisfy { $0.completedPuzzles == 0 })
+                
+                if hasStats && hasRecommendation && isConsistent {
+                    viewModelTestStatus = .passed
+                    print("✅ DifficultySelectionViewModel test PASSED")
+                    print("   - Difficulty stats loaded: \(viewModel.difficultyStats.count)")
+                    print("   - Is new user: \(viewModel.isNewUser)")
+                    print("   - Recommended difficulty: \(viewModel.recommendedDifficulty?.displayName ?? "None")")
+                } else {
+                    viewModelTestStatus = .failed
+                    print("❌ DifficultySelectionViewModel test FAILED")
+                    print("   - Has stats: \(hasStats)")
+                    print("   - Has recommendation: \(hasRecommendation)")
+                    print("   - Is consistent: \(isConsistent)")
+                }
+            }
+        }
+    }
+    
     private func runVisualTests() {
         testStatus = .running
         testResults = ""
@@ -371,13 +544,11 @@ struct TangramProgressServiceDebugView: View {
             // Simulate async testing
             try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
             
-            await MainActor.run {
-                captureTestResults()
-            }
+            await captureTestResults()
         }
     }
     
-    private func captureTestResults() {
+    private func captureTestResults() async {
         var results = ""
         var allPassed = true
         
@@ -559,23 +730,129 @@ struct TangramProgressServiceDebugView: View {
             allPassed = false
         }
         
-        // Final results
-        if allPassed {
-            results += "✅ ALL TESTS PASSED! Phase 1 implementation is working correctly.\n"
-            testStatus = .passed
-        } else {
-            results += "❌ SOME TESTS FAILED. Check implementation.\n"
-            testStatus = .failed
+        // Test 5: DifficultySelectionViewModel
+        results += "🎯 Testing DifficultySelectionViewModel...\n"
+        do {
+            // Create a mock service for testing
+            let mockService = MockPuzzleLibraryService(puzzles: samplePuzzles)
+            let testChild = "test-viewmodel-child"
+            
+            // Create ViewModel
+            var testCompleted = false
+            let viewModel = DifficultySelectionViewModel(
+                childProfileId: testChild,
+                progressService: progressService,
+                puzzleLibraryService: mockService,
+                onDifficultySelected: { difficulty in
+                    testCompleted = true
+                    results += "   ✅ Callback triggered with \(difficulty.displayName)\n"
+                }
+            )
+            
+            // Test initial state
+            guard viewModel.childProfileId == testChild,
+                  viewModel.isLoading == true,
+                  viewModel.difficultyStats.isEmpty else {
+                results += "   ❌ Initial ViewModel state incorrect\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ Initial ViewModel state correct\n"
+            
+            // Test async loading
+            await viewModel.loadDifficultyData()
+            
+            guard !viewModel.isLoading,
+                  viewModel.difficultyStats.count == 3,
+                  viewModel.recommendedDifficulty != nil else {
+                results += "   ❌ ViewModel data loading failed\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ ViewModel data loading works\n"
+            
+            // Test difficulty selection
+            if viewModel.canSelectDifficulty(.easy) {
+                viewModel.selectDifficulty(.easy)
+                
+                // Give callback a moment to execute
+                try await Task.sleep(nanoseconds: 10_000_000) // 0.01 seconds
+                
+                guard testCompleted else {
+                    results += "   ❌ Difficulty selection callback failed\n"
+                    allPassed = false
+                    throw TestError.failed
+                }
+                results += "   ✅ Difficulty selection works\n"
+            } else {
+                results += "   ⚠️ Easy difficulty locked (might be expected)\n"
+            }
+            
+            // Test helper methods
+            let progressText = viewModel.getProgressText(for: .easy)
+            let percentage = viewModel.getCompletionPercentage(for: .easy)
+            let description = viewModel.getDifficultyDescription(.easy)
+            
+            guard !progressText.isEmpty,
+                  percentage >= 0.0,
+                  description.contains("beginner") else {
+                results += "   ❌ Helper methods failed\n"
+                allPassed = false
+                throw TestError.failed
+            }
+            results += "   ✅ Helper methods work\n"
+            
+            results += "   🎉 DifficultySelectionViewModel: ALL PASSED\n\n"
+            
+        } catch {
+            results += "   ❌ DifficultySelectionViewModel: FAILED\n\n"
+            allPassed = false
         }
         
-        testResults = results
+        // Final results
+        if allPassed {
+            results += "✅ ALL TESTS PASSED! Phase 1 & Phase 2 Task 1 working correctly.\n"
+        } else {
+            results += "❌ SOME TESTS FAILED. Check implementation.\n"
+        }
         
-        // Also print to console for developers
-        print(results)
+        await MainActor.run {
+            testResults = results
+            testStatus = allPassed ? .passed : .failed
+            
+            // Also print to console for developers
+            print(results)
+        }
     }
     
     private enum TestError: Error {
         case failed
+    }
+}
+
+// MARK: - MockPuzzleLibraryService for Testing
+
+class MockPuzzleLibraryService: PuzzleLibraryProviding {
+    private let mockPuzzles: [GamePuzzleData]
+    
+    init(puzzles: [GamePuzzleData]) {
+        self.mockPuzzles = puzzles
+    }
+    
+    func loadPuzzles() async throws -> [GamePuzzleData] {
+        // Simulate slight delay like real service
+        try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+        return mockPuzzles
+    }
+    
+    func savePuzzle(_ puzzle: GamePuzzleData) async throws {
+        // Mock implementation - not used in our testing
+        throw NSError(domain: "MockPuzzleLibraryService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Mock doesn't support saving"])
+    }
+    
+    func deletePuzzle(id: String) async throws {
+        // Mock implementation - not used in our testing
+        throw NSError(domain: "MockPuzzleLibraryService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Mock doesn't support deleting"])
     }
 }
 
