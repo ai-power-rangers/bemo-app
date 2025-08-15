@@ -136,18 +136,8 @@ struct CalculationDisplayView: View {
             
             Spacer()
             
-            // Equation display
-            if !viewModel.equationString.isEmpty {
-                Text(viewModel.equationString)
-                    .font(.title.monospaced().bold())
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(Color.black.opacity(0.3))
-                    .cornerRadius(12)
-                    .shadow(radius: 2)
-                    .animation(.easeInOut, value: viewModel.equationString)
-            }
+            // Equation display - now shown inline in the workspace
+            // Removed to avoid duplication
             
             Spacer()
             

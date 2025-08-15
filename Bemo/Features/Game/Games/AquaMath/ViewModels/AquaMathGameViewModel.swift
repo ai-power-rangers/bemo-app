@@ -182,6 +182,11 @@ class AquaMathGameViewModel {
     private func updateEquation() {
         equation = Equation(groups: gameState.tileGroups, mode: gameState.mode)
         gameState.lastEquationResult = equation.result
+        
+        // Show result in scene if we have tiles
+        if let result = equation.result, !gameState.tileGroups.isEmpty {
+            gameScene?.showEquationResult(result)
+        }
     }
     
     // MARK: - Bubble Management

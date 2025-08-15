@@ -29,6 +29,8 @@ class GameScene: SKScene {
     
     // Workspace elements
     private var tileNodes: [UUID: SKSpriteNode] = [:]
+    private var operatorNodes: [SKLabelNode] = []
+    private var resultNode: SKLabelNode?
     private var workspaceBackground = SKShapeNode()
     
     // UI overlays
@@ -414,22 +416,21 @@ class GameScene: SKScene {
     func addTileToWorkspace(_ tile: Tile) {
         let node = createTileNode(for: tile)
         
-        // Position tiles in a row, centered in workspace
-        let tileCount = tileNodes.count
-        let spacing: CGFloat = 70
-        let totalWidth = CGFloat(tileCount) * spacing
-        let startX = (size.width - totalWidth) / 2 + spacing / 2
-        
-        // Center vertically in the workspace area (which is 30% of screen height)
-        let workspaceHeight = size.height * 0.3
-        let yPosition: CGFloat = workspaceHeight / 2 - 50  // Center in workspace, accounting for tile tray
-        
-        node.position = CGPoint(x: startX + CGFloat(tileCount) * spacing, y: yPosition)
+        // Add node first with temporary position
+        node.position = CGPoint(x: size.width / 2, y: size.height * 0.3 * 0.65)
         node.setScale(0.1)
         node.alpha = 0
         
         workspaceNode.addChild(node)
         tileNodes[tile.id] = node
+        
+        // Get current mode from viewModel
+        let mode = viewModel?.selectedMode ?? .add
+        
+        // Add operator if not the first tile and not in connect mode
+        if tileNodes.count > 1 && mode != .connect {
+            addOperatorBetweenTiles(at: tileNodes.count - 2, mode: mode)
+        }
         
         // Animate appearance
         let appear = SKAction.group([
@@ -438,6 +439,9 @@ class GameScene: SKScene {
         ])
         appear.timingMode = .easeOut
         node.run(appear)
+        
+        // Reorganize all tiles to maintain centering
+        reorganizeTiles()
     }
     
     private func createTileNode(for tile: Tile) -> SKSpriteNode {
@@ -470,6 +474,138 @@ class GameScene: SKScene {
         return node
     }
     
+    private func addOperatorBetweenTiles(at index: Int, mode: GameMode) {
+        let operatorSymbol: String
+        switch mode {
+        case .add, .count:
+            operatorSymbol = "+"
+        case .multiply:
+            operatorSymbol = "×"
+        case .connect:
+            return // No operators in connect mode
+        }
+        
+        let operatorLabel = SKLabelNode(text: operatorSymbol)
+        operatorLabel.fontName = "Helvetica-Bold"
+        operatorLabel.fontSize = 28
+        operatorLabel.fontColor = .darkGray
+        operatorLabel.verticalAlignmentMode = .center
+        operatorLabel.horizontalAlignmentMode = .center
+        
+        workspaceNode.addChild(operatorLabel)
+        operatorNodes.append(operatorLabel)
+        
+        // Position will be set in reorganizeTiles
+    }
+    
+    private func reorganizeTiles() {
+        let mode = viewModel?.selectedMode ?? .add
+        let tiles = Array(tileNodes.values).sorted { $0.position.x < $1.position.x }
+        let tileCount = tiles.count
+        
+        guard tileCount > 0 else { return }
+        
+        let tileWidth: CGFloat = 60
+        let workspaceHeight = size.height * 0.3
+        let yPosition: CGFloat = workspaceHeight * 0.65
+        
+        if mode == .connect {
+            // Tiles close together for connect mode
+            let spacing: CGFloat = 5
+            let totalWidth = CGFloat(tileCount) * tileWidth + CGFloat(tileCount - 1) * spacing
+            let startX = size.width / 2 - totalWidth / 2 + tileWidth / 2
+            
+            for (index, tile) in tiles.enumerated() {
+                let xPosition = startX + CGFloat(index) * (tileWidth + spacing)
+                tile.run(SKAction.moveTo(x: xPosition, duration: 0.2))
+            }
+            
+            // Clear operators in connect mode
+            for operatorNode in operatorNodes {
+                operatorNode.removeFromParent()
+            }
+            operatorNodes.removeAll()
+        } else {
+            // Tiles with operators for other modes - reduced spacing
+            let operatorSpacing: CGFloat = 15  // Space between tile and operator
+            let operatorWidth: CGFloat = 30    // Width reserved for operator
+            
+            // Calculate total width: tiles + spaces for operators
+            let totalWidth = CGFloat(tileCount) * tileWidth + CGFloat(tileCount - 1) * (operatorSpacing * 2 + operatorWidth)
+            let startX = size.width / 2 - totalWidth / 2 + tileWidth / 2
+            
+            for (index, tile) in tiles.enumerated() {
+                let xPosition = startX + CGFloat(index) * (tileWidth + operatorSpacing * 2 + operatorWidth)
+                tile.run(SKAction.moveTo(x: xPosition, duration: 0.2))
+                
+                // Position operator between tiles
+                if index < tileCount - 1 && index < operatorNodes.count {
+                    let operatorX = xPosition + tileWidth / 2 + operatorSpacing + operatorWidth / 2
+                    operatorNodes[index].position = CGPoint(x: operatorX, y: yPosition)
+                    operatorNodes[index].alpha = 1.0
+                }
+            }
+        }
+    }
+    
+    func showEquationResult(_ result: Int) {
+        // Remove existing result nodes
+        resultNode?.removeFromParent()
+        
+        // Also remove any existing equal sign
+        workspaceNode.children.forEach { node in
+            if let label = node as? SKLabelNode, label.text == "=" {
+                label.removeFromParent()
+            }
+        }
+        
+        let tiles = Array(tileNodes.values).sorted { $0.position.x < $1.position.x }
+        
+        guard let lastTile = tiles.last else { return }
+        
+        // Create result display
+        let equalSign = SKLabelNode(text: "=")
+        equalSign.fontName = "Helvetica-Bold"
+        equalSign.fontSize = 28
+        equalSign.fontColor = SKColor(cgColor: UIColor.darkGray.cgColor)
+        equalSign.verticalAlignmentMode = .center
+        equalSign.horizontalAlignmentMode = .center
+        equalSign.name = "equalSign"
+        
+        let resultLabel = SKLabelNode(text: "\(result)")
+        resultLabel.fontName = "Helvetica-Bold"
+        resultLabel.fontSize = 32
+        resultLabel.fontColor = SKColor(cgColor: UIColor.systemGreen.cgColor)
+        resultLabel.verticalAlignmentMode = .center
+        resultLabel.horizontalAlignmentMode = .center
+        resultLabel.name = "resultLabel"
+        
+        // Position after last tile with proper spacing
+        let workspaceHeight = size.height * 0.3
+        let yPosition: CGFloat = workspaceHeight * 0.65
+        let spacing: CGFloat = 20
+        let equalX = lastTile.position.x + 30 + spacing
+        let resultX = equalX + 30 + spacing
+        
+        equalSign.position = CGPoint(x: equalX, y: yPosition)
+        resultLabel.position = CGPoint(x: resultX, y: yPosition)
+        
+        workspaceNode.addChild(equalSign)
+        workspaceNode.addChild(resultLabel)
+        
+        // Store for cleanup
+        self.resultNode = resultLabel
+        
+        // Animate appearance
+        equalSign.alpha = 0
+        resultLabel.alpha = 0
+        equalSign.run(SKAction.fadeIn(withDuration: 0.3))
+        resultLabel.run(SKAction.sequence([
+            SKAction.wait(forDuration: 0.1),
+            SKAction.fadeIn(withDuration: 0.3)
+        ]))
+    }
+    
     func clearWorkspace() {
         // Animate tiles disappearing
         for node in tileNodes.values {
@@ -483,6 +619,27 @@ class GameScene: SKScene {
             node.run(disappear)
         }
         tileNodes.removeAll()
+        
+        // Remove operators
+        for operatorNode in operatorNodes {
+            operatorNode.run(SKAction.sequence([
+                SKAction.fadeOut(withDuration: 0.2),
+                SKAction.removeFromParent()
+            ]))
+        }
+        operatorNodes.removeAll()
+        
+        // Remove result and equal sign
+        workspaceNode.children.forEach { node in
+            if let label = node as? SKLabelNode, 
+               (label.name == "equalSign" || label.name == "resultLabel" || label.text == "=") {
+                label.run(SKAction.sequence([
+                    SKAction.fadeOut(withDuration: 0.2),
+                    SKAction.removeFromParent()
+                ]))
+            }
+        }
+        resultNode = nil
     }
     
     private func convertPointToWorkspace(_ point: CGPoint) -> CGPoint {
