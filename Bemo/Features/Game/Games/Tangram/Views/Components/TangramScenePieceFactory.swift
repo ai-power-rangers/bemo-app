@@ -208,7 +208,7 @@ extension TangramPuzzleScene {
         // Clean up existing CV piece if any
         cvPieces[pieceId]?.removeFromParent()
         
-        // Create a shape node that mirrors the physical piece geometry (unscaled here; scaling handled by cvContent)
+        // Create a shape node that mirrors the physical piece geometry
         guard let physicalPiece = availablePieces.first(where: { $0.name == pieceId }),
               let pieceType = physicalPiece.pieceType else { return }
 
@@ -235,8 +235,8 @@ extension TangramPuzzleScene {
         cvPiece.yScale = max(0.0001, abs(physicalPiece.yScale))
         if physicalPiece.isFlipped { cvPiece.xScale *= -1 }
 
-        // Add to cvContent (inherits uniform scaling and centering)
-        if cvPiece.parent !== cvContent { cvContent.addChild(cvPiece) }
+        // Add to top mirror content, not cvContent, to ensure mapping matches mirror layer
+        if cvPiece.parent !== topMirrorContent { topMirrorContent.addChild(cvPiece) }
         cvPieces[pieceId] = cvPiece
     }
     
@@ -246,6 +246,15 @@ extension TangramPuzzleScene {
         // Fill the silhouette with the piece's color when validated
         targetNode.fillColor = TangramColors.Sprite.uiColor(for: pieceType).withAlphaComponent(0.7)
         targetNode.strokeColor = TangramColors.Sprite.uiColor(for: pieceType)
+        targetNode.lineWidth = 2
+        targetNode.alpha = 1.0
+    }
+    
+    func applyOrientedFill(to targetNode: SKShapeNode, for pieceType: TangramPieceType) {
+        // Partial fill (orientation/flip correct, position not yet correct)
+        targetNode.fillColor = TangramColors.Sprite.uiColor(for: pieceType).withAlphaComponent(0.25)
+        // Keep stroke subtle to distinguish from validated
+        targetNode.strokeColor = TangramColors.Sprite.uiColor(for: pieceType).withAlphaComponent(0.5)
         targetNode.lineWidth = 2
         targetNode.alpha = 1.0
     }

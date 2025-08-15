@@ -47,6 +47,9 @@ class TangramDependencyContainer {
     /// Relative mapping service for anchor-based validation shared by Scene and ViewModel
     let mappingService: TangramRelativeMappingService
     
+    /// Unified validation engine - single source of truth for all validation
+    let validationEngine: TangramValidationEngine
+    
     // MARK: - Initialization
     
     init(
@@ -67,6 +70,9 @@ class TangramDependencyContainer {
         // gameplayService and positioningService removed
         self.hintEngine = TangramHintEngine()
         self.mappingService = TangramRelativeMappingService()
+        
+        // Initialize unified validation engine with default difficulty (map to .normal)
+        self.validationEngine = TangramValidationEngine(difficulty: .normal)
         
         // Initialize data services
         self.databaseLoader = TangramDatabaseLoader(supabaseService: supabaseService)

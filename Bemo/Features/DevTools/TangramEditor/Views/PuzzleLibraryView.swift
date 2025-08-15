@@ -45,11 +45,11 @@ struct PuzzleLibraryView: View {
                     // Search field
                     HStack {
                         Image(systemName: "magnifyingglass")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(TangramTheme.Text.secondary)
                         TextField("Search puzzles...", text: $searchText)
                     }
                     .padding(8)
-                    .background(Color(.systemGray6))
+                    .background(TangramTheme.Backgrounds.secondaryPanel)
                     .cornerRadius(8)
                     
                     // Category filter
@@ -64,16 +64,18 @@ struct PuzzleLibraryView: View {
                     } label: {
                         HStack {
                             Image(systemName: "line.3.horizontal.decrease.circle")
+                                .foregroundColor(TangramTheme.UI.primaryButton)
                             Text(selectedCategory?.rawValue ?? "All")
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(Color(.systemGray6))
+                        .background(TangramTheme.Backgrounds.secondaryPanel)
                         .cornerRadius(8)
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
+                .background(TangramTheme.Backgrounds.editor)
             
             Divider()
             
@@ -104,7 +106,7 @@ struct PuzzleLibraryView: View {
                 }
             }
         }
-        .background(Color(.systemGray6))
+        .background(TangramTheme.Backgrounds.editor)
         .alert("Delete Puzzle", isPresented: $showingDeleteAlert, presenting: puzzleToDelete) { puzzle in
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
@@ -124,7 +126,7 @@ struct PuzzleLibraryView: View {
         VStack(spacing: 24) {
             Image(systemName: "square.grid.3x3.square")
                 .font(.system(size: 80))
-                .foregroundColor(.secondary)
+                .foregroundColor(TangramTheme.Text.secondary)
             
             VStack(spacing: 8) {
                 Text("No Puzzles Yet")
@@ -132,7 +134,7 @@ struct PuzzleLibraryView: View {
                     .fontWeight(.semibold)
                 
                 Text("Create your first tangram puzzle to get started")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(TangramTheme.Text.secondary)
             }
             
             Button(action: { viewModel.createNewPuzzle() }) {
@@ -164,7 +166,7 @@ struct PuzzleCardView: View {
             ZStack {
                 // Background for consistent card size
                 Rectangle()
-                    .fill(Color(.systemGray6))
+                    .fill(TangramTheme.Backgrounds.secondaryPanel)
                     .aspectRatio(1, contentMode: .fit)
                 
                 if let thumbnailData = puzzle.thumbnailData,
@@ -181,13 +183,13 @@ struct PuzzleCardView: View {
                     // Placeholder when no pieces
                     Image(systemName: "square.grid.3x3")
                         .font(.largeTitle)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(TangramTheme.Text.secondary)
                 }
             }
             .cornerRadius(8)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color(.systemGray4), lineWidth: 1)
+                    .stroke(TangramTheme.UI.separator, lineWidth: 1)
             )
             .overlay(
                 // Dynamic badge based on puzzle properties - top left corner
@@ -200,7 +202,7 @@ struct PuzzleCardView: View {
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
                                     .background(badge.color)
-                                    .foregroundColor(.white)
+                                    .foregroundColor(TangramTheme.Text.onColor)
                                     .cornerRadius(4)
                                     .padding(8)
                                 Spacer()
@@ -223,7 +225,7 @@ struct PuzzleCardView: View {
                         .font(.caption)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color(.systemGray5))
+                        .background(TangramTheme.Backgrounds.secondaryPanel.opacity(0.8))
                         .cornerRadius(4)
                     
                     Spacer()
@@ -233,7 +235,7 @@ struct PuzzleCardView: View {
                         ForEach(1...5, id: \.self) { star in
                             Image(systemName: star <= puzzle.difficulty.rawValue ? "star.fill" : "star")
                                 .font(.caption2)
-                                .foregroundColor(.orange)
+                                .foregroundColor(TangramTheme.UI.warning)
                         }
                     }
                 }
@@ -241,7 +243,7 @@ struct PuzzleCardView: View {
             .padding(.horizontal, 8)
             .padding(.bottom, 8)
         }
-        .background(Color(.systemBackground))
+        .background(TangramTheme.Backgrounds.panel)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
         .scaleEffect(isPressed ? 0.95 : 1.0)

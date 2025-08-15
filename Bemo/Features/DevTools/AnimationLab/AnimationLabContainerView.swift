@@ -46,7 +46,7 @@ struct AnimationLabContainerView: View {
                 sectionSelector
                     .padding(.horizontal)
                     .padding(.vertical, 8)
-                    .background(Color(.secondarySystemBackground))
+                    .background(TangramTheme.Backgrounds.editor)
                 
                 Divider()
                 
@@ -57,10 +57,10 @@ struct AnimationLabContainerView: View {
                         ZStack {
                             SpriteView(scene: scene, options: [.allowsTransparency])
                                 .frame(height: geometry.size.height * 0.6)
-                                .background(Color(.systemBackground))
+                                .background(TangramTheme.Backgrounds.panel)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color(.separator), lineWidth: 1)
+                                        .stroke(TangramTheme.UI.separator, lineWidth: 1)
                                 )
                                 .padding()
                                 .onAppear {
@@ -86,7 +86,7 @@ struct AnimationLabContainerView: View {
                                 }
                                 .padding(.horizontal)
                                 .padding(.vertical, 12)
-                                .background(Color(.tertiarySystemBackground))
+                                .background(TangramTheme.Backgrounds.secondaryPanel)
                                 
                                 Divider()
                             }
@@ -95,6 +95,7 @@ struct AnimationLabContainerView: View {
                         }
                         .frame(maxHeight: geometry.size.height * 0.4)
                     }
+                    .background(TangramTheme.Backgrounds.editor)
                 }
             }
             .overlay(
@@ -135,10 +136,12 @@ struct AnimationLabContainerView: View {
                             Text("Back")
                                 .font(.system(size: 16))
                         }
+                        .foregroundColor(TangramTheme.UI.primaryButton)
                     }
 }
             }
         }
+        .background(TangramTheme.Backgrounds.editor)
     }
     
     private var sectionSelector: some View {
@@ -156,12 +159,12 @@ struct AnimationLabContainerView: View {
                             Text(section.rawValue)
                                 .font(.system(size: 15, weight: .medium))
                         }
-                        .foregroundColor(selectedSection == section ? .white : .primary)
+                        .foregroundColor(selectedSection == section ? TangramTheme.Text.onColor : TangramTheme.Text.primary)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
                         .background(
                             Capsule()
-                                .fill(selectedSection == section ? Color.blue : Color(.tertiarySystemFill))
+                                .fill(selectedSection == section ? TangramTheme.UI.primaryButton : TangramTheme.UI.selection)
                         )
                     }
                 }
@@ -173,7 +176,7 @@ struct AnimationLabContainerView: View {
         HStack {
             Text("Puzzle:")
                 .font(.system(size: 15, weight: .medium))
-                .foregroundColor(.secondary)
+                .foregroundColor(TangramTheme.Text.secondary)
             
             Menu {
                 // None option to clear selection
@@ -193,18 +196,18 @@ struct AnimationLabContainerView: View {
                 HStack {
                     Text(viewModel.selectedPuzzle?.name ?? "None")
                         .font(.system(size: 15))
-                        .foregroundColor(viewModel.selectedPuzzle == nil ? .secondary : .primary)
+                        .foregroundColor(viewModel.selectedPuzzle == nil ? TangramTheme.Text.secondary : TangramTheme.Text.primary)
                         .lineLimit(1)
                     
                     Spacer()
                     
                     Image(systemName: "chevron.down")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(TangramTheme.Text.secondary)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color(.secondarySystemBackground))
+                .background(TangramTheme.Backgrounds.secondaryPanel)
                 .cornerRadius(8)
             }
             .disabled(viewModel.puzzles.isEmpty)
@@ -217,7 +220,7 @@ struct AnimationLabContainerView: View {
         HStack {
             Text("Entrance Direction:")
                 .font(.system(size: 15, weight: .medium))
-                .foregroundColor(.secondary)
+                .foregroundColor(TangramTheme.Text.secondary)
             
             Menu {
                 ForEach(AnimationLabScene.EntranceDirection.allCases, id: \.self) { direction in
@@ -239,17 +242,17 @@ struct AnimationLabContainerView: View {
                         .font(.system(size: 14))
                     Text(selectedEntranceDirection.displayName)
                         .font(.system(size: 15))
-                        .foregroundColor(.primary)
+                        .foregroundColor(TangramTheme.Text.primary)
                     
                     Spacer()
                     
                     Image(systemName: "chevron.down")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(TangramTheme.Text.secondary)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color(.secondarySystemBackground))
+                .background(TangramTheme.Backgrounds.secondaryPanel)
                 .cornerRadius(8)
             }
             
@@ -275,7 +278,7 @@ struct AnimationLabContainerView: View {
         HStack {
             Text("Exit Direction:")
                 .font(.system(size: 15, weight: .medium))
-                .foregroundColor(.secondary)
+                .foregroundColor(TangramTheme.Text.secondary)
             
             Menu {
                 ForEach(AnimationLabScene.ExitDirection.allCases, id: \.self) { direction in
@@ -297,17 +300,17 @@ struct AnimationLabContainerView: View {
                         .font(.system(size: 14))
                     Text(selectedExitDirection.displayName)
                         .font(.system(size: 15))
-                        .foregroundColor(.primary)
+                        .foregroundColor(TangramTheme.Text.primary)
                     
                     Spacer()
                     
                     Image(systemName: "chevron.down")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(TangramTheme.Text.secondary)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color(.secondarySystemBackground))
+                .background(TangramTheme.Backgrounds.secondaryPanel)
                 .cornerRadius(8)
             }
             
@@ -335,10 +338,10 @@ struct AnimationLabContainerView: View {
                 VStack(spacing: 12) {
                     Image(systemName: "puzzlepiece")
                         .font(.system(size: 48))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(TangramTheme.Text.secondary)
                     Text("Select a puzzle above to preview animations")
                         .font(.system(size: 15))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(TangramTheme.Text.secondary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
@@ -477,7 +480,7 @@ struct AnimationRowView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(animation.name)
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.primary)
+                    .foregroundColor(TangramTheme.Text.primary)
                 
                 if animation.category != .generic {
                     HStack(spacing: 4) {
@@ -486,7 +489,7 @@ struct AnimationRowView: View {
                         Text(animation.group.rawValue.capitalized)
                             .font(.system(size: 13))
                     }
-                    .foregroundColor(.secondary)
+                    .foregroundColor(TangramTheme.Text.secondary)
                 }
             }
             
@@ -496,7 +499,7 @@ struct AnimationRowView: View {
             Button(action: onPlay) {
                 Image(systemName: "play.circle.fill")
                     .font(.system(size: 28))
-                    .foregroundColor(.blue)
+                    .foregroundColor(TangramTheme.UI.primaryButton)
             }
         }
         .padding(.horizontal, 16)

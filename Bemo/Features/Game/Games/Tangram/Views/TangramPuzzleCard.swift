@@ -47,7 +47,7 @@ struct TangramPuzzleCard: View {
             .cornerRadius(8)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color("AppPrimaryTextColor").opacity(0.2), lineWidth: 1)
+                    .stroke(TangramTheme.Text.primary.opacity(0.2), lineWidth: 1)
             )
             .overlay(
                 // Dynamic badge based on puzzle properties - top left corner
@@ -76,16 +76,16 @@ struct TangramPuzzleCard: View {
                 Text(puzzle.name)
                     .font(.headline)
                     .lineLimit(1)
-                    .foregroundColor(Color("AppPrimaryTextColor"))
+                    .foregroundColor(TangramTheme.Text.primary)
                 
                 HStack {
                     // Category badge
                     Text(puzzle.category)
                         .font(.caption)
-                        .foregroundColor(Color("AppPrimaryTextColor"))
+                        .foregroundColor(TangramTheme.Text.primary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color("AppBackground").opacity(0.8))
+                        .background(TangramTheme.Backgrounds.panel.opacity(0.8))
                         .cornerRadius(4)
                     
                     Spacer()
