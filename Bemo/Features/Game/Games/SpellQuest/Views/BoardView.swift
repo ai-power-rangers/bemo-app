@@ -61,12 +61,6 @@ struct BoardView: View {
                 .padding(.vertical)
             }
         }
-        .overlay(alignment: .center) {
-            if viewModel.boardState.isComplete {
-                CompletionCelebrationView()
-                    .transition(.scale.combined(with: .opacity))
-            }
-        }
     }
     
     // MARK: - Puzzle Image
@@ -293,54 +287,6 @@ private struct LetterTileView: View {
                     .stroke(isHighlighted ? Color.orange : Color.clear, lineWidth: 2)
             )
             .animation(.spring(response: 0.3), value: isHighlighted)
-    }
-}
-
-// MARK: - Celebration View
-private struct CompletionCelebrationView: View {
-    @State private var isAnimating = false
-    
-    var body: some View {
-        ZStack {
-            // Background overlay
-            Color.black.opacity(0.3)
-                .ignoresSafeArea()
-            
-            // Success message
-            VStack(spacing: 20) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 80))
-                    .foregroundColor(.green)
-                    .scaleEffect(isAnimating ? 1.2 : 0.8)
-                
-                Text("Perfect!")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                
-                Text("Word Complete!")
-                    .font(.title2)
-                    .foregroundColor(.white.opacity(0.9))
-            }
-            .padding(40)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.green, Color.blue],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            )
-            .scaleEffect(isAnimating ? 1.0 : 0.5)
-            .opacity(isAnimating ? 1.0 : 0.0)
-        }
-        .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
-                isAnimating = true
-            }
-        }
     }
 }
 

@@ -11,7 +11,7 @@
 
 import Foundation
 
-struct SpellQuestPuzzle: Identifiable, Equatable {
+struct SpellQuestPuzzle: Identifiable, Equatable, Codable {
     let id: String
     let imageName: String
     let word: String // Stored uppercase internally

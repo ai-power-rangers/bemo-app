@@ -11,14 +11,14 @@
 
 import Foundation
 
-struct SpellQuestAlbum: Identifiable, Equatable {
+struct SpellQuestAlbum: Identifiable, Equatable, Codable {
     let id: String
     let title: String
     let puzzles: [SpellQuestPuzzle]
     let isInstalled: Bool
     let difficulty: DifficultyLevel
     
-    enum DifficultyLevel: String {
+    enum DifficultyLevel: String, Codable {
         case easy, normal, hard
     }
 }

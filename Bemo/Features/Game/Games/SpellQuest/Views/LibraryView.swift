@@ -109,9 +109,7 @@ struct LibraryView: View {
                 Spacer()
                 
                 Button(action: {
-                    if !selectedAlbums.isEmpty {
-                        viewModel.selectAlbums(selectedAlbums)
-                    }
+                    viewModel.selectAlbums(selectedAlbums)
                 }) {
                     Text("Continue")
                         .font(.headline)

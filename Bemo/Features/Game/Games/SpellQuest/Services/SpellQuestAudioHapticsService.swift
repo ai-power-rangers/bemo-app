@@ -14,7 +14,6 @@ import AVFoundation
 
 class SpellQuestAudioHapticsService {
     private let impactLight = UIImpactFeedbackGenerator(style: .light)
-    private let impactMedium = UIImpactFeedbackGenerator(style: .medium)
     private let notificationFeedback = UINotificationFeedbackGenerator()
     
     init() {
@@ -23,7 +22,6 @@ class SpellQuestAudioHapticsService {
     
     private func prepareHaptics() {
         impactLight.prepare()
-        impactMedium.prepare()
         notificationFeedback.prepare()
     }
     

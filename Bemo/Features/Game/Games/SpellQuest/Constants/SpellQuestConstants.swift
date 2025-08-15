@@ -29,6 +29,7 @@ enum SpellQuestConstants {
         static let celebrationDuration = 2.0
         static let autoAdvanceDelay = 1.5
         static let zenJuniorAutoHintDelay = 5.0
+        static let zenJuniorDirectRevealThreshold = 2
     }
     
     // MARK: - UI
@@ -37,7 +38,7 @@ enum SpellQuestConstants {
         static let slotSize: CGFloat = 55
         static let slotSpacing: CGFloat = 8
         static let dragFeedbackScale: CGFloat = 1.2
-        static let shakeAnimationDuration = 0.3
+        static let shakeAnimationDuration: TimeInterval = 0.3
         static let correctPlacementScale: CGFloat = 1.1
         static let minTouchTargetSize: CGFloat = 44
         static let zenJuniorScaleFactor: CGFloat = 1.3
@@ -45,13 +46,13 @@ enum SpellQuestConstants {
     
     // MARK: - Colors
     enum Colors {
-        static let slotEmpty = Color.gray.opacity(0.2)
-        static let slotFilled = Color.green.opacity(0.3)
-        static let slotHinted = Color.yellow.opacity(0.3)
-        static let letterTile = Color.blue
+        static let slotEmpty = BemoTheme.Colors.gray2.opacity(0.2)
+        static let slotFilled = BemoTheme.Colors.card2Foreground.opacity(0.3)
+        static let slotHinted = BemoTheme.Colors.card3Foreground.opacity(0.3)
+        static let letterTile = BemoTheme.Colors.primary
         static let letterTileText = Color.white
-        static let correctHighlight = Color.green
-        static let incorrectHighlight = Color.red
+        static let correctHighlight = BemoTheme.Colors.card2Foreground
+        static let incorrectHighlight = BemoTheme.Colors.card4Foreground
     }
     
     // MARK: - Animation

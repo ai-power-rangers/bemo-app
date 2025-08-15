@@ -5,7 +5,7 @@
 //  Game mode enumeration for SpellQuest
 //
 
-// WHAT: Defines the four game modes available in SpellQuest
+// WHAT: Defines the game modes available in SpellQuest
 // ARCHITECTURE: Model in MVVM-S
 // USAGE: Used by ViewModels to determine game flow and UI behavior
 

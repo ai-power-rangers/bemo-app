@@ -27,7 +27,7 @@ class SpellQuestHintService {
         }
         
         // For Zen Junior, more likely to reveal letters directly
-        if mode == .zenJunior && boardState.hintsUsedThisPuzzle >= 2 {
+        if mode == .zenJunior && boardState.hintsUsedThisPuzzle >= SpellQuestConstants.Gameplay.zenJuniorDirectRevealThreshold {
             return .revealLetter(index: nextEmptySlot.index, character: nextEmptySlot.expected)
         }
         
