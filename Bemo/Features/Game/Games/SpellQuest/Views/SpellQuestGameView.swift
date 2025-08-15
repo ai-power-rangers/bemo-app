@@ -21,13 +21,9 @@ struct SpellQuestGameView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Background gradient
-                LinearGradient(
-                    colors: [Color.purple.opacity(0.1), Color.blue.opacity(0.1)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                // Background
+                Color("AppBackground")
+                    .ignoresSafeArea()
                 
                 // Navigation
                 VStack {
