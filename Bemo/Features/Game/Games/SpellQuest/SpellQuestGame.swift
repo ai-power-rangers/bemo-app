@@ -30,10 +30,16 @@ class SpellQuestGame: Game {
     
     // MARK: - Private State
     private var currentState: SpellQuestGameState?
+    private let supabaseService: SupabaseService?
+    
+    // MARK: - Initialization
+    init(supabaseService: SupabaseService? = nil) {
+        self.supabaseService = supabaseService
+    }
     
     // MARK: - Game Protocol Methods
     func makeGameView(delegate: GameDelegate) -> AnyView {
-        let dependencyContainer = SpellQuestDependencyContainer()
+        let dependencyContainer = SpellQuestDependencyContainer(supabaseService: supabaseService)
         let viewModel = SpellQuestGameViewModel(
             contentService: dependencyContainer.contentService,
             hintService: dependencyContainer.hintService,

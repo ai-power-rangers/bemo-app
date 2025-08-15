@@ -71,27 +71,50 @@ struct BoardView: View {
                 .shadow(color: .black.opacity(0.1), radius: 10)
             
             if !viewModel.boardState.currentPuzzle.imageName.isEmpty {
-                // Try to load the image, fallback to placeholder
-                if UIImage(named: viewModel.boardState.currentPuzzle.imageName) != nil {
-                    Image(viewModel.boardState.currentPuzzle.imageName)
+                // Check if it's a local asset first
+                if let img = UIImage(named: viewModel.boardState.currentPuzzle.imageName) {
+                    Image(uiImage: img)
                         .resizable()
                         .scaledToFit()
                         .padding()
-                } else {
-                    // Placeholder for missing images
-                    VStack {
-                        Image(systemName: "photo.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(Color("AppPrimaryTextColor").opacity(0.3))
-                        Text(viewModel.boardState.currentPuzzle.displayTitle ?? "")
-                            .font(.title2)
-                            .foregroundColor(Color("AppPrimaryTextColor"))
+                } else if let url = URL(string: viewModel.boardState.currentPuzzle.imageName) {
+                    // It's a remote URL, use AsyncImage
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFit()
+                                .padding()
+                        case .failure(_):
+                            placeholderView
+                        case .empty:
+                            ProgressView()
+                                .padding()
+                        @unknown default:
+                            placeholderView
+                        }
                     }
+                } else {
+                    // Fallback placeholder
+                    placeholderView
                 }
             }
         }
         .aspectRatio(4/3, contentMode: .fit)
         .padding(.horizontal)
+    }
+    
+    @ViewBuilder
+    private var placeholderView: some View {
+        VStack {
+            Image(systemName: "photo.fill")
+                .font(.system(size: 60))
+                .foregroundColor(Color("AppPrimaryTextColor").opacity(0.3))
+            Text(viewModel.boardState.currentPuzzle.displayTitle ?? "")
+                .font(.title2)
+                .foregroundColor(Color("AppPrimaryTextColor"))
+        }
     }
     
     // MARK: - Letter Slots
