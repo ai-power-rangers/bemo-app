@@ -161,7 +161,7 @@ class GameLobbyViewModel {
         
         let aquaMathGame = AquaMathGame()
         
-        let spellQuestGame = SpellQuestGame()
+        let spellQuestGame = SpellQuestGame(supabaseService: supabaseService)
         
         // Start with regular games (Tangram is now CV-ready)
         availableGames = [

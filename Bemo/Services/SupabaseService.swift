@@ -133,12 +133,13 @@ class SupabaseService {
                 ))
             }
             
+            let capturedProfile = parentProfile  // Capture the value before the concurrent code
             await MainActor.run {
                 self.isConnected = true
                 self.syncError = nil
                 self.lastSyncDate = Date()
                 print("Supabase Event: .signedIn or .tokenRefreshed. Notifying AuthenticationService.")
-                self.authService?.updateUserAndConfirmAuth(session: session, parentProfile: parentProfile)
+                self.authService?.updateUserAndConfirmAuth(session: session, parentProfile: capturedProfile)
             }
         }
     }
@@ -1400,6 +1401,100 @@ struct TangramPuzzleDTO: Codable {
         // Publish immediately - all editor puzzles are official
         self.published_at = ISO8601DateFormatter().string(from: Date())
         self.metadata = AnyCodable([:] as [String: String])  // Empty metadata as AnyCodable
+    }
+}
+
+// MARK: - SpellQuest Content Storage
+
+struct SpellQuestAlbumDTO: Decodable {
+    let id: String        // uuid
+    let album_id: String  // slug
+    let title: String
+    let difficulty: Int   // 1 easy, 2 normal, 3 hard
+    let order_index: Int?
+    let published_at: String?
+    let tags: [String]?
+    let metadata: AnyCodable?
+}
+
+struct SpellQuestPuzzleDTO: Decodable {
+    let id: String        // uuid
+    let puzzle_id: String // slug
+    let album_id: String  // album uuid (FK)
+    let word: String
+    let display_title: String?
+    let image_path: String
+    let difficulty: Int
+    let order_index: Int?
+    let published_at: String?
+    let tags: [String]?
+    let metadata: AnyCodable?
+}
+
+extension SupabaseService {
+    func fetchSpellQuestAlbums() async throws -> [SpellQuestAlbumDTO] {
+        guard isConnected || useServiceRole else { 
+            print("[SupabaseService] Not connected and not using service role, cannot fetch SpellQuest albums")
+            throw SupabaseError.notAuthenticated 
+        }
+        
+        print("[SupabaseService] Fetching SpellQuest albums...")
+        let response = try await client
+            .from("spellquest_albums")
+            .select()
+            .eq("is_official", value: true)
+            .not("published_at", operator: .is, value: "null")
+            .order("order_index", ascending: true)
+            .execute()
+        
+        let albums = try JSONDecoder().decode([SpellQuestAlbumDTO].self, from: response.data)
+        print("[SupabaseService] Successfully decoded \(albums.count) SpellQuest albums")
+        return albums
+    }
+
+    func fetchSpellQuestPuzzles(albumUUIDs: [String]) async throws -> [SpellQuestPuzzleDTO] {
+        guard isConnected || useServiceRole else { throw SupabaseError.notAuthenticated }
+        
+        // If albumUUIDs is provided, fetch only those albums' puzzles
+        // Otherwise fetch all published puzzles
+        if !albumUUIDs.isEmpty {
+            // Fetch puzzles for each album and combine results
+            var allPuzzles: [SpellQuestPuzzleDTO] = []
+            for albumId in albumUUIDs {
+                let response = try await client
+                    .from("spellquest_puzzles")
+                    .select()
+                    .eq("album_id", value: albumId)
+                    .eq("is_official", value: true)
+                    .not("published_at", operator: .is, value: "null")
+                    .order("order_index", ascending: true)
+                    .execute()
+                
+                let puzzles = try JSONDecoder().decode([SpellQuestPuzzleDTO].self, from: response.data)
+                allPuzzles.append(contentsOf: puzzles)
+            }
+            
+            // Sort combined results by order_index
+            return allPuzzles.sorted { ($0.order_index ?? 0) < ($1.order_index ?? 0) }
+        } else {
+            // Fetch all published puzzles
+            let response = try await client
+                .from("spellquest_puzzles")
+                .select()
+                .eq("is_official", value: true)
+                .not("published_at", operator: .is, value: "null")
+                .order("order_index", ascending: true)
+                .execute()
+            
+            return try JSONDecoder().decode([SpellQuestPuzzleDTO].self, from: response.data)
+        }
+    }
+
+    func getSpellQuestImagePublicURL(path: String) throws -> String {
+        try client.storage
+            .from("spellquest-images")
+            .getPublicURL(path: path)
+            .absoluteString
     }
 }
 

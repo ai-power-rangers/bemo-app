@@ -16,9 +16,11 @@ class SpellQuestDependencyContainer {
     let hintService: SpellQuestHintService
     let scoringService: SpellQuestScoringService
     let audioHapticsService: SpellQuestAudioHapticsService
+    let supabaseService: SupabaseService?
     
-    init() {
-        self.contentService = SpellQuestContentService()
+    init(supabaseService: SupabaseService? = nil) {
+        self.supabaseService = supabaseService
+        self.contentService = SpellQuestContentService(supabaseService: supabaseService)
         self.hintService = SpellQuestHintService()
         self.scoringService = SpellQuestScoringService()
         self.audioHapticsService = SpellQuestAudioHapticsService()

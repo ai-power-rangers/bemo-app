@@ -71,27 +71,50 @@ struct BoardView: View {
                 .shadow(color: .black.opacity(0.1), radius: 10)
             
             if !viewModel.boardState.currentPuzzle.imageName.isEmpty {
-                // Try to load the image, fallback to placeholder
-                if UIImage(named: viewModel.boardState.currentPuzzle.imageName) != nil {
-                    Image(viewModel.boardState.currentPuzzle.imageName)
+                // Check if it's a local asset first
+                if let img = UIImage(named: viewModel.boardState.currentPuzzle.imageName) {
+                    Image(uiImage: img)
                         .resizable()
                         .scaledToFit()
                         .padding()
-                } else {
-                    // Placeholder for missing images
-                    VStack {
-                        Image(systemName: "photo.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray.opacity(0.5))
-                        Text(viewModel.boardState.currentPuzzle.displayTitle ?? "")
-                            .font(.title2)
-                            .foregroundColor(.gray)
+                } else if let url = URL(string: viewModel.boardState.currentPuzzle.imageName) {
+                    // It's a remote URL, use AsyncImage
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFit()
+                                .padding()
+                        case .failure(_):
+                            placeholderView
+                        case .empty:
+                            ProgressView()
+                                .padding()
+                        @unknown default:
+                            placeholderView
+                        }
                     }
+                } else {
+                    // Fallback placeholder
+                    placeholderView
                 }
             }
         }
         .aspectRatio(4/3, contentMode: .fit)
         .padding(.horizontal)
+    }
+    
+    @ViewBuilder
+    private var placeholderView: some View {
+        VStack {
+            Image(systemName: "photo.fill")
+                .font(.system(size: 60))
+                .foregroundColor(Color("AppPrimaryTextColor").opacity(0.3))
+            Text(viewModel.boardState.currentPuzzle.displayTitle ?? "")
+                .font(.title2)
+                .foregroundColor(Color("AppPrimaryTextColor"))
+        }
     }
     
     // MARK: - Letter Slots
@@ -226,7 +249,7 @@ private struct LetterSlotView: View {
             if let letter = slot.currentLetter {
                 Text(String(letter))
                     .font(.system(size: 30 * scaleFactor, weight: .bold))
-                    .foregroundColor(slot.isRevealedByHint ? .orange : .primary)
+                    .foregroundColor(slot.isRevealedByHint ? .orange : SpellQuestConstants.Colors.letterColor(for: letter))
                     .transition(.scale.combined(with: .opacity))
             } else {
                 // Show placeholder dash for empty slots
@@ -245,7 +268,7 @@ private struct LetterSlotView: View {
     
     private var slotBackgroundColor: Color {
         if slot.isFilled {
-            return slot.isRevealedByHint ? SpellQuestConstants.Colors.slotHinted : SpellQuestConstants.Colors.slotFilled
+            return slot.isRevealedByHint ? Color.orange.opacity(0.1) : Color.white
         } else if isTargeted {
             return Color.blue.opacity(0.2)
         } else {
@@ -272,20 +295,22 @@ private struct LetterTileView: View {
     
     var body: some View {
         Text(String(letter))
-            .font(.system(size: 20 * scaleFactor, weight: .semibold))
-            .foregroundColor(SpellQuestConstants.Colors.letterTileText)
+            .font(.system(size: 24 * scaleFactor, weight: .bold))
+            .foregroundColor(SpellQuestConstants.Colors.letterColor(for: letter))
             .frame(
                 width: SpellQuestConstants.UI.letterTileSize * scaleFactor,
                 height: SpellQuestConstants.UI.letterTileSize * scaleFactor
             )
             .background(
-                Circle()
-                    .fill(isHighlighted ? Color.yellow : SpellQuestConstants.Colors.letterTile)
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(SpellQuestConstants.Colors.letterTileBackground)
+                    .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
             )
             .overlay(
-                Circle()
-                    .stroke(isHighlighted ? Color.orange : Color.clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isHighlighted ? Color.yellow : SpellQuestConstants.Colors.letterTileBorder, lineWidth: isHighlighted ? 2 : 1)
             )
+            .scaleEffect(isHighlighted ? 1.1 : 1.0)
             .animation(.spring(response: 0.3), value: isHighlighted)
     }
 }
