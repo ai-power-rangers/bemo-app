@@ -208,7 +208,7 @@ class TangramPuzzleScene: SKScene {
         // Add label for CV mini display
         let cvLabel = SKLabelNode(text: "CV")
         cvLabel.fontSize = 10
-        cvLabel.fontColor = SKColor.systemBlue.withAlphaComponent(0.7)
+        cvLabel.fontColor = SKColor(red: 0.18, green: 0.50, blue: 0.93, alpha: 0.7)
         cvLabel.position = CGPoint(x: 0, y: -miniDisplaySize/2 + 5)
         cvLabel.zPosition = 1
         cvMiniDisplay.addChild(cvLabel)
@@ -627,7 +627,7 @@ class TangramPuzzleScene: SKScene {
             // Show text hint above the target
             let label = SKLabelNode(text: content.message)
             label.fontSize = 16
-            label.fontColor = .white
+            label.fontColor = SKColor.white
             label.fontName = "System-Bold"
             
             let background = SKShapeNode(rectOf: CGSize(width: label.frame.width + 20, height: 30), cornerRadius: 15)
@@ -717,7 +717,7 @@ class TangramPuzzleScene: SKScene {
             if !content.message.isEmpty {
                 let label = SKLabelNode(text: content.message)
                 label.fontSize = 14
-                label.fontColor = .systemYellow
+                label.fontColor = TangramTheme.Hint.skColor
                 label.position = CGPoint(x: 0, y: 60)
                 nudgeNode.addChild(label)
             }
@@ -768,14 +768,7 @@ class TangramPuzzleScene: SKScene {
     private func showSmartNudge(for piece: PuzzlePieceNode, content: NudgeContent) { /* no-op for physical realism */ }
     
     private func nudgeLevelColor(_ level: NudgeLevel) -> SKColor {
-        switch level {
-        case .none: return .clear
-        case .visual: return .systemBlue
-        case .gentle: return .systemTeal
-        case .specific: return .systemOrange
-        case .directed: return .systemYellow
-        case .solution: return .systemGreen
-        }
+        return TangramTheme.Nudge.skColor(for: level)
     }
 
     // MARK: - Motion/Settlement Helpers
@@ -810,7 +803,7 @@ class TangramPuzzleScene: SKScene {
         case .visual, .gentle, .specific, .directed, .solution:
             let label = SKLabelNode(text: content.message.isEmpty ? "Hint" : content.message)
             label.fontSize = 16
-            label.fontColor = .white
+            label.fontColor = SKColor.white
             label.fontName = "System-Bold"
             label.verticalAlignmentMode = .center
             label.horizontalAlignmentMode = .center
@@ -909,7 +902,7 @@ class TangramPuzzleScene: SKScene {
         checkmark.name = checkName
         checkmark.fontSize = 28
         checkmark.fontName = "System-Bold"
-        checkmark.fontColor = .systemGreen
+        checkmark.fontColor = TangramTheme.Validation.correctSK
         checkmark.position = CGPoint(x: mirrorNode.position.x, y: mirrorNode.position.y + 56)
         checkmark.zPosition = mirrorNode.zPosition + 20
         topMirrorContent?.addChild(checkmark)

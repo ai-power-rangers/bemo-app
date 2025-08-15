@@ -24,7 +24,7 @@ struct TangramEditorTopBar: View {
                     Text("Library")
                 }
                 .font(.body)
-                .foregroundColor(.blue)
+                .foregroundColor(TangramTheme.UI.primaryButton)
             }
             .frame(width: 100, alignment: .leading)
             
@@ -37,14 +37,14 @@ struct TangramEditorTopBar: View {
                     Button(action: { viewModel.cancelPendingPiece() }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title2)
-                            .foregroundColor(.red)
+                            .foregroundColor(TangramTheme.UI.destructive)
                     }
                     
                     // Rotate
                     Button(action: { viewModel.rotatePendingPiece(by: 45) }) {
                         Image(systemName: "rotate.right")
                             .font(.title2)
-                            .foregroundColor(.primary)
+                            .foregroundColor(TangramTheme.Text.primary)
                     }
                     
                     // Flip (for parallelogram)
@@ -52,13 +52,13 @@ struct TangramEditorTopBar: View {
                         Button(action: { viewModel.flipPendingPiece() }) {
                             Image(systemName: "arrow.left.and.right")
                                 .font(.title2)
-                                .foregroundColor(.primary)
+                                .foregroundColor(TangramTheme.Text.primary)
                         }
                     } else if case .manipulatingPendingPiece(let type, _, _) = viewModel.editorState, type == .parallelogram {
                         Button(action: { viewModel.flipPendingPiece() }) {
                             Image(systemName: "arrow.left.and.right")
                                 .font(.title2)
-                                .foregroundColor(.primary)
+                                .foregroundColor(TangramTheme.Text.primary)
                         }
                     }
                     
@@ -68,7 +68,7 @@ struct TangramEditorTopBar: View {
                     }) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.title2)
-                            .foregroundColor(canPlacePiece() ? .green : .gray)
+                            .foregroundColor(canPlacePiece() ? TangramTheme.UI.success : TangramTheme.UI.disabled)
                     }
                     .disabled(!canPlacePiece())
                 }
@@ -79,7 +79,7 @@ struct TangramEditorTopBar: View {
                     Button(action: { viewModel.undo() }) {
                         Image(systemName: "arrow.uturn.backward.circle")
                             .font(.title2)
-                            .foregroundColor(viewModel.canUndo ? .primary : .gray)
+                            .foregroundColor(viewModel.canUndo ? TangramTheme.Text.primary : TangramTheme.UI.disabled)
                     }
                     .disabled(!viewModel.canUndo)
                     
@@ -87,7 +87,7 @@ struct TangramEditorTopBar: View {
                     Button(action: { viewModel.redo() }) {
                         Image(systemName: "arrow.uturn.forward.circle")
                             .font(.title2)
-                            .foregroundColor(viewModel.canRedo ? .primary : .gray)
+                            .foregroundColor(viewModel.canRedo ? TangramTheme.Text.primary : TangramTheme.UI.disabled)
                     }
                     .disabled(!viewModel.canRedo)
                     
@@ -96,11 +96,11 @@ struct TangramEditorTopBar: View {
                         if viewModel.validationState.isValid {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.body)
-                                .foregroundColor(.green)
+                                .foregroundColor(TangramTheme.UI.success)
                         } else {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.body)
-                                .foregroundColor(.orange)
+                                .foregroundColor(TangramTheme.UI.warning)
                         }
                     }
                 }
@@ -113,17 +113,17 @@ struct TangramEditorTopBar: View {
                 Text("Save")
                     .font(.body)
                     .fontWeight(.semibold)
-                    .foregroundColor(.white)
+                    .foregroundColor(TangramTheme.Text.onColor)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 8)
-                    .background(Capsule().fill(viewModel.validationState.isValid && viewModel.puzzle.pieces.count >= 2 ? Color.blue : Color.gray))
+                    .background(Capsule().fill(viewModel.validationState.isValid && viewModel.puzzle.pieces.count >= 2 ? TangramTheme.UI.primaryButton : TangramTheme.UI.disabled))
             }
             .disabled(!(viewModel.validationState.isValid && viewModel.puzzle.pieces.count >= 2))
             .frame(width: 100, alignment: .trailing)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Color(.systemBackground))
+        .background(TangramTheme.Backgrounds.toolbar)
     }
     
     private var isPendingPiece: Bool {

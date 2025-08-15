@@ -25,7 +25,7 @@ struct TangramEditorToolbar: View {
                         Text("Library")
                     }
                     .font(.body)
-                    .foregroundColor(.blue)
+                    .foregroundColor(TangramTheme.UI.primaryButton)
                 }
                 
                 Spacer()
@@ -42,10 +42,10 @@ struct TangramEditorToolbar: View {
                     Text("Save")
                         .font(.body)
                         .fontWeight(.semibold)
-                        .foregroundColor(canSave ? .white : .gray)
+                        .foregroundColor(canSave ? TangramTheme.Text.onColor : TangramTheme.UI.disabled)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 6)
-                        .background(Capsule().fill(canSave ? Color.blue : Color.gray.opacity(0.3)))
+                        .background(Capsule().fill(canSave ? TangramTheme.UI.primaryButton : TangramTheme.UI.disabled.opacity(0.3)))
                 }
                 .disabled(!canSave)
             }
@@ -61,14 +61,14 @@ struct TangramEditorToolbar: View {
                     Button(action: { viewModel.undo() }) {
                         Image(systemName: "arrow.uturn.backward")
                             .font(.body)
-                            .foregroundColor(viewModel.canUndo ? .primary : .gray)
+                            .foregroundColor(viewModel.canUndo ? TangramTheme.Text.primary : TangramTheme.UI.disabled)
                     }
                     .disabled(!viewModel.canUndo)
                     
                     Button(action: { viewModel.redo() }) {
                         Image(systemName: "arrow.uturn.forward")
                             .font(.body)
-                            .foregroundColor(viewModel.canRedo ? .primary : .gray)
+                            .foregroundColor(viewModel.canRedo ? TangramTheme.Text.primary : TangramTheme.UI.disabled)
                     }
                     .disabled(!viewModel.canRedo)
                 }
@@ -88,7 +88,7 @@ struct TangramEditorToolbar: View {
                     }) {
                         Image(systemName: "rotate.left")
                             .font(.body)
-                            .foregroundColor(canRotate ? .primary : .gray)
+                            .foregroundColor(canRotate ? TangramTheme.Text.primary : TangramTheme.UI.disabled)
                     }
                     .disabled(!canRotate)
                     
@@ -102,7 +102,7 @@ struct TangramEditorToolbar: View {
                     }) {
                         Image(systemName: "rotate.right")
                             .font(.body)
-                            .foregroundColor(canRotate ? .primary : .gray)
+                            .foregroundColor(canRotate ? TangramTheme.Text.primary : TangramTheme.UI.disabled)
                     }
                     .disabled(!canRotate)
                     
@@ -116,7 +116,7 @@ struct TangramEditorToolbar: View {
                     }) {
                         Image(systemName: "arrow.left.and.right")
                             .font(.body)
-                            .foregroundColor(canFlip ? .primary : .gray)
+                            .foregroundColor(canFlip ? TangramTheme.Text.primary : TangramTheme.UI.disabled)
                     }
                     .disabled(!canFlip)
                     
@@ -124,7 +124,7 @@ struct TangramEditorToolbar: View {
                     Button(action: { viewModel.cancelPendingPiece() }) {
                         Image(systemName: "xmark.circle")
                             .font(.body)
-                            .foregroundColor(isPendingPiece ? .red : .gray)
+                            .foregroundColor(isPendingPiece ? TangramTheme.UI.destructive : TangramTheme.UI.disabled)
                     }
                     .disabled(!isPendingPiece)
                     
@@ -134,7 +134,7 @@ struct TangramEditorToolbar: View {
                     }) {
                         Image(systemName: "checkmark.circle")
                             .font(.body)
-                            .foregroundColor(canConfirm ? .green : .gray)
+                            .foregroundColor(canConfirm ? TangramTheme.UI.success : TangramTheme.UI.disabled)
                     }
                     .disabled(!canConfirm)
                 }
@@ -146,7 +146,7 @@ struct TangramEditorToolbar: View {
                 Button(action: { viewModel.removeSelectedPieces() }) {
                     Image(systemName: "trash")
                         .font(.body)
-                        .foregroundColor(hasSelectedPiece ? .red : .gray)
+                        .foregroundColor(hasSelectedPiece ? TangramTheme.UI.destructive : TangramTheme.UI.disabled)
                 }
                 .disabled(!hasSelectedPiece)
                 
@@ -157,14 +157,14 @@ struct TangramEditorToolbar: View {
                     HStack(spacing: 4) {
                         if viewModel.validationState.isValid {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
+                                .foregroundColor(TangramTheme.UI.success)
                         } else {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.orange)
+                                .foregroundColor(TangramTheme.UI.warning)
                         }
                         Text(viewModel.validationState.isValid ? "Valid" : "Invalid")
                             .font(.caption)
-                            .foregroundColor(viewModel.validationState.isValid ? .green : .orange)
+                            .foregroundColor(viewModel.validationState.isValid ? TangramTheme.UI.success : TangramTheme.UI.warning)
                     }
                 }
             }
@@ -173,10 +173,10 @@ struct TangramEditorToolbar: View {
             
             Divider()
         }
-        .background(Color(.systemBackground))
+        .background(TangramTheme.Backgrounds.toolbar)
         .overlay(
             Rectangle()
-                .fill(Color.gray.opacity(0.2))
+                .fill(TangramTheme.UI.separator)
                 .frame(height: 1),
             alignment: .bottom
         )

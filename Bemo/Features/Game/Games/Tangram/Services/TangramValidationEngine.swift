@@ -155,7 +155,7 @@ class TangramValidationEngine {
         // Update pose cache for all observations
         for obs in frame { lastObservedPose[obs.pieceId] = (obs.position, obs.rotation) }
         // Detect moving pieces (velocity-based) to freeze mapping persistence during manipulation
-        let anyMoving: Bool = frame.contains { hypot($0.velocity.dx, $0.velocity.dy) > 10.0 }
+        let _ = frame.contains { hypot($0.velocity.dx, $0.velocity.dy) > 10.0 }
         // SIMPLE TWO-PIECE ANCHOR + ORIENTATION-ONLY FEEDBACK
         var orientedTargets: Set<String> = []
         var pieceStates: [String: PieceValidationState] = [:]

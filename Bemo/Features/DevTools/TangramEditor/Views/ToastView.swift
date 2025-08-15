@@ -86,7 +86,7 @@ struct ToastMessageView: View {
         ZStack {
             // Background
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.systemBackground))
+                .fill(TangramTheme.Backgrounds.panel)
             
             // Severity indicator stripe
             HStack {
