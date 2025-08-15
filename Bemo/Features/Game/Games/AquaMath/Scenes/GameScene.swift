@@ -401,12 +401,7 @@ class GameScene: SKScene {
                 ])
                 particle.run(particleAction)
             }
-            
-            // Add a pop sound effect if audio service is available
-            if let vm = viewModel {
-                //vm.audioService.playSound("pop")
-            }
-            
+                        
             node.run(popSequence)
         }
     }
