@@ -114,6 +114,10 @@ class TangramValidationEngine {
     private let invalidationSlackPosition: CGFloat = 18 // px
     private let invalidationSlackRotationDeg: CGFloat = 8 // deg
     private let invalidationDwellSeconds: TimeInterval = 0.5
+
+    // Precomputed target relations (cached per puzzle id)
+    private var cachedPairLibraries: [String: TargetPairLibrary] = [:]
+    private var cachedAdjacencyGraphs: [String: TargetAdjacencyGraph] = [:]
     
     // MARK: - Initialization
     
@@ -144,6 +148,13 @@ class TangramValidationEngine {
         difficulty: UserPreferences.DifficultySetting,
         options: ValidationOptions = .default
     ) -> ValidationResult {
+        // Ensure target relations are built for this puzzle id
+        if cachedPairLibraries[puzzle.id] == nil {
+            cachedPairLibraries[puzzle.id] = TargetPairLibrary.build(for: puzzle)
+        }
+        if cachedAdjacencyGraphs[puzzle.id] == nil {
+            cachedAdjacencyGraphs[puzzle.id] = TargetAdjacencyGraph.build(for: puzzle)
+        }
         // Follow plan doc: two-piece rigid mapping commit, then relative validation
         let enableAnchorMapping = true
         
