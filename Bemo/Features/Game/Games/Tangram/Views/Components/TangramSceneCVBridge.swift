@@ -248,60 +248,10 @@ extension TangramPuzzleScene {
             // No checkmark overlays; fillAlpha is the only orientation feedback here
         }
 
-        // Remove old nodes path for mini display no longer used
-
-        // 3) Update or create each CV piece visualization using proper shape and color
-        for _ in frame.objects { /* no-op */ }
+        // Mini CV display removed; no dedicated per-piece CV rendering below
     }
     
-    private func updateCVPiece(_ cvPiece: CVPieceEvent) {
-        // Find or create CV visualization
-        let pieceId = pieceIdFromCVName(cvPiece.name)
-        
-        // Only show pieces that have been interacted with (not purely unobserved)
-        if let state = pieceStates[pieceId] {
-            switch state.state {
-            case .unobserved, .detected:
-                if let existingNode = cvPieces[pieceId] { existingNode.removeFromParent(); cvPieces.removeValue(forKey: pieceId) }
-                return
-            default: break
-            }
-        }
-        
-        if cvPieces[pieceId] == nil {
-            createCVVisualization(for: pieceId)
-        }
-        
-        guard let cvNode = cvPieces[pieceId] else { return }
-        
-        // Find the corresponding physical piece to get its position
-        guard let physicalPiece = availablePieces.first(where: { $0.name == pieceId }) else { return }
-        
-        // Position/rotation: use a direct mapping via cvContent's transform (uniformScale + center offset)
-        // Place cvNode as a child of cvContent to inherit uniform scaling and centering
-        if cvNode.parent !== cvContent { cvNode.removeFromParent(); cvContent.addChild(cvNode) }
-        cvNode.position = physicalPiece.position
-        cvNode.zRotation = physicalPiece.zRotation
-        
-        // Update flip state and visuals for SKShapeNode-based CV piece
-        if let shape = cvNode as? SKShapeNode {
-            // Match bottom piece scale, using xScale sign to encode flip
-            let baseScaleX = max(0.0001, abs(physicalPiece.xScale))
-            let baseScaleY = max(0.0001, abs(physicalPiece.yScale))
-            let desiredSign: CGFloat = physicalPiece.isFlipped ? -1 : 1
-            shape.xScale = desiredSign * baseScaleX
-            shape.yScale = baseScaleY
-
-            if let pieceType = physicalPiece.pieceType {
-                shape.fillColor = TangramColors.Sprite.uiColor(for: pieceType).withAlphaComponent(0.6)
-                shape.strokeColor = TangramColors.Sprite.uiColor(for: pieceType)
-                shape.lineWidth = 1.0
-                if let state = pieceStates[pieceId] {
-                    updateCVShapeVisualState(shape, pieceType: pieceType, state: state)
-                }
-            }
-        }
-    }
+    // updateCVPiece removed with mini display
     
     // Note: createCVVisualization is implemented in TangramScenePieceFactory extension
     
@@ -340,7 +290,7 @@ extension TangramPuzzleScene {
         feedbackNode.position = cvNode.position
         feedbackNode.zPosition = cvNode.zPosition + 10
         
-        cvContent.addChild(feedbackNode)
+        // Mini CV display removed; no parent container for dedicated CV content
         
         // Animate feedback
         let expand = SKAction.scale(to: 2, duration: 0.3)

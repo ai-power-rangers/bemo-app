@@ -95,7 +95,8 @@ class TangramAnchorMapper {
                 mapping: mapping,
                 anchorPosition: anchorPosition,
                 puzzle: puzzle,
-                difficulty: difficulty
+                difficulty: difficulty,
+                allowedTargetIds: nil
             )
             states[obs.pieceId] = state
         }
@@ -208,16 +209,20 @@ class TangramAnchorMapper {
     
     // MARK: - Private Methods
     
-    private func validateMappedPiece(
+    func validateMappedPiece(
         observation: TangramValidationEngine.PieceObservation,
         mapping: AnchorMapping,
         anchorPosition: CGPoint,
         puzzle: GamePuzzleData,
-        difficulty: UserPreferences.DifficultySetting
+        difficulty: UserPreferences.DifficultySetting,
+        allowedTargetIds: Set<String>? = nil
     ) -> TangramValidationEngine.PieceValidationState {
-        // Get candidate targets
-        let candidateTargets = puzzle.targetPieces.filter { 
-            $0.pieceType == observation.pieceType 
+        // Get candidate targets, optionally restricted to whitelist
+        var candidateTargets = puzzle.targetPieces.filter {
+            $0.pieceType == observation.pieceType
+        }
+        if let whitelist = allowedTargetIds {
+            candidateTargets = candidateTargets.filter { whitelist.contains($0.id) }
         }
         
         // Map piece to target space

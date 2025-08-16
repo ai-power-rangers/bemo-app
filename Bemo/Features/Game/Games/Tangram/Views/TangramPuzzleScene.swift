@@ -18,8 +18,10 @@ class TangramPuzzleScene: SKScene {
     // MARK: - Section Nodes
     
     internal var targetSection: SKNode!      // Top panel - shows target puzzle centered
-    internal var cvMiniDisplay: SKNode!      // Mini CV display in top-right corner (internal for extensions)
-    internal var cvContent: SKNode!          // Content container inside CV mini display (scaled mapping of physical world)
+    // Removed mini CV display; top mirror is used as the sole visualization layer
+    // Mini display fully removed; kept variables for compatibility but unused
+    // internal var cvMiniDisplay: SKNode!
+    // internal var cvContent: SKNode!
     internal var physicalWorldSection: SKNode! // Bottom - user interaction area (internal for extensions)
     
     // MARK: - Section Bounds
@@ -159,9 +161,7 @@ class TangramPuzzleScene: SKScene {
         
         targetBounds = CGRect(x: 0, y: topSectionY - sectionHeight/2, width: size.width, height: sectionHeight)
         
-        // Remove mini CV display: pieces render only in the main top panel now
-        cvMiniDisplay = SKNode()
-        cvContent = SKNode()
+        // Mini CV display removed
 
         // Top mirror content (shows mirrored physical pieces in the top panel)
         topMirrorContent = SKNode()
@@ -196,23 +196,7 @@ class TangramPuzzleScene: SKScene {
         targetBg.zPosition = -1
         targetSection.addChild(targetBg)
         
-        // Mini CV display background (with a subtle border so we can see it during debugging)
-        let miniDisplaySize: CGFloat = min(size.width * 0.25, 150)
-        let cvMiniBg = SKShapeNode(rectOf: CGSize(width: miniDisplaySize, height: miniDisplaySize))
-        cvMiniBg.fillColor = SKColor.systemBlue.withAlphaComponent(0.1)
-        cvMiniBg.strokeColor = SKColor.systemBlue.withAlphaComponent(0.7)
-        cvMiniBg.lineWidth = 2
-        cvMiniBg.position = .zero
-        cvMiniBg.zPosition = -1
-        cvMiniDisplay.addChild(cvMiniBg)
-        
-        // Add label for CV mini display
-        let cvLabel = SKLabelNode(text: "CV")
-        cvLabel.fontSize = 10
-        cvLabel.fontColor = SKColor(red: 0.18, green: 0.50, blue: 0.93, alpha: 0.7)
-        cvLabel.position = CGPoint(x: 0, y: -miniDisplaySize/2 + 5)
-        cvLabel.zPosition = 1
-        cvMiniDisplay.addChild(cvLabel)
+        // Mini CV background and label removed
         
         // Physical world section - assembly area (bottom)
         let assemblyArea = SKShapeNode(rectOf: CGSize(width: size.width - 30, height: sectionHeight))
@@ -290,10 +274,9 @@ class TangramPuzzleScene: SKScene {
         // Only clear if sections have been initialized
         guard targetSection != nil else { return }
         
-        // Clear all child nodes except backgrounds, labels, CV mini display, and the top mirror container
+        // Clear all child nodes except backgrounds, labels, and the top mirror container
         targetSection.children.forEach { node in
-            // Keep backgrounds, labels, the CV mini display itself, and the top mirror container
-            if node === cvMiniDisplay { return }
+            // Keep backgrounds, labels, and the top mirror container
             if node === topMirrorContent { return }
             if (node is SKShapeNode) || (node is SKLabelNode) { return }
             node.removeFromParent()
@@ -304,13 +287,7 @@ class TangramPuzzleScene: SKScene {
             mirror.enumerateChildNodes(withName: "mirror_*") { node, _ in node.removeFromParent() }
         }
         
-        // Clear CV mini display contents except its background and persistent content container
-        cvMiniDisplay?.children.forEach { node in
-            if node.name == "cvContent" { return }
-            if !(node is SKShapeNode) && !(node is SKLabelNode) {
-                node.removeFromParent()
-            }
-        }
+        // Mini CV display removed; nothing to clear here
         
         physicalWorldSection.children.forEach { node in
             if !(node is SKShapeNode) && !(node is SKLabelNode) {
@@ -1272,5 +1249,88 @@ class TangramPuzzleScene: SKScene {
         if let frameId = frameSubscriptionId {
             eventBus.unsubscribe(frameId)
         }
+    }
+}
+
+// MARK: - Validation Delegation
+
+extension TangramPuzzleScene {
+    /// Main validation entry point - delegates to CVValidationBridge
+    func validatePlacedPiece(_ piece: PuzzlePieceNode) {
+        validationBridge?.validatePiece(piece)
+    }
+
+    /// Complete validation for a piece (called by CVValidationBridge)
+    func completeValidation(piece: PuzzlePieceNode, targetId: String, state: PieceState) {
+        guard let pieceId = piece.name,
+              let pieceType = piece.pieceType else { return }
+
+        print("[VALIDATION] ✅ piece=\(pieceId) type=\(pieceType.rawValue) → target=\(targetId)")
+
+        // Update state
+        pieceStates[pieceId] = state
+        piece.pieceState = state
+        piece.updateStateIndicator()
+
+        // Mark as completed
+        completedPieces.insert(targetId)
+        validatedTargets.insert(targetId)
+        onValidatedTargetsChanged?(validatedTargets)
+
+        // Update visual
+        if let targetNode = targetSilhouettes[targetId] {
+            applyValidatedFill(to: targetNode, for: pieceType)
+
+            let pulse = SKAction.sequence([
+                SKAction.scale(to: 1.1, duration: 0.1),
+                SKAction.scale(to: 1.0, duration: 0.1)
+            ])
+            targetNode.run(pulse)
+        }
+
+        // Check puzzle completion
+        if completedPieces.count == puzzle?.targetPieces.count {
+            handlePuzzleComplete()
+        }
+    }
+
+    /// Handle validation failure (called by CVValidationBridge)
+    func handleValidationFailure(piece: PuzzlePieceNode, failure: ValidationFailure?) {
+        guard let pieceId = piece.name else { return }
+
+        // Update state to invalid
+        if var state = pieceStates[pieceId] {
+            state.markAsInvalid(reason: failure ?? .wrongPiece)
+            pieceStates[pieceId] = state
+            piece.pieceState = state
+            piece.updateStateIndicator()
+        }
+
+        // Visual feedback
+        if let failure = failure {
+            print("[VALIDATION] ❌ piece=\(pieceId) - \(failure.nudgeMessage)")
+        }
+    }
+
+    private func handlePuzzleComplete() {
+        print("[PUZZLE] 🎉 Puzzle completed!")
+
+        // Notify view model
+        onPuzzleCompleted?()
+
+        // Celebration animation
+        let celebrationNode = SKLabelNode(text: "🎉")
+        celebrationNode.fontSize = 100
+        celebrationNode.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        celebrationNode.zPosition = 1000
+        addChild(celebrationNode)
+
+        let sequence = SKAction.sequence([
+            SKAction.scale(to: 1.5, duration: 0.5),
+            SKAction.wait(forDuration: 2),
+            SKAction.fadeOut(withDuration: 0.5),
+            SKAction.removeFromParent()
+        ])
+        celebrationNode.run(sequence)
     }
 }

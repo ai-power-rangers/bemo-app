@@ -233,12 +233,12 @@ extension TangramPuzzleScene {
         cvPiece.fillColor = TangramColors.Sprite.uiColor(for: pieceType).withAlphaComponent(0.6)
         cvPiece.strokeColor = TangramColors.Sprite.uiColor(for: pieceType)
         cvPiece.lineWidth = 1
-        // Start with same scale as physical piece so transformed edge distances match once cvContent uniform scale is applied
+        // Start with same scale as physical piece so transformed edge distances match once mirrored
         cvPiece.xScale = max(0.0001, abs(physicalPiece.xScale))
         cvPiece.yScale = max(0.0001, abs(physicalPiece.yScale))
         if physicalPiece.isFlipped { cvPiece.xScale *= -1 }
 
-        // Add to top mirror content, not cvContent, to ensure mapping matches mirror layer
+        // Add to top mirror content to ensure mapping matches mirror layer
         if cvPiece.parent !== topMirrorContent { topMirrorContent.addChild(cvPiece) }
         cvPieces[pieceId] = cvPiece
     }
