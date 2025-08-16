@@ -102,6 +102,9 @@ extension TangramPuzzleScene {
         let displayScale: CGFloat = 0.8  // Doubled from 0.4 for better visibility
         self.targetDisplayScale = displayScale
         
+        // Persist bounds center for later relative overlay mapping
+        self.puzzleBoundsCenterSK = boundsCenterSK
+
         // Create a container to center the puzzle in the main area
         let puzzleContainer = SKNode()
         puzzleContainer.name = "puzzleContainer"

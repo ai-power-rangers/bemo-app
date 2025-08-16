@@ -70,6 +70,7 @@ class TangramPuzzleScene: SKScene {
     internal var pieceInvalidStreak: [String: Int] = [:]  // Internal for extensions
     internal let invalidStreakThreshold = 5  // Internal for extensions
     internal var targetDisplayScale: CGFloat = 0.8  // Internal for extensions
+    internal var puzzleBoundsCenterSK: CGPoint = .zero  // Center used for converting SK scene → puzzleContainer coords
     internal var topMirrorContent: SKNode!  // Top-panel mirror of physical world
     // Orientation feedback handled by validation engine nudges only; no local overlays
     internal var lastMotionAt: [String: TimeInterval] = [:]  // Per-piece last motion timestamp (position/rotation/flip)
