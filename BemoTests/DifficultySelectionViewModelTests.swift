@@ -426,10 +426,25 @@ final class DifficultySelectionViewModelTests: XCTestCase {
         weak var weakViewModel: DifficultySelectionViewModel?
         
         autoreleasepool {
-            let strongViewModel = createViewModel()
+            // Create ViewModel with non-capturing callback to avoid retain cycle
+            let strongViewModel = DifficultySelectionViewModel(
+                childProfileId: testChildId,
+                progressService: mockProgressService,
+                puzzleLibraryService: mockPuzzleService,
+                onDifficultySelected: { _ in
+                    // Non-capturing callback for memory test
+                }
+            )
             weakViewModel = strongViewModel
             XCTAssertNotNil(weakViewModel)
         }
+        
+        // Allow time for deallocation to complete
+        let expectation = XCTestExpectation(description: "ViewModel deallocation")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 1.0)
         
         // ViewModel should be deallocated
         XCTAssertNil(weakViewModel)
