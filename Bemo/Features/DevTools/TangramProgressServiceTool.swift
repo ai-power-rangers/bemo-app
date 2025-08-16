@@ -1,21 +1,21 @@
 //
-//  TangramProgressTool.swift  
+//  TangramProgressServiceTool.swift  
 //  Bemo
 //
-//  DevTool for testing TangramProgress model functionality
+//  DevTool for testing TangramProgressService functionality
 //
 
-// WHAT: DevTool for testing and demonstrating TangramProgress functionality
+// WHAT: DevTool for testing and demonstrating TangramProgressService functionality
 // ARCHITECTURE: DevTool in MVVM-S pattern
-// USAGE: Provides UI to test progress tracking, difficulty switching, and unlock logic
+// USAGE: Provides UI to test service-level progress tracking, persistence, and multiple children
 
 import SwiftUI
 import Foundation
 
-class TangramProgressTool: DevTool {
-    let id = "tangram_progress"
-    let title = "Tangram Progress Test"
-    let description = "Test difficulty selection and progress tracking"
+class TangramProgressServiceTool: DevTool {
+    let id = "tangram_progress_service"
+    let title = "Tangram Progress Service"
+    let description = "Test progress service with persistence and multiple children"
     let recommendedAge: ClosedRange<Int> = 18...120
     let thumbnailImageName = "tangram_thumb"
     
@@ -29,7 +29,7 @@ class TangramProgressTool: DevTool {
     }
     
     func makeDevToolView(delegate: DevToolDelegate) -> AnyView {
-        return AnyView(TangramProgressDebugView())
+        return AnyView(TangramProgressServiceDebugView())
     }
     
     func reset() { }
