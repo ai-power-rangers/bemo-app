@@ -36,6 +36,8 @@ struct TangramSpriteView: View {
         scene.scaleMode = .resizeFill
         return scene
     }()
+    // Validation engine instance owned by this view
+    @State private var engine: TangramValidationEngine = TangramValidationEngine()
     
     var body: some View {
         GeometryReader { geometry in
@@ -56,6 +58,10 @@ struct TangramSpriteView: View {
         .onChange(of: difficultySetting) { _, newValue in
             if let tangramScene = scene as? TangramPuzzleScene {
                 tangramScene.difficultySetting = newValue
+                // Update bridge engine if scene already created
+                // Recreate engine for new difficulty and update the bridge
+                engine = TangramValidationEngine(difficulty: newValue)
+                tangramScene.validationBridge?.updateEngine(engine)
             }
         }
         // Propagate difficulty changes via puzzle reloads or view updates if needed later
@@ -100,6 +106,14 @@ struct TangramSpriteView: View {
         tangramScene.onToggleHints = onToggleHints
         tangramScene.onValidatedTargetsChanged = onValidatedTargetsChanged
         
+        // Provide a validation engine to the scene's bridge
+        engine = TangramValidationEngine(difficulty: difficultySetting)
+        if tangramScene.validationBridge == nil {
+            tangramScene.validationBridge = CVValidationBridge(scene: tangramScene, engine: engine)
+        } else {
+            tangramScene.validationBridge?.updateEngine(engine)
+        }
+
         // Load the puzzle (no UI elements needed - handled by SwiftUI)
         tangramScene.loadPuzzle(puzzle)
     }

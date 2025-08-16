@@ -25,7 +25,7 @@ class CVValidationBridge {
     
     // MARK: - Properties
     
-    private let validationEngine: TangramValidationEngine
+    private var validationEngine: TangramValidationEngine
     private weak var scene: TangramPuzzleScene?
     private var lastValidationTime: TimeInterval = 0
     // Max engine rate; real triggers are event-driven via CV frame signature or drag end
@@ -47,6 +47,18 @@ class CVValidationBridge {
     init(scene: TangramPuzzleScene, difficulty: UserPreferences.DifficultySetting) {
         self.scene = scene
         self.validationEngine = TangramValidationEngine(difficulty: difficulty)
+    }
+
+    /// Initialize with a provided/shared validation engine
+    init(scene: TangramPuzzleScene, engine: TangramValidationEngine) {
+        self.scene = scene
+        self.validationEngine = engine
+    }
+
+    /// Swap the underlying engine (e.g., when difficulty changes upstream)
+    func updateEngine(_ engine: TangramValidationEngine) {
+        self.validationEngine = engine
+        self.lastValidationTime = 0
     }
     
     // MARK: - Public Interface

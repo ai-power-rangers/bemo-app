@@ -96,19 +96,5 @@ class TangramDependencyContainer {
         )
     }
     
-    /// Creates a configured PuzzleSelectionViewModel
-    func makePuzzleSelectionViewModel(
-        onPuzzleSelected: @escaping (Any) -> Void,
-        onBackToLobby: (() -> Void)? = nil
-    ) -> PuzzleSelectionViewModel {
-        return PuzzleSelectionViewModel(
-            libraryService: puzzleLibraryService,
-            onPuzzleSelected: { puzzle in
-                // The library service already returns GamePuzzleData, so just pass it through
-                // If we ever need to handle TangramPuzzle conversion, we can add that later
-                onPuzzleSelected(puzzle)
-            },
-            onBackToLobby: onBackToLobby
-        )
-    }
+    // Removed PuzzleSelectionViewModel factory to reduce duplicate selection paths
 }

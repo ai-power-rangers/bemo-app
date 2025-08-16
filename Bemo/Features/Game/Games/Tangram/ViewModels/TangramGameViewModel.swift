@@ -125,6 +125,9 @@ class TangramGameViewModel {
         return engine
     }
 
+    // Expose a shared engine instance for injection into the scene/bridge
+    var sharedValidationEngine: TangramValidationEngine { validationEngine }
+
     // MARK: - Difficulty
     private(set) var effectiveDifficulty: UserPreferences.DifficultySetting = .normal
     var currentDifficulty: UserPreferences.DifficultySetting {

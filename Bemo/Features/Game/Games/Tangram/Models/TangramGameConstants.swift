@@ -60,11 +60,16 @@ enum TangramGameConstants {
         /// This gates early validation to ensure the first relations are built physically next to each other
         static let connectionDistance: CGFloat = 100.0
 
-        /// Per-difficulty tolerance presets
+        /// Per-difficulty tolerance presets (tighter at hard, looser at easy)
         static func tolerances(for difficulty: UserPreferences.DifficultySetting) -> (position: CGFloat, rotationDeg: CGFloat, connection: CGFloat, edgeContact: CGFloat) {
-            // For testing: use the same tolerances across all difficulties
-            // This can be restored to difficulty-specific values later
-            return (position: 30, rotationDeg: 15, connection: 60, edgeContact: 15)
+            switch difficulty {
+            case .easy:
+                return (position: 36, rotationDeg: 20, connection: 70, edgeContact: 18)
+            case .normal:
+                return (position: 30, rotationDeg: 15, connection: 60, edgeContact: 15)
+            case .hard:
+                return (position: 24, rotationDeg: 10, connection: 50, edgeContact: 12)
+            }
         }
     }
     
