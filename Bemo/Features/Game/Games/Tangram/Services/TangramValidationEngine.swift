@@ -194,7 +194,7 @@ class TangramValidationEngine {
                 if let gid = mainGroupId, let committed = mappingService.mapping(for: gid),
                    let obs0 = idToObs[committed.anchorPieceId],
                    let otherId = anchorPieceIds.first(where: { $0 != committed.anchorPieceId }),
-                   let obs1 = idToObs[otherId ?? ""] {
+                   let obs1 = idToObs[otherId] {
                     candidatePair = (obs0, obs1)
                 } else if let a = anchorPieceIds.sorted().first,
                           let b = anchorPieceIds.sorted().last,
@@ -236,39 +236,73 @@ class TangramValidationEngine {
                     }
                 }
                 if oriented.count >= 2 {
-                    // Prefer focus-based oriented pairs first, else closest among oriented
-                    if let focus = options.focusPieceId, let focusInfo = oriented.first(where: { $0.obs.pieceId == focus }) {
-                        var bestPair: (PieceObservation, PieceObservation)? = nil
-                        var bestDist: CGFloat = .infinity
-                        for item in oriented where item.obs.pieceId != focusInfo.obs.pieceId {
-                            let p = focusInfo.obs.position
-                            let q = item.obs.position
-                            let d = hypot(p.x - q.x, p.y - q.y)
-                            if d < bestDist { bestDist = d; bestPair = (focusInfo.obs, item.obs) }
-                        }
-                        candidatePair = bestPair
-                    }
-                    if candidatePair == nil {
-                        var bestPair: (PieceObservation, PieceObservation)? = nil
-                        var bestDist: CGFloat = .infinity
-                        for i in 0..<(oriented.count - 1) {
-                            for j in (i + 1)..<oriented.count {
-                                let p = oriented[i].obs.position
-                                let q = oriented[j].obs.position
-                                let d = hypot(p.x - q.x, p.y - q.y)
-                                if d < bestDist { bestDist = d; bestPair = (oriented[i].obs, oriented[j].obs) }
+                    #if DEBUG
+                    print("[ANCHOR-SELECT] Found \(oriented.count) oriented pieces")
+                    #endif
+                    // Score all oriented pairs against the target library and pick the best
+                    var bestPair: (PieceObservation, PieceObservation)? = nil
+                    var bestScore: CGFloat = .infinity
+                    var bestReason = ""
+                    
+                    // Try all pairs of oriented pieces
+                    for i in 0..<(oriented.count - 1) {
+                        for j in (i + 1)..<oriented.count {
+                            let obs0 = oriented[i].obs
+                            let obs1 = oriented[j].obs
+                            
+                            // Score this pair against the library
+                            if let targetMatch = findBestTargetPair(
+                                observedPair: (p0: obs0, p1: obs1),
+                                puzzle: puzzle,
+                                focusPieceId: options.focusPieceId
+                            ) {
+                                var score = targetMatch.score
+                                
+                                // Add orientation bonus (lower score for better oriented pieces)
+                                let orientBonus = (oriented[i].deltaDeg + oriented[j].deltaDeg) / 2.0
+                                score += orientBonus * 0.5
+                                
+                                // Strong preference for focus piece pairs
+                                let hasFocus = options.focusPieceId != nil &&
+                                    (obs0.pieceId == options.focusPieceId || obs1.pieceId == options.focusPieceId)
+                                if hasFocus {
+                                    score *= 0.6  // 40% bonus for focus pieces
+                                }
+                                
+                                if score < bestScore {
+                                    bestScore = score
+                                    bestPair = (obs0, obs1)
+                                    bestReason = hasFocus ? "focus+library" : "library"
+                                }
+                            } else {
+                                // Fallback: use distance as score if library matching fails
+                                let d = hypot(obs0.position.x - obs1.position.x, 
+                                            obs0.position.y - obs1.position.y)
+                                let hasFocus = options.focusPieceId != nil &&
+                                    (obs0.pieceId == options.focusPieceId || obs1.pieceId == options.focusPieceId)
+                                var score = d
+                                if hasFocus { score *= 0.7 }
+                                
+                                if score < bestScore {
+                                    bestScore = score
+                                    bestPair = (obs0, obs1)
+                                    bestReason = hasFocus ? "focus+distance" : "distance"
+                                }
                             }
                         }
-                        candidatePair = bestPair
                     }
+                    
+                    candidatePair = bestPair
                     #if DEBUG
                     if let cp = candidatePair {
-                        if let focus = options.focusPieceId, (cp.0.pieceId == focus || cp.1.pieceId == focus) {
-                            print("[ANCHOR] Oriented pair selected (focus prioritized): \(cp.0.pieceId), \(cp.1.pieceId)")
-                        } else {
-                            print("[ANCHOR] Oriented pair selected: \(cp.0.pieceId), \(cp.1.pieceId) (closest among oriented)")
-                        }
+                        print("[ANCHOR-SELECT] Oriented pair selected via \(bestReason): \(cp.0.pieceType.rawValue)+\(cp.1.pieceType.rawValue) pieces=\(cp.0.pieceId), \(cp.1.pieceId) (score=\(Int(bestScore)))")
+                    } else {
+                        print("[ANCHOR-SELECT] No oriented pair found from \(oriented.count) oriented pieces")
                     }
+                    #endif
+                } else {
+                    #if DEBUG
+                    print("[ANCHOR-SELECT] Only \(oriented.count) oriented pieces, need at least 2")
                     #endif
                 }
                 if candidatePair == nil {
@@ -325,12 +359,16 @@ class TangramValidationEngine {
                     // both pass relaxed gating based on residuals (doc spirit: enable when geometry matches)
                     // Add pair-separation guard to avoid validating pieces far apart
                     let bothStrict = pairObs.allSatisfy { localStates[$0.pieceId]?.isValid == true }
+                    #if DEBUG
+                    print("[ANCHOR-VALIDATE] Pair validation: \(pairObs[0].pieceType.rawValue)=\(localStates[pairObs[0].pieceId]?.isValid ?? false), \(pairObs[1].pieceType.rawValue)=\(localStates[pairObs[1].pieceId]?.isValid ?? false), bothStrict=\(bothStrict)")
+                    #endif
                     var bothRelaxed = false
                     if !bothStrict {
                         // Compute residuals and apply relaxed thresholds
+                        // Be more forgiving for initial anchor establishment to avoid false negatives
                         let tolerances = TangramGameConstants.Validation.tolerances(for: difficulty)
-                        let posRelax = tolerances.position * 1.6
-                        let rotRelaxDeg = tolerances.rotationDeg * 1.2
+                        let posRelax = tolerances.position * 2.5  // Much more forgiving on position for initial anchor
+                        let rotRelaxDeg = tolerances.rotationDeg * 1.5  // Slightly more forgiving on rotation
                         var okCount = 0
                         for obs in pairObs {
                             // Determine target from local state if available, else pick best by type
@@ -361,16 +399,27 @@ class TangramValidationEngine {
                                     TangramPoseMapper.spriteKitAngle(fromRawAngle: TangramPoseMapper.rawAngle(from: target.transform)) + canonicalTarget
                                 )
                                 let rotDiffDeg = abs(angleDifference(pieceFeature, targetFeature)) * 180 / .pi
-                                if posDist <= posRelax && rotDiffDeg <= rotRelaxDeg { okCount += 1 }
+                                let passesRelaxed = posDist <= posRelax && rotDiffDeg <= rotRelaxDeg
+                                if passesRelaxed { okCount += 1 }
+                                #if DEBUG
+                                print("[ANCHOR-RESIDUALS] piece=\(obs.pieceType.rawValue) posDist=\(Int(posDist))/\(Int(posRelax)) rotDiff=\(Int(rotDiffDeg))°/\(Int(rotRelaxDeg))° passes=\(passesRelaxed)")
+                                #endif
                             }
                         }
                         bothRelaxed = (okCount == pairObs.count)
+                        #if DEBUG
+                        print("[ANCHOR-VALIDATE] Relaxed validation: okCount=\(okCount)/\(pairObs.count), bothRelaxed=\(bothRelaxed)")
+                        #endif
                     }
                     // Enforce maximum distance between the two observed anchors before allowing commit
-                    let maxPairSeparation: CGFloat = 140 // px in scene space; adjust per level
+                    // Increased to allow more flexibility in initial anchor placement
+                    let maxPairSeparation: CGFloat = 200 // px in scene space; adjust per level
                     let pA = pairObs[0].position
                     let pB = pairObs[1].position
                     let pairDist = hypot(pA.x - pB.x, pA.y - pB.y)
+                    #if DEBUG
+                    print("[ANCHOR-VALIDATE] Pair distance=\(Int(pairDist)) (max=\(Int(maxPairSeparation))), ready=\(bothStrict || bothRelaxed)")
+                    #endif
 
                     if (bothStrict || bothRelaxed) && pairDist <= maxPairSeparation {
                         // Refine mapping using the actual target ids selected for the pair (avoids first-of-type skew)
@@ -413,7 +462,8 @@ class TangramValidationEngine {
                             let dTrans = hypot(existing.translationOffset.dx - mapping.translationOffset.dx,
                                                existing.translationOffset.dy - mapping.translationOffset.dy)
                             let sameAnchor = (existing.anchorPieceId == mapping.anchorPieceId) && (existing.anchorTargetId == mapping.anchorTargetId)
-                            if sameAnchor && dTheta <= 2.0 && dTrans <= 3.0 {
+                            // Be more forgiving about reusing existing mappings to avoid jitter
+                            if sameAnchor && dTheta <= 5.0 && dTrans <= 10.0 {
                                 mainGroupId = groupId
                                 anchorPieceIds = Set(pairObs.map { $0.pieceId })
                                 anchorIds = anchorPieceIds
@@ -667,10 +717,13 @@ class TangramValidationEngine {
         }
         }
         
-        for obs in significant {
-            // Candidates by type
-            let candidates = puzzle.targetPieces.filter { $0.pieceType == obs.pieceType }
-            guard !candidates.isEmpty else { continue }
+        // Only do orientation-only feedback when we DON'T have an anchor mapping
+        // Once we have a mapping, everything should validate through the mapped space
+        if mainGroupId == nil {
+            for obs in significant {
+                // Candidates by type
+                let candidates = puzzle.targetPieces.filter { $0.pieceType == obs.pieceType }
+                guard !candidates.isEmpty else { continue }
             
             // Compute piece feature angle (no mapping, rotation-only)
             let canonicalPiece: CGFloat = obs.pieceType.isTriangle ? (3 * .pi / 4) : 0
@@ -749,6 +802,7 @@ class TangramValidationEngine {
                 #endif
             }
         }
+        } // end if mainGroupId == nil
         
         // Absolute fallback: removed to honor the plan doc (relative until anchor, target-space after anchor)
 
@@ -1018,6 +1072,133 @@ class TangramValidationEngine {
         return diff
     }
 
+    // MARK: - Pair Scoring Helpers
+    
+    /// Score an observed pair against a target pair entry using rotation/translation-invariant geometry
+    private func scorePairAgainstTarget(
+        observedVector: CGVector,
+        observedLength: CGFloat,
+        targetEntry: TargetPairLibrary.Entry,
+        hasFocusPiece: Bool = false
+    ) -> CGFloat {
+        // Angle residual - find minimum angle difference (rotation invariant)
+        let observedAngle = atan2(observedVector.dy, observedVector.dx)
+        var angleDiff = abs(angleDifference(observedAngle, targetEntry.angleRad))
+        
+        // Consider 180° rotation for symmetry
+        let flippedAngleDiff = abs(angleDifference(observedAngle, targetEntry.angleRad + .pi))
+        angleDiff = min(angleDiff, flippedAngleDiff)
+        
+        // Length residual (scale should be fixed in our setup)
+        let lengthDiff = abs(observedLength - targetEntry.length)
+        
+        // Compute score (lower is better)
+        // Weights: angle more important than length since scale is fixed
+        var score = (angleDiff * 180 / .pi) * 2.0 + lengthDiff * 0.5
+        
+        // Apply focus/recency bonus (reduce score by 20% if contains focus piece)
+        if hasFocusPiece {
+            score *= 0.8
+        }
+        
+        return score
+    }
+    
+    /// Find the best matching target pair for an observed pair using TargetPairLibrary
+    private func findBestTargetPair(
+        observedPair: (p0: PieceObservation, p1: PieceObservation),
+        puzzle: GamePuzzleData,
+        focusPieceId: String? = nil
+    ) -> (t0: GamePuzzleData.TargetPiece, t1: GamePuzzleData.TargetPiece, score: CGFloat)? {
+        // Get the cached library for this puzzle
+        guard let library = cachedPairLibraries[puzzle.id] else { return nil }
+        
+        // Compute observed pair vector and length
+        let vObs = CGVector(
+            dx: observedPair.p1.position.x - observedPair.p0.position.x,
+            dy: observedPair.p1.position.y - observedPair.p0.position.y
+        )
+        let lenObs = hypot(vObs.dx, vObs.dy)
+        guard lenObs > 1e-3 else { return nil }
+        
+        // Check if this pair contains the focus piece
+        let hasFocus = focusPieceId != nil && 
+            (observedPair.p0.pieceId == focusPieceId || observedPair.p1.pieceId == focusPieceId)
+        
+        // Filter library entries by type compatibility
+        let typeKey = [observedPair.p0.pieceType.rawValue, observedPair.p1.pieceType.rawValue].sorted().joined(separator: "|")
+        guard let candidateEntries = library.entriesByTypePair[typeKey], !candidateEntries.isEmpty else {
+            // Fallback: no entries for this type pair
+            #if DEBUG
+            print("[PAIR-SCORING] No entries found for type pair: \(typeKey)")
+            #endif
+            return nil
+        }
+        
+        // Score all candidate pairs
+        var bestMatch: (entry: TargetPairLibrary.Entry, score: CGFloat)?
+        for entry in candidateEntries {
+            // Check type matching in both orders
+            let matchesForward = (entry.typeA == observedPair.p0.pieceType && entry.typeB == observedPair.p1.pieceType)
+            let matchesReverse = (entry.typeA == observedPair.p1.pieceType && entry.typeB == observedPair.p0.pieceType)
+            
+            guard matchesForward || matchesReverse else { continue }
+            
+            // Adjust vector if types are reversed
+            let adjustedVector: CGVector
+            if matchesReverse {
+                // Reverse the library vector to match our observed pair order
+                adjustedVector = CGVector(dx: -entry.vectorSK.dx, dy: -entry.vectorSK.dy)
+            } else {
+                adjustedVector = entry.vectorSK
+            }
+            
+            // Score this target pair
+            let score = scorePairAgainstTarget(
+                observedVector: vObs,
+                observedLength: lenObs,
+                targetEntry: TargetPairLibrary.Entry(
+                    idA: matchesReverse ? entry.idB : entry.idA,
+                    idB: matchesReverse ? entry.idA : entry.idB,
+                    typeA: matchesReverse ? entry.typeB : entry.typeA,
+                    typeB: matchesReverse ? entry.typeA : entry.typeB,
+                    vectorSK: adjustedVector,
+                    angleRad: atan2(adjustedVector.dy, adjustedVector.dx),
+                    length: entry.length
+                ),
+                hasFocusPiece: hasFocus
+            )
+            
+            if bestMatch == nil || score < bestMatch!.score {
+                // Store the entry with correct ordering
+                let orderedEntry = matchesReverse ? 
+                    TargetPairLibrary.Entry(
+                        idA: entry.idB, idB: entry.idA,
+                        typeA: entry.typeB, typeB: entry.typeA,
+                        vectorSK: adjustedVector,
+                        angleRad: atan2(adjustedVector.dy, adjustedVector.dx),
+                        length: entry.length
+                    ) : entry
+                bestMatch = (orderedEntry, score)
+            }
+        }
+        
+        // Convert best entry to target pieces
+        if let best = bestMatch,
+           let t0 = puzzle.targetPieces.first(where: { $0.id == best.entry.idA }),
+           let t1 = puzzle.targetPieces.first(where: { $0.id == best.entry.idB }) {
+            #if DEBUG
+            print("[PAIR-SCORING] Best match: \(t0.pieceType.rawValue)-\(t1.pieceType.rawValue) targets=\(t0.id.suffix(4))-\(t1.id.suffix(4)) score=\(Int(best.score)) hasFocus=\(hasFocus) from \(candidateEntries.count) candidates")
+            #endif
+            return (t0, t1, best.score)
+        }
+        
+        #if DEBUG
+        print("[PAIR-SCORING] No match found for \(observedPair.p0.pieceType.rawValue)-\(observedPair.p1.pieceType.rawValue)")
+        #endif
+        return nil
+    }
+    
     // MARK: - Pair Mapping per plan doc (centroid + relative)
     private func computePairDocMapping(
         pair: (TangramValidationEngine.PieceObservation, TangramValidationEngine.PieceObservation),
@@ -1026,45 +1207,36 @@ class TangramValidationEngine {
     ) -> AnchorMapping? {
         let p0 = pair.0
         let p1 = pair.1
+        
         // Choose concrete targets
         let tPair: (GamePuzzleData.TargetPiece, GamePuzzleData.TargetPiece)? = {
             if let pref = preferredTargetIds {
+                // Use preferred target IDs if provided
                 if let a = puzzle.targetPieces.first(where: { $0.id == pref.0 }),
                    let b = puzzle.targetPieces.first(where: { $0.id == pref.1 }) {
                     return (a, b)
                 }
                 return nil
             }
-            // No preferred ids: select the target pair that best matches observed pair by angle + length
+            
+            // Use TargetPairLibrary scoring to find best matching target pair
+            if let bestMatch = findBestTargetPair(
+                observedPair: (p0: p0, p1: p1),
+                puzzle: puzzle,
+                focusPieceId: nil // Focus is already handled in pair selection
+            ) {
+                return (bestMatch.t0, bestMatch.t1)
+            }
+            
+            // Fallback: type-based selection if library scoring fails
             let candA = puzzle.targetPieces.filter { $0.pieceType == p0.pieceType }
             let candB = puzzle.targetPieces.filter { $0.pieceType == p1.pieceType }
-            if candA.isEmpty || candB.isEmpty { return nil }
-            let vp = CGVector(dx: p1.position.x - p0.position.x, dy: p1.position.y - p0.position.y)
-            let vpLen = hypot(vp.dx, vp.dy)
-            if vpLen < 1e-3 { return nil }
-            var best: (pair: (GamePuzzleData.TargetPiece, GamePuzzleData.TargetPiece), cost: CGFloat)? = nil
-            for a in candA {
-                let cA = TangramBounds.computeSKTransformedVertices(for: a)
-                let cAc = CGPoint(x: cA.map { $0.x }.reduce(0, +) / CGFloat(max(1, cA.count)),
-                                  y: cA.map { $0.y }.reduce(0, +) / CGFloat(max(1, cA.count)))
-                for b in candB {
-                    let cB = TangramBounds.computeSKTransformedVertices(for: b)
-                    let cBc = CGPoint(x: cB.map { $0.x }.reduce(0, +) / CGFloat(max(1, cB.count)),
-                                      y: cB.map { $0.y }.reduce(0, +) / CGFloat(max(1, cB.count)))
-                    let vt = CGVector(dx: cBc.x - cAc.x, dy: cBc.y - cAc.y)
-                    let vtLen = hypot(vt.dx, vt.dy)
-                    if vtLen < 1e-3 { continue }
-                    // angle residual
-                    let dot = vp.dx * vt.dx + vp.dy * vt.dy
-                    let cross = vp.dx * vt.dy - vp.dy * vt.dx
-                    let angle = abs(atan2(cross, dot))
-                    // length residual (absolute difference)
-                    let lenDiff = abs(vpLen - vtLen)
-                    let cost = angle * 180 / .pi * 2.0 + lenDiff * 0.2 // weights: 2 deg weight, 0.2 px weight
-                    if best == nil || cost < best!.cost { best = ((a, b), cost) }
-                }
+            if !candA.isEmpty && !candB.isEmpty {
+                // Just pick first of each type as absolute fallback
+                return (candA[0], candB[0])
             }
-            return best?.pair
+            
+            return nil
         }()
         guard let (t0, t1) = tPair else { return nil }
         // Compute target centroids in SK space
