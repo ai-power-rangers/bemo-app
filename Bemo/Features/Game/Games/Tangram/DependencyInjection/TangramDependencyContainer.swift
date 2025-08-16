@@ -30,6 +30,9 @@ class TangramDependencyContainer {
     /// Library service for puzzle management
     let puzzleLibraryService: PuzzleLibraryService
     
+    /// Progress service for tracking child progress
+    let progressService: TangramProgressService
+    
     /// Data converter for puzzle format transformations
     let dataConverter: PuzzleDataConverter.Type
     
@@ -77,6 +80,9 @@ class TangramDependencyContainer {
         // Initialize data services
         self.databaseLoader = TangramDatabaseLoader(supabaseService: supabaseService)
         self.puzzleLibraryService = PuzzleLibraryService(supabaseService: supabaseService)
+        
+        // Initialize progress service
+        self.progressService = TangramProgressService(userDefaults: .standard, supabaseService: supabaseService)
     }
     
     // MARK: - Factory Methods
