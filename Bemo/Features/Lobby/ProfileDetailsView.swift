@@ -112,7 +112,7 @@ struct ProfileDetailsView: View {
                         .font(.system(size: 14))
                     Text("Level \(level)")
                         .font(.headline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color("AppPrimaryTextColor"))
                 }
             }
         }
@@ -247,7 +247,7 @@ struct ProfileDetailsView: View {
                 Text("Switch Profile")
                     .font(.headline)
             }
-            .foregroundColor(Color("AppPrimaryTextColor"))
+            .foregroundColor(.white)
             .frame(maxWidth: .infinity)
             .padding()
             .background(Color.blue)
