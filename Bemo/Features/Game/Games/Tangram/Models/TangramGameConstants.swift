@@ -51,10 +51,10 @@ enum TangramGameConstants {
     
     enum Validation {
         /// Distance tolerance for piece center position matching (in pixels)
-        static let positionTolerance: CGFloat = 35.0
+        static let positionTolerance: CGFloat = 30.0
         
         /// Rotation tolerance for piece angle matching (in degrees)
-        static let rotationTolerance: CGFloat = 18.0
+        static let rotationTolerance: CGFloat = 15.0
 
         /// Minimum center-to-center distance for two pieces to be considered "connected"
         /// This gates early validation to ensure the first relations are built physically next to each other
@@ -64,7 +64,7 @@ enum TangramGameConstants {
         static func tolerances(for difficulty: UserPreferences.DifficultySetting) -> (position: CGFloat, rotationDeg: CGFloat, connection: CGFloat, edgeContact: CGFloat) {
             // For testing: use the same tolerances across all difficulties
             // This can be restored to difficulty-specific values later
-            return (position: 40, rotationDeg: 18, connection: 130, edgeContact: 14)
+            return (position: 30, rotationDeg: 15, connection: 60, edgeContact: 15)
         }
     }
     

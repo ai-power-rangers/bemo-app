@@ -36,6 +36,8 @@ class TangramValidationEngine {
         let dwellValidateInterval: TimeInterval
         let orientationToleranceDeg: CGFloat
         let rotationNudgeUpperDeg: CGFloat
+        let focusPieceId: String?
+        let settleVelocityThreshold: CGFloat
         
         static let `default` = ValidationOptions(
             validateOnMove: true,
@@ -44,7 +46,9 @@ class TangramValidationEngine {
             nudgeCooldown: 3.0,
             dwellValidateInterval: 1.0,
             orientationToleranceDeg: 5.0,
-            rotationNudgeUpperDeg: 45.0
+            rotationNudgeUpperDeg: 45.0,
+            focusPieceId: nil,
+            settleVelocityThreshold: 12.0
         )
     }
     
@@ -166,8 +170,11 @@ class TangramValidationEngine {
 
         // Establish or maintain a two-piece anchor mapping if possible
         if enableAnchorMapping && frame.count >= 2 {
-            // Map for quick lookup
-            let idToObs: [String: PieceObservation] = Dictionary(uniqueKeysWithValues: frame.map { ($0.pieceId, $0) })
+            // Consider only settled pieces for anchor selection (avoid moving pieces)
+            let settled: [PieceObservation] = frame.filter { hypot($0.velocity.dx, $0.velocity.dy) <= options.settleVelocityThreshold }
+            if settled.count >= 2 {
+                // Map for quick lookup
+                let idToObs: [String: PieceObservation] = Dictionary(uniqueKeysWithValues: settled.map { ($0.pieceId, $0) })
 
             // Prefer existing anchor pair if still present; otherwise choose best oriented pair (then closest)
             var candidatePair: (PieceObservation, PieceObservation)? = nil
@@ -188,7 +195,7 @@ class TangramValidationEngine {
                 // Compute orientation deltas to pick a pair likely to be aligned to targets
                 struct OrientInfo { let obs: PieceObservation; let bestTargetId: String; let deltaDeg: CGFloat; let flipOK: Bool }
                 var oriented: [OrientInfo] = []
-                for obs in frame {
+                for obs in settled {
                     let candidates = puzzle.targetPieces.filter { $0.pieceType == obs.pieceType }
                     guard !candidates.isEmpty else { continue }
                     let canonicalPiece: CGFloat = obs.pieceType.isTriangle ? (3 * .pi / 4) : 0
@@ -218,34 +225,59 @@ class TangramValidationEngine {
                     }
                 }
                 if oriented.count >= 2 {
-                    // Choose closest pair among oriented
-                    var bestPair: (PieceObservation, PieceObservation)? = nil
-                    var bestDist: CGFloat = .infinity
-                    for i in 0..<(oriented.count - 1) {
-                        for j in (i + 1)..<oriented.count {
-                            let p = oriented[i].obs.position
-                            let q = oriented[j].obs.position
+                    // Prefer focus-based oriented pairs first, else closest among oriented
+                    if let focus = options.focusPieceId, let focusInfo = oriented.first(where: { $0.obs.pieceId == focus }) {
+                        var bestPair: (PieceObservation, PieceObservation)? = nil
+                        var bestDist: CGFloat = .infinity
+                        for item in oriented where item.obs.pieceId != focusInfo.obs.pieceId {
+                            let p = focusInfo.obs.position
+                            let q = item.obs.position
                             let d = hypot(p.x - q.x, p.y - q.y)
-                            if d < bestDist { bestDist = d; bestPair = (oriented[i].obs, oriented[j].obs) }
+                            if d < bestDist { bestDist = d; bestPair = (focusInfo.obs, item.obs) }
                         }
+                        candidatePair = bestPair
                     }
-                    candidatePair = bestPair
+                    if candidatePair == nil {
+                        var bestPair: (PieceObservation, PieceObservation)? = nil
+                        var bestDist: CGFloat = .infinity
+                        for i in 0..<(oriented.count - 1) {
+                            for j in (i + 1)..<oriented.count {
+                                let p = oriented[i].obs.position
+                                let q = oriented[j].obs.position
+                                let d = hypot(p.x - q.x, p.y - q.y)
+                                if d < bestDist { bestDist = d; bestPair = (oriented[i].obs, oriented[j].obs) }
+                            }
+                        }
+                        candidatePair = bestPair
+                    }
                     #if DEBUG
                     if let cp = candidatePair {
-                        print("[ANCHOR] Oriented pair selected: \(cp.0.pieceId), \(cp.1.pieceId) (closest among oriented)")
+                        if let focus = options.focusPieceId, (cp.0.pieceId == focus || cp.1.pieceId == focus) {
+                            print("[ANCHOR] Oriented pair selected (focus prioritized): \(cp.0.pieceId), \(cp.1.pieceId)")
+                        } else {
+                            print("[ANCHOR] Oriented pair selected: \(cp.0.pieceId), \(cp.1.pieceId) (closest among oriented)")
+                        }
                     }
                     #endif
                 }
                 if candidatePair == nil {
-                    // Fallback to closest pair in frame
+                    // Fallback to closest pair among settled; prefer focus when provided
                     var bestPair: (PieceObservation, PieceObservation)? = nil
                     var bestDist: CGFloat = .infinity
-                    for i in 0..<(frame.count - 1) {
-                        for j in (i + 1)..<frame.count {
-                            let p = frame[i].position
-                            let q = frame[j].position
-                            let d = hypot(p.x - q.x, p.y - q.y)
-                            if d < bestDist { bestDist = d; bestPair = (frame[i], frame[j]) }
+                    if let focus = options.focusPieceId, let focusObs = settled.first(where: { $0.pieceId == focus }) {
+                        for item in settled where item.pieceId != focusObs.pieceId {
+                            let d = hypot(focusObs.position.x - item.position.x, focusObs.position.y - item.position.y)
+                            if d < bestDist { bestDist = d; bestPair = (focusObs, item) }
+                        }
+                    }
+                    if bestPair == nil {
+                        for i in 0..<(settled.count - 1) {
+                            for j in (i + 1)..<settled.count {
+                                let p = settled[i].position
+                                let q = settled[j].position
+                                let d = hypot(p.x - q.x, p.y - q.y)
+                                if d < bestDist { bestDist = d; bestPair = (settled[i], settled[j]) }
+                            }
                         }
                     }
                     candidatePair = bestPair
@@ -515,7 +547,7 @@ class TangramValidationEngine {
                         #endif
                     }
                 }
-            }
+            } // settled.count >= 2
         }
 
         // If we have an established anchor mapping, update it from live anchors then validate relative to it
@@ -621,6 +653,7 @@ class TangramValidationEngine {
                 groupMappingsOut[gid] = mapping
                 anchorIds = anchorPieceIds
             }
+        }
         }
         
         for obs in significant {
