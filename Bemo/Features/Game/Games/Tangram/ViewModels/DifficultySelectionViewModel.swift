@@ -160,7 +160,7 @@ class DifficultySelectionViewModel {
                 group.addTask {
                     let puzzlesForDifficulty = self.getPuzzlesForDifficulty(difficulty, from: allPuzzles)
                     let completedPuzzles = progress.getCompletedCount(for: difficulty)
-                    let isUnlocked = self.isDifficultyUnlocked(difficulty, progress: progress)
+                    let isUnlocked = self.isDifficultyUnlocked(difficulty, progress: progress, allPuzzles: allPuzzles)
                     
                     let difficultyStats = DifficultyStats(
                         totalPuzzles: puzzlesForDifficulty.count,
@@ -192,10 +192,13 @@ class DifficultySelectionViewModel {
     }
     
     /// Determine if a difficulty should be unlocked for the current user
-    private func isDifficultyUnlocked(_ difficulty: UserPreferences.DifficultySetting, progress: TangramProgress) -> Bool {
+    private func isDifficultyUnlocked(_ difficulty: UserPreferences.DifficultySetting, progress: TangramProgress, allPuzzles: [GamePuzzleData]) -> Bool {
         let easyCompleted = progress.getCompletedCount(for: UserPreferences.DifficultySetting.easy)
         let mediumCompleted = progress.getCompletedCount(for: UserPreferences.DifficultySetting.normal)
-        let mediumTotal = difficultyStats[UserPreferences.DifficultySetting.normal]?.totalPuzzles ?? 0
+        
+        // Calculate mediumTotal directly from puzzle data instead of relying on difficultyStats
+        let mediumPuzzles = getPuzzlesForDifficulty(.normal, from: allPuzzles)
+        let mediumTotal = mediumPuzzles.count
         
         return TangramGameConstants.DifficultyProgression.isDifficultyUnlocked(
             difficulty,
