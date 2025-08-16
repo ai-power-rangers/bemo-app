@@ -148,7 +148,7 @@ final class DifficultySelectionIntegrationTests: XCTestCase {
         let easyStats = viewModel.difficultyStats[.easy]
         XCTAssertEqual(easyStats?.completedPuzzles, 2)
         XCTAssertEqual(easyStats?.totalPuzzles, 4)
-        XCTAssertEqual(easyStats?.completionPercentage, 50.0, accuracy: 0.001)
+        XCTAssertEqual(easyStats?.completionPercentage ?? 0.0, 50.0, accuracy: 0.001)
         
         // Step 5: Easy should still be unlocked, others locked until progression threshold
         XCTAssertTrue(viewModel.canSelectDifficulty(.easy))
@@ -169,7 +169,7 @@ final class DifficultySelectionIntegrationTests: XCTestCase {
         let easyStats = viewModel.difficultyStats[.easy]
         XCTAssertEqual(easyStats?.completedPuzzles, 3)
         XCTAssertEqual(easyStats?.totalPuzzles, 4)
-        XCTAssertEqual(easyStats?.completionPercentage, 75.0, accuracy: 0.001)
+        XCTAssertEqual(easyStats?.completionPercentage ?? 0.0, 75.0, accuracy: 0.001)
         
         // Step 2: User completes final easy puzzle
         progressService.markPuzzleCompleted(childId: child1Id, puzzleId: "easy-04", difficulty: .easy)
@@ -181,7 +181,7 @@ final class DifficultySelectionIntegrationTests: XCTestCase {
         // Step 3: Easy should be 100% complete
         let updatedEasyStats = updatedViewModel.difficultyStats[.easy]
         XCTAssertEqual(updatedEasyStats?.completedPuzzles, 4)
-        XCTAssertEqual(updatedEasyStats?.completionPercentage, 100.0, accuracy: 0.001)
+        XCTAssertEqual(updatedEasyStats?.completionPercentage ?? 0.0, 100.0, accuracy: 0.001)
         
         // Step 4: Should now recommend Normal difficulty
         XCTAssertEqual(updatedViewModel.recommendedDifficulty, .normal)
@@ -214,7 +214,7 @@ final class DifficultySelectionIntegrationTests: XCTestCase {
         
         let child1EasyStats = child1ViewModel.difficultyStats[.easy]
         XCTAssertEqual(child1EasyStats?.completedPuzzles, 1)
-        XCTAssertEqual(child1EasyStats?.completionPercentage, 25.0, accuracy: 0.001)
+        XCTAssertEqual(child1EasyStats?.completionPercentage ?? 0.0, 25.0, accuracy: 0.001)
         
         // Test Child 2 ViewModel
         let child2ViewModel = createViewModel(for: child2Id)
@@ -228,7 +228,7 @@ final class DifficultySelectionIntegrationTests: XCTestCase {
         let child2NormalStats = child2ViewModel.difficultyStats[.normal]
         
         XCTAssertEqual(child2EasyStats?.completedPuzzles, 4)
-        XCTAssertEqual(child2EasyStats?.completionPercentage, 100.0, accuracy: 0.001)
+        XCTAssertEqual(child2EasyStats?.completionPercentage ?? 0.0, 100.0, accuracy: 0.001)
         XCTAssertEqual(child2NormalStats?.completedPuzzles, 1)
         
         // Verify progress isolation
@@ -334,7 +334,7 @@ final class DifficultySelectionIntegrationTests: XCTestCase {
         
         let midEasyStats = currentViewModel.difficultyStats[.easy]
         XCTAssertEqual(midEasyStats?.completedPuzzles, 2)
-        XCTAssertEqual(midEasyStats?.completionPercentage, 50.0, accuracy: 0.001)
+        XCTAssertEqual(midEasyStats?.completionPercentage ?? 0.0, 50.0, accuracy: 0.001)
         
         // Phase 4: Complete Easy difficulty
         progressService.markPuzzleCompleted(childId: child1Id, puzzleId: "easy-03", difficulty: .easy)
@@ -346,7 +346,7 @@ final class DifficultySelectionIntegrationTests: XCTestCase {
         
         XCTAssertEqual(currentViewModel.recommendedDifficulty, .normal) // Progress to Normal
         let completedEasyStats = currentViewModel.difficultyStats[.easy]
-        XCTAssertEqual(completedEasyStats?.completionPercentage, 100.0, accuracy: 0.001)
+        XCTAssertEqual(completedEasyStats?.completionPercentage ?? 0.0, 100.0, accuracy: 0.001)
         
         // Phase 6: Start Normal difficulty
         currentViewModel.selectDifficulty(.normal)
@@ -362,7 +362,7 @@ final class DifficultySelectionIntegrationTests: XCTestCase {
         let finalEasyStats = currentViewModel.difficultyStats[.easy]
         let finalNormalStats = currentViewModel.difficultyStats[.normal]
         
-        XCTAssertEqual(finalEasyStats?.completionPercentage, 100.0, accuracy: 0.001)
+        XCTAssertEqual(finalEasyStats?.completionPercentage ?? 0.0, 100.0, accuracy: 0.001)
         XCTAssertGreaterThan(finalNormalStats?.completionPercentage ?? 0, 0.0)
     }
     

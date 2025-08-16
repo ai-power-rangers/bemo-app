@@ -136,19 +136,19 @@ final class DifficultySelectionViewModelTests: XCTestCase {
         XCTAssertEqual(easyStats?.totalPuzzles, 3)
         XCTAssertEqual(easyStats?.completedPuzzles, 0)
         XCTAssertTrue(easyStats?.isUnlocked ?? false)
-        XCTAssertEqual(easyStats?.completionPercentage, 0.0, accuracy: 0.001)
+        XCTAssertEqual(easyStats?.completionPercentage ?? 0.0, 0.0, accuracy: 0.001)
         
         // Normal: 2 puzzles, 0 completed, locked for new user
         XCTAssertEqual(normalStats?.totalPuzzles, 2)
         XCTAssertEqual(normalStats?.completedPuzzles, 0)
         XCTAssertFalse(normalStats?.isUnlocked ?? true)
-        XCTAssertEqual(normalStats?.completionPercentage, 0.0, accuracy: 0.001)
+        XCTAssertEqual(normalStats?.completionPercentage ?? 0.0, 0.0, accuracy: 0.001)
         
         // Hard: 2 puzzles, 0 completed, locked for new user
         XCTAssertEqual(hardStats?.totalPuzzles, 2)
         XCTAssertEqual(hardStats?.completedPuzzles, 0)
         XCTAssertFalse(hardStats?.isUnlocked ?? true)
-        XCTAssertEqual(hardStats?.completionPercentage, 0.0, accuracy: 0.001)
+        XCTAssertEqual(hardStats?.completionPercentage ?? 0.0, 0.0, accuracy: 0.001)
     }
     
     func testDifficultyStatsCalculationWithProgress() async {
@@ -170,12 +170,12 @@ final class DifficultySelectionViewModelTests: XCTestCase {
         // Easy: 3 puzzles, 2 completed
         XCTAssertEqual(easyStats?.totalPuzzles, 3)
         XCTAssertEqual(easyStats?.completedPuzzles, 2)
-        XCTAssertEqual(easyStats?.completionPercentage, 200.0/3.0, accuracy: 0.1) // 66.7%
+        XCTAssertEqual(easyStats?.completionPercentage ?? 0.0, 200.0/3.0, accuracy: 0.1) // 66.7%
         
         // Normal: 2 puzzles, 1 completed  
         XCTAssertEqual(normalStats?.totalPuzzles, 2)
         XCTAssertEqual(normalStats?.completedPuzzles, 1)
-        XCTAssertEqual(normalStats?.completionPercentage, 50.0, accuracy: 0.001)
+        XCTAssertEqual(normalStats?.completionPercentage ?? 0.0, 50.0, accuracy: 0.001)
     }
     
     // MARK: - Recommendation Logic Tests
