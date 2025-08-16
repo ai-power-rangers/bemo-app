@@ -20,6 +20,9 @@ class ProfileService {
     private let activeProfileKey = "com.bemo.activeProfile"
     private let childProfilesKey = "com.bemo.childProfiles"
     
+    // Track whether we've completed at least one sync from Supabase
+    private(set) var hasSyncedAtLeastOnce = false
+    
     // Optional Supabase integration - will be injected after initialization
     private weak var supabaseService: SupabaseService?
     
@@ -93,12 +96,16 @@ class ProfileService {
                         }
                     }
                     saveChildProfiles()
+                    self.hasSyncedAtLeastOnce = true
                     print("Profile sync from Supabase completed - synced \(remoteProfiles.count) profiles")
                     
                     // Don't auto-select profile here - let the coordinator handle it
                     // This ensures proper UI flow
                 }
             } catch {
+                await MainActor.run {
+                    self.hasSyncedAtLeastOnce = true
+                }
                 print("Profile sync from Supabase failed (non-critical): \(error)")
                 errorTrackingService?.trackError(error, context: ErrorContext(
                     feature: "ProfileService",
@@ -131,6 +138,9 @@ class ProfileService {
         childProfiles.removeAll()
         userDefaults.removeObject(forKey: activeProfileKey)
         userDefaults.removeObject(forKey: childProfilesKey)
+        
+        // Reset sync flag when clearing all profiles
+        hasSyncedAtLeastOnce = false
         
         print("All local profile data cleared")
     }

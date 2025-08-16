@@ -70,9 +70,10 @@ class AppCoordinator {
         let profileService = dependencyContainer.profileService
         
         withObservationTracking {
-            // Observe both hasProfiles and activeProfile changes
+            // Observe hasProfiles, activeProfile, and sync status changes
             _ = profileService.hasProfiles
             _ = profileService.activeProfile
+            _ = profileService.hasSyncedAtLeastOnce
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.handleProfileServiceChange()
@@ -101,6 +102,8 @@ class AppCoordinator {
         let authService = dependencyContainer.authenticationService
         let profileService = dependencyContainer.profileService
         
+        print("AppCoordinator: handleProfileServiceChange called - hasProfiles: \(profileService.hasProfiles), hasSyncedAtLeastOnce: \(profileService.hasSyncedAtLeastOnce)")
+        
         // Only handle profile changes if user is authenticated
         guard authService.isAuthenticated else { return }
         
@@ -116,20 +119,30 @@ class AppCoordinator {
             default:
                 break
             }
-        } else {
-            // No profiles exist. Ensure we cannot remain in main app surfaces.
+        } else if profileService.hasSyncedAtLeastOnce {
+            // Sync completed but no profiles exist - navigate to profile setup
             switch currentState {
+            case .loading:
+                if let user = authService.currentUser {
+                    print("AppCoordinator: Navigating from loading to profileSetup after sync completed with no profiles")
+                    currentState = .profileSetup(user)
+                } else {
+                    currentState = .onboarding
+                }
             case .onboarding, .profileSetup, .addChildProfile:
                 // Already in the correct flow
+                print("AppCoordinator: Already in correct flow, not changing state")
                 break
             default:
                 if let user = authService.currentUser {
+                    print("AppCoordinator: Navigating to profileSetup from \(currentState)")
                     currentState = .profileSetup(user)
                 } else {
                     currentState = .onboarding
                 }
             }
         }
+        // If not synced yet, stay in current state (e.g., loading)
     }
     
     private func checkAuthenticationAndNavigate() {
@@ -148,8 +161,20 @@ class AppCoordinator {
             
             // Sync is triggered from handleAuthenticationChange, so we just check state here.
             
-            // Check if local profiles belong to the current user.
-            if profileService.profilesBelong(to: user.id) {
+            // First check if we have profiles at all
+            if profileService.childProfiles.isEmpty {
+                // No profiles exist
+                if profileService.hasSyncedAtLeastOnce {
+                    // Sync completed but no profiles - user needs to create their first profile
+                    print("AppCoordinator: Sync complete with no profiles - navigating to profile setup")
+                    currentState = .profileSetup(user)
+                } else {
+                    // Still waiting for sync to complete
+                    print("AppCoordinator: No profiles yet, waiting for sync to complete")
+                    currentState = .loading
+                }
+            } else if profileService.profilesBelong(to: user.id) {
+                // We have profiles and they belong to the current user
                 currentState = .lobby
                 // If there's an active profile saved, it will be used.
                 // If not, and there's only one profile, set it as active.
@@ -157,10 +182,15 @@ class AppCoordinator {
                     profileService.setActiveProfile(profileService.childProfiles[0])
                 }
             } else {
-                // Local profiles are for another user, or don't exist.
-                // Show loading and wait for sync to fetch correct profiles or determine new user status.
-                // `handleProfileServiceChange` will navigate to lobby or profile setup once sync completes.
-                currentState = .loading
+                // Profiles exist but belong to a different user
+                // Wait for sync to fetch correct profiles or confirm no profiles exist
+                if profileService.hasSyncedAtLeastOnce {
+                    // Sync completed, and we still have wrong user's profiles
+                    // This means current user has no profiles
+                    currentState = .profileSetup(user)
+                } else {
+                    currentState = .loading
+                }
             }
         } else {
             // Not authenticated, show onboarding
