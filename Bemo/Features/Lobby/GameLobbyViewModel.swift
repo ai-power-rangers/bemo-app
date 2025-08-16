@@ -47,6 +47,7 @@ class GameLobbyViewModel {
     private let developerService: DeveloperService
     let audioService: AudioService?
     private let characterAnimationService: CharacterAnimationService?
+    private let cvService: CVService
     
     private let onGameSelected: (Game) -> Void
     private let onDevToolSelected: (DevTool) -> Void
@@ -109,6 +110,7 @@ class GameLobbyViewModel {
         developerService: DeveloperService,
         audioService: AudioService? = nil,
         characterAnimationService: CharacterAnimationService? = nil,
+        cvService: CVService,
         onGameSelected: @escaping (Game) -> Void,
         onDevToolSelected: @escaping (DevTool) -> Void,
         onParentDashboardRequested: @escaping () -> Void,
@@ -121,6 +123,7 @@ class GameLobbyViewModel {
         self.developerService = developerService
         self.audioService = audioService
         self.characterAnimationService = characterAnimationService
+        self.cvService = cvService
         self.onGameSelected = onGameSelected
         self.onDevToolSelected = onDevToolSelected
         self.onParentDashboardRequested = onParentDashboardRequested
@@ -230,7 +233,7 @@ class GameLobbyViewModel {
             )
             
             // Add TgramViewer as a developer tool
-            let tgramViewerGame = TgramViewerGame()
+            let tgramViewerGame = TgramViewerGame(cvService: cvService)
             availableGames.append(
                 GameItem(
                     game: tgramViewerGame,

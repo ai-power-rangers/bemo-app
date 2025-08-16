@@ -310,6 +310,7 @@ class AppCoordinator {
                 developerService: self.dependencyContainer.developerService,
                 audioService: self.dependencyContainer.audioService,
                 characterAnimationService: self.dependencyContainer.characterAnimationService,
+                cvService: self.dependencyContainer.cvService,
                 onGameSelected: { [weak self] selectedGame in
                     self?.currentState = .game(selectedGame)
                 },

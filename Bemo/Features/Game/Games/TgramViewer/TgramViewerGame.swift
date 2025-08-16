@@ -35,11 +35,16 @@ class TgramViewerGame: Game {
     // MARK: - Properties
     
     private var viewModel: TgramViewerViewModel?
+    private let cvService: CVService
+    
+    init(cvService: CVService) {
+        self.cvService = cvService
+    }
     
     // MARK: - Game Protocol Methods
     
     func makeGameView(delegate: GameDelegate) -> AnyView {
-        let vm = TgramViewerViewModel(delegate: delegate)
+        let vm = TgramViewerViewModel(delegate: delegate, cvService: cvService)
         self.viewModel = vm
         return AnyView(
             TgramViewerView(viewModel: vm)
