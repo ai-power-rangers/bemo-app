@@ -12,7 +12,9 @@
 import SwiftUI
 
 struct ProfileDetailsView: View {
-    let profile: UserProfile
+    @State var profile: UserProfile
+    let profileService: ProfileService?
+    let audioService: AudioService?
     let onSwitchProfile: () -> Void
     let onDismiss: () -> Void
     
@@ -112,7 +114,7 @@ struct ProfileDetailsView: View {
                         .font(.system(size: 14))
                     Text("Level \(level)")
                         .font(.headline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color("AppPrimaryTextColor"))
                 }
             }
         }
@@ -203,21 +205,55 @@ struct ProfileDetailsView: View {
                 .foregroundColor(Color("AppPrimaryTextColor"))
             
             VStack(spacing: 0) {
-                PreferenceRow(
-                    icon: "speaker.wave.2.fill",
-                    title: "Sound",
-                    value: profile.preferences.soundEnabled ? "On" : "Off",
-                    valueColor: profile.preferences.soundEnabled ? .green : Color("AppPrimaryTextColor")
-                )
+                // Sound Effects Toggle
+                HStack {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.blue)
+                        .frame(width: 24)
+                    
+                    Text("Sound Effects")
+                        .font(.body)
+                        .foregroundColor(Color("AppPrimaryTextColor"))
+                    
+                    Spacer()
+                    
+                    Toggle("", isOn: $profile.preferences.soundEnabled)
+                        .labelsHidden()
+                        .onChange(of: profile.preferences.soundEnabled) { _, newValue in
+                            // Update AudioService
+                            audioService?.isSoundEffectsEnabled = newValue
+                            // Save preferences
+                            savePreferences()
+                        }
+                }
+                .padding()
                 
                 Divider()
                 
-                PreferenceRow(
-                    icon: "music.note",
-                    title: "Music",
-                    value: profile.preferences.musicEnabled ? "On" : "Off",
-                    valueColor: profile.preferences.musicEnabled ? .green : Color("AppPrimaryTextColor")
-                )
+                // Background Music Toggle
+                HStack {
+                    Image(systemName: "music.note")
+                        .font(.system(size: 18))
+                        .foregroundColor(.blue)
+                        .frame(width: 24)
+                    
+                    Text("Background Music")
+                        .font(.body)
+                        .foregroundColor(Color("AppPrimaryTextColor"))
+                    
+                    Spacer()
+                    
+                    Toggle("", isOn: $profile.preferences.musicEnabled)
+                        .labelsHidden()
+                        .onChange(of: profile.preferences.musicEnabled) { _, newValue in
+                            // Update AudioService
+                            audioService?.isBackgroundMusicEnabled = newValue
+                            // Save preferences
+                            savePreferences()
+                        }
+                }
+                .padding()
                 
                 Divider()
                 
@@ -247,12 +283,19 @@ struct ProfileDetailsView: View {
                 Text("Switch Profile")
                     .font(.headline)
             }
-            .foregroundColor(Color("AppPrimaryTextColor"))
+            .foregroundColor(.white)
             .frame(maxWidth: .infinity)
             .padding()
             .background(Color.blue)
             .cornerRadius(12)
         }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func savePreferences() {
+        // Update the profile in ProfileService
+        profileService?.updatePreferences(profile.preferences, for: profile.id)
     }
 }
 
@@ -328,6 +371,8 @@ struct ProfileDetailsView_Previews: PreviewProvider {
                 totalXP: 450,
                 preferences: UserPreferences()
             ),
+            profileService: nil,
+            audioService: nil,
             onSwitchProfile: {},
             onDismiss: {}
         )

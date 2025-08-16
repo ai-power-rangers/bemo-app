@@ -144,24 +144,24 @@ struct ProfileRowView: View {
                                 .font(.caption)
                             Text("Level \(level)")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color("AppPrimaryTextColor"))
                         }
                         
                         Text("•")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color("AppPrimaryTextColor"))
                             .font(.caption)
                         
                         Text("\(profile.totalXP) XP")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color("AppPrimaryTextColor"))
                         
                         Text("•")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color("AppPrimaryTextColor"))
                             .font(.caption)
                         
                         Text("Age \(profile.age)")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color("AppPrimaryTextColor"))
                     }
                 }
                 
@@ -170,10 +170,10 @@ struct ProfileRowView: View {
                 // Selection indicator
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color("AppPrimaryTextColor"))
             }
             .padding()
-            .background(Color(.systemGray6))
+            .background(Color.white)
             .cornerRadius(12)
         }
         .buttonStyle(PlainButtonStyle())

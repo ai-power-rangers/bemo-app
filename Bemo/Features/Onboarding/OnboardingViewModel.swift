@@ -20,13 +20,18 @@ class OnboardingViewModel {
     var isLoading = false
     
     private let authenticationService: AuthenticationService
+    private let characterAnimationService: CharacterAnimationService?
     private let onAuthenticationComplete: (AuthenticatedUser) -> Void
     private var cancellables = Set<AnyCancellable>()
     
-    init(authenticationService: AuthenticationService, onAuthenticationComplete: @escaping (AuthenticatedUser) -> Void) {
+    init(authenticationService: AuthenticationService, characterAnimationService: CharacterAnimationService? = nil, onAuthenticationComplete: @escaping (AuthenticatedUser) -> Void) {
         self.authenticationService = authenticationService
+        self.characterAnimationService = characterAnimationService
         self.onAuthenticationComplete = onAuthenticationComplete
         setupAuthenticationObserver()
+        
+        // Show waving character on onboarding start
+        showWelcomeAnimation()
     }
     
     private func setupAuthenticationObserver() {
@@ -115,8 +120,72 @@ class OnboardingViewModel {
         authenticationService.signInWithApple()
     }
     
+    func showSignInCharacter() {
+        // Show a cheerful waving character on the sign-in screen
+        characterAnimationService?.showCharacter(
+            .waving,
+            at: .topCenter,
+            size: CGSize(width: 150, height: 150),
+            duration: 3.0,
+            interactive: true,
+            onTap: { [weak self] in
+                // Wave again when tapped with a fun bounce effect
+                self?.characterAnimationService?.showCharacter(
+                    .waving,
+                    at: .topCenter,
+                    size: CGSize(width: 170, height: 170),
+                    duration: 2.5,
+                    scale: 1.2,
+                    rotation: -10
+                )
+            }
+        )
+    }
+    
     func clearError() {
         authenticationError = nil
+    }
+    
+    // MARK: - Character Animations
+    
+    private func showWelcomeAnimation() {
+        // Show waving character with a slight delay for better visual effect
+        Task {
+            try? await Task.sleep(nanoseconds: 800_000_000) // 0.8 seconds
+            await MainActor.run {
+                characterAnimationService?.showWelcome(at: .bottomRight)
+            }
+        }
+    }
+    
+    func showCharacterForStep(_ step: Int) {
+        // Show character at different positions for different onboarding steps
+        let positions: [CharacterAnimationService.AnimationPosition] = [
+            .bottomRight,  // Step 0: Tangram Adventures
+            .topLeft,      // Step 1: Real Objects
+            .bottomLeft,   // Step 2: Progress Tracking
+            .topRight      // Step 3: Parent Dashboard
+        ]
+        
+        if step < positions.count {
+            characterAnimationService?.showCharacter(
+                .waving,
+                at: positions[step],
+                size: CGSize(width: 120, height: 120),
+                duration: 2.5,
+                interactive: true,
+                onTap: { [weak self] in
+                    // Make the character wave again when tapped
+                    self?.characterAnimationService?.showCharacter(
+                        .waving,
+                        at: positions[step],
+                        size: CGSize(width: 140, height: 140), // Slightly bigger
+                        duration: 2.0,
+                        scale: 1.1
+                    )
+                }
+            )
+        }
     }
 }
 

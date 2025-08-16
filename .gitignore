@@ -2,6 +2,10 @@
 .DS_Store
 .Trashes
 
+# Frameworks
+Bemo/Frameworks/opencv2.framework/
+!Bemo/Frameworks/TangramPipeline.xcframework/
+
 # Xcode project files that cause merge conflicts
 *.xcodeproj/project.pbxproj
 *.xcworkspace/xcuserdata/

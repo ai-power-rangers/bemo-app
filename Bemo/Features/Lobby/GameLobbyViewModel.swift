@@ -40,11 +40,13 @@ class GameLobbyViewModel {
         }
     }
     
-    private let profileService: ProfileService
+    let profileService: ProfileService
     private let supabaseService: SupabaseService?
     private let puzzleManagementService: PuzzleManagementService?
     private let learningService: LearningService?
     private let developerService: DeveloperService
+    let audioService: AudioService?
+    private let characterAnimationService: CharacterAnimationService?
     
     private let onGameSelected: (Game) -> Void
     private let onDevToolSelected: (DevTool) -> Void
@@ -105,6 +107,8 @@ class GameLobbyViewModel {
         puzzleManagementService: PuzzleManagementService? = nil,
         learningService: LearningService? = nil,
         developerService: DeveloperService,
+        audioService: AudioService? = nil,
+        characterAnimationService: CharacterAnimationService? = nil,
         onGameSelected: @escaping (Game) -> Void,
         onDevToolSelected: @escaping (DevTool) -> Void,
         onParentDashboardRequested: @escaping () -> Void,
@@ -115,6 +119,8 @@ class GameLobbyViewModel {
         self.puzzleManagementService = puzzleManagementService
         self.learningService = learningService
         self.developerService = developerService
+        self.audioService = audioService
+        self.characterAnimationService = characterAnimationService
         self.onGameSelected = onGameSelected
         self.onDevToolSelected = onDevToolSelected
         self.onParentDashboardRequested = onParentDashboardRequested
@@ -132,6 +138,9 @@ class GameLobbyViewModel {
                 self.checkAndShowProfileModal()
             }
         }
+        
+        // Show welcome animation
+        showWelcomeAnimation()
     }
     
     private func setupProfileObserver() {
@@ -311,6 +320,9 @@ class GameLobbyViewModel {
                 )
             }
             
+            // Switch to game-specific music
+            audioService?.switchToGameMusic(for: game.id)
+            
             // Navigate to game
             onGameSelected(game)
         }
@@ -413,5 +425,24 @@ class GameLobbyViewModel {
     private func getAnalyticsService() -> AnalyticsService? {
         // Could be injected via init, or accessed through app coordinator
         return nil // Implement based on your preference
+    }
+    
+    // MARK: - Character Animations
+    
+    private func showWelcomeAnimation() {
+        // Show a waving character when entering the lobby
+        Task {
+            // Small delay for better visual effect
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            
+            await MainActor.run {
+                characterAnimationService?.showWelcome(at: .bottomRight)
+            }
+        }
+    }
+    
+    func showCelebrationForGameUnlock() {
+        // Show celebration animation when a new game is unlocked
+        characterAnimationService?.showCelebration(at: .center)
     }
 }

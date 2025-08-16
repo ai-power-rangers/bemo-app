@@ -23,6 +23,8 @@ class DependencyContainer {
     let puzzleManagementService: PuzzleManagementService
     let developerService: DeveloperService
     let learningService: LearningService
+    let audioService: AudioService
+    let characterAnimationService: CharacterAnimationService
     
     init() {
         // Initialize error tracking first so it's available for other services
@@ -33,6 +35,8 @@ class DependencyContainer {
         self.profileService = ProfileService()
         self.cvService = CVService()
         self.analyticsService = AnalyticsService()
+        self.audioService = AudioService()
+        self.characterAnimationService = CharacterAnimationService()
         // Use regular authentication for user data - this ensures proper RLS enforcement
         self.supabaseService = SupabaseService(authService: authenticationService, errorTracking: errorTrackingService, useServiceRole: false)
         
@@ -65,6 +69,7 @@ class DependencyContainer {
         // Setup cross-service dependencies
         profileService.setAuthenticationService(authenticationService)
         authenticationService.setProfileService(profileService)
+        audioService.setProfileService(profileService)
         
         // Setup error tracking integration
         authenticationService.setErrorTrackingService(errorTrackingService)

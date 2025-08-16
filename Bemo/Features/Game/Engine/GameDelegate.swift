@@ -37,9 +37,30 @@ protocol GameDelegate: AnyObject {
     /// Provides the active child's default gameplay difficulty as set by the parent
     /// Games can use this as a baseline and optionally allow in-game overrides
     func getChildDifficultySetting() -> UserPreferences.DifficultySetting
+    
+    /// Shows a celebration character animation
+    /// - Parameter position: Position on screen for the animation
+    func showCelebrationAnimation(at position: CharacterAnimationService.AnimationPosition)
+    
+    /// Shows a custom character animation
+    /// - Parameters:
+    ///   - character: The character type to show
+    ///   - position: Position on screen
+    ///   - duration: How long to show the animation
+    func showCharacterAnimation(
+        _ character: CharacterAnimationService.CharacterType,
+        at position: CharacterAnimationService.AnimationPosition,
+        duration: TimeInterval
+    )
 }
 
 // Default implementations for optional behaviors
 extension GameDelegate {
     func getChildDifficultySetting() -> UserPreferences.DifficultySetting { .normal }
+    func showCelebrationAnimation(at position: CharacterAnimationService.AnimationPosition) { }
+    func showCharacterAnimation(
+        _ character: CharacterAnimationService.CharacterType,
+        at position: CharacterAnimationService.AnimationPosition,
+        duration: TimeInterval
+    ) { }
 }

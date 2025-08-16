@@ -95,6 +95,7 @@ struct ProfileSetupView: View {
             }
             .disabled(viewModel.isLoading)
         }
+        .navigationViewStyle(StackNavigationViewStyle())
         .onAppear {
             withAnimation(.easeOut(duration: 0.6)) {
                 animateContent = true
