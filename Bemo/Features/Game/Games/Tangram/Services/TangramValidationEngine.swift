@@ -69,6 +69,9 @@ class TangramValidationEngine {
         let targetId: String
         var lastValidPose: (pos: CGPoint, rot: CGFloat, flip: Bool)
         let lockedAt: TimeInterval
+        // Dynamic hysteresis per lock (optional). If nil, fall back to global slack.
+        var allowedPositionSlack: CGFloat? = nil
+        var allowedRotationSlackDeg: CGFloat? = nil
     }
     
     struct PieceValidationState {
@@ -364,12 +367,13 @@ class TangramValidationEngine {
                     #endif
                     var bothRelaxed = false
                     if !bothStrict {
-                        // Compute residuals and apply relaxed thresholds
-                        // Be more forgiving for initial anchor establishment to avoid false negatives
+                        // Compute residuals and apply relaxed thresholds (tempered)
                         let tolerances = TangramGameConstants.Validation.tolerances(for: difficulty)
-                        let posRelax = tolerances.position * 2.5  // Much more forgiving on position for initial anchor
-                        let rotRelaxDeg = tolerances.rotationDeg * 1.5  // Slightly more forgiving on rotation
+                        let posRelax = tolerances.position * 1.6
+                        let rotRelaxDeg = tolerances.rotationDeg * 1.2
                         var okCount = 0
+                        var maxObservedPos: CGFloat = 0
+                        var maxObservedRotDeg: CGFloat = 0
                         for obs in pairObs {
                             // Determine target from local state if available, else pick best by type
                             var targetId: String? = localStates[obs.pieceId]?.targetId
@@ -399,6 +403,8 @@ class TangramValidationEngine {
                                     TangramPoseMapper.spriteKitAngle(fromRawAngle: TangramPoseMapper.rawAngle(from: target.transform)) + canonicalTarget
                                 )
                                 let rotDiffDeg = abs(angleDifference(pieceFeature, targetFeature)) * 180 / .pi
+                                maxObservedPos = max(maxObservedPos, posDist)
+                                maxObservedRotDeg = max(maxObservedRotDeg, rotDiffDeg)
                                 let passesRelaxed = posDist <= posRelax && rotDiffDeg <= rotRelaxDeg
                                 if passesRelaxed { okCount += 1 }
                                 #if DEBUG
@@ -412,8 +418,9 @@ class TangramValidationEngine {
                         #endif
                     }
                     // Enforce maximum distance between the two observed anchors before allowing commit
-                    // Increased to allow more flexibility in initial anchor placement
-                    let maxPairSeparation: CGFloat = 200 // px in scene space; adjust per level
+                    // Tie to difficulty connection tolerance to avoid far-apart validation
+                    let baseConn = TangramGameConstants.Validation.tolerances(for: difficulty).connection
+                    let maxPairSeparation: CGFloat = baseConn * 1.25
                     let pA = pairObs[0].position
                     let pB = pairObs[1].position
                     let pairDist = hypot(pA.x - pB.x, pA.y - pB.y)
@@ -462,8 +469,8 @@ class TangramValidationEngine {
                             let dTrans = hypot(existing.translationOffset.dx - mapping.translationOffset.dx,
                                                existing.translationOffset.dy - mapping.translationOffset.dy)
                             let sameAnchor = (existing.anchorPieceId == mapping.anchorPieceId) && (existing.anchorTargetId == mapping.anchorTargetId)
-                            // Be more forgiving about reusing existing mappings to avoid jitter
-                            if sameAnchor && dTheta <= 5.0 && dTrans <= 10.0 {
+                            // Tighten reuse window to avoid orbiting/flip-flopping mapping
+                            if sameAnchor && dTheta <= 2.0 && dTrans <= 4.0 {
                                 mainGroupId = groupId
                                 anchorPieceIds = Set(pairObs.map { $0.pieceId })
                                 anchorIds = anchorPieceIds
@@ -566,6 +573,59 @@ class TangramValidationEngine {
                             }
                             #endif
                         }
+                        
+                        // After committing the anchor pair, attempt to validate exactly one adjacent neighbor
+                        if let adj = cachedAdjacencyGraphs[puzzle.id] {
+                            // Get neighbor target ids of the committed targets
+                            let committedTargetIds: [String] = [pair.0.pieceId, pair.1.pieceId].compactMap { pieceBindings[$0] }
+                            var neighborTargetWhitelist: Set<String> = []
+                            for tid in committedTargetIds {
+                                neighborTargetWhitelist.formUnion(adj.neighbors(of: tid))
+                            }
+                            // Remove already validated targets and the two anchors
+                            neighborTargetWhitelist.subtract(validatedTargets)
+                            neighborTargetWhitelist.subtract(committedTargetIds)
+                            
+                            if !neighborTargetWhitelist.isEmpty {
+                                // Try to find one observed piece of matching type that validates under the mapping
+                                var bestNeighbor: (pid: String, st: PieceValidationState)? = nil
+                                for obs in frame where !committedTargetIds.contains(obs.pieceId) {
+                                    let st = validateMappedPiece(
+                                        observation: obs,
+                                        mapping: mapping,
+                                        anchorPosition: anchorObs.position,
+                                        puzzle: puzzle,
+                                        difficulty: difficulty,
+                                        allowedTargetIds: neighborTargetWhitelist
+                                    )
+                                    if st.isValid, let _ = st.targetId {
+                                        bestNeighbor = (obs.pieceId, st)
+                                        break
+                                    }
+                                }
+                                if let add = bestNeighbor, let tid = add.st.targetId {
+                                    pieceStates[add.pid] = add.st
+                                    pieceBindings[add.pid] = tid
+                                    validatedTargets.insert(tid)
+                                    // Initialize a conservative lock for neighbor with small slack to prevent oscillation
+                                    lockedValidations[add.pid] = LockedValidation(
+                                        pieceId: add.pid,
+                                        targetId: tid,
+                                        lastValidPose: (
+                                            pos: CGPoint.zero,
+                                            rot: 0,
+                                            flip: false
+                                        ),
+                                        lockedAt: CACurrentMediaTime(),
+                                        allowedPositionSlack: TangramGameConstants.Validation.tolerances(for: difficulty).position * 1.1,
+                                        allowedRotationSlackDeg: TangramGameConstants.Validation.tolerances(for: difficulty).rotationDeg * 1.1
+                                    )
+                                    #if DEBUG
+                                    print("[ADJ-EXPAND] Added neighbor piece=\(add.pid) -> target=\(tid)")
+                                    #endif
+                                }
+                            }
+                        }
                     } else {
                         // Soft failure: keep anchor for a bit, but emit failure reasons for UI feedback
                         for obs in pairObs {
@@ -623,8 +683,14 @@ class TangramValidationEngine {
                     let t1 = pieceBindings[obs1.pieceId]
                     if let t0 = t0, let t1 = t1,
                        let updated = computePairDocMapping(pair: (obs0, obs1), puzzle: puzzle, preferredTargetIds: (t0, t1)) {
-                        mapping = updated
-                        mappingService.setMapping(for: gid, mapping: updated)
+                        // Only accept updated mapping if change is within tight bounds to prevent orbiting jitter
+                        let dTheta = abs(angleDifference(mapping.rotationDelta, updated.rotationDelta)) * 180 / .pi
+                        let dTrans = hypot(mapping.translationOffset.dx - updated.translationOffset.dx,
+                                           mapping.translationOffset.dy - updated.translationOffset.dy)
+                        if dTheta <= 2.0 && dTrans <= 4.0 {
+                            mapping = updated
+                            mappingService.setMapping(for: gid, mapping: updated)
+                        }
                     }
                 }
             }
@@ -667,7 +733,10 @@ class TangramValidationEngine {
                         let tol = TangramGameConstants.Validation.tolerances(for: difficulty)
                         let posLimit = tol.position + invalidationSlackPosition
                         let rotLimit = tol.rotationDeg + invalidationSlackRotationDeg
-                        if posDist <= posLimit && rotDiffDeg <= rotLimit {
+                        // Prefer per-lock dynamic slack if available (1.1x of commit residuals), else global slack
+                        let effPosLimit = lock.allowedPositionSlack ?? posLimit
+                        let effRotLimit = lock.allowedRotationSlackDeg ?? rotLimit
+                        if posDist <= effPosLimit && rotDiffDeg <= effRotLimit {
                             // Refresh lock
                             lockedValidations[obs.pieceId]?.lastValidPose = (mapped.positionSK, mapped.rotationSK, mapped.isFlipped)
                             invalidationStartAt.removeValue(forKey: obs.pieceId)
@@ -881,11 +950,15 @@ class TangramValidationEngine {
         mapping: AnchorMapping,
         anchorPosition: CGPoint,
         puzzle: GamePuzzleData,
-        difficulty: UserPreferences.DifficultySetting
+        difficulty: UserPreferences.DifficultySetting,
+        allowedTargetIds: Set<String>? = nil
     ) -> PieceValidationState {
-        // Build candidate targets by type
-        let candidateTargets: [GamePuzzleData.TargetPiece] = puzzle.targetPieces.filter { target in
+        // Build candidate targets by type, then optionally restrict by allowedTargetIds
+        var candidateTargets: [GamePuzzleData.TargetPiece] = puzzle.targetPieces.filter { target in
             target.pieceType == observation.pieceType && !validatedTargets.contains(target.id)
+        }
+        if let whitelist = allowedTargetIds {
+            candidateTargets = candidateTargets.filter { whitelist.contains($0.id) }
         }
 
         // Map the observed piece pose into target (SK) space using the group's mapping
