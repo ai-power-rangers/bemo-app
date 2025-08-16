@@ -14,7 +14,6 @@ import SwiftUI
 struct DifficultySelectionView: View {
     @State private var viewModel: DifficultySelectionViewModel
     @State private var selectedDifficulty: UserPreferences.DifficultySetting?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     
     init(viewModel: DifficultySelectionViewModel) {
         self._viewModel = State(initialValue: viewModel)
@@ -298,7 +297,7 @@ struct DifficultyCard: View {
         .cornerRadius(BemoTheme.CornerRadius.small)
         .scaleEffect(isRecommended ? 1.1 : 1.0)
         .animation(
-            reduceMotion ? 
+            UIAccessibility.isReduceMotionEnabled ? 
                 .easeInOut(duration: 0.2) : 
                 .easeInOut(duration: 1.0).repeatCount(3, autoreverses: true),
             value: isRecommended

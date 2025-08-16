@@ -190,10 +190,17 @@ class TangramGameViewModel {
             }
             
             // After puzzles are loaded, determine initial phase
-            #if DEBUG
-            print("🎯 [TangramGameViewModel] Determining initial phase...")
-            #endif
-            self.determineInitialPhase()
+            if !self.availablePuzzles.isEmpty {
+                #if DEBUG
+                print("🎯 [TangramGameViewModel] Determining initial phase...")
+                #endif
+                self.determineInitialPhase()
+            } else {
+                #if DEBUG
+                print("⚠️ [TangramGameViewModel] Puzzles not loaded, using safe default phase")
+                #endif
+                self.currentPhase = .selectingDifficulty
+            }
         }
     }
 
@@ -1133,7 +1140,14 @@ class TangramGameViewModel {
         currentProgress = nil
         
         // Determine initial phase for new child
-        determineInitialPhase()
+        if !availablePuzzles.isEmpty {
+            determineInitialPhase()
+        } else {
+            #if DEBUG
+            print("⚠️ [TangramGameViewModel] Puzzles not loaded for child profile change, using safe default phase")
+            #endif
+            currentPhase = .selectingDifficulty
+        }
     }
     
     private func startGameSession(puzzleId: String, puzzleName: String, difficulty: Int) {
