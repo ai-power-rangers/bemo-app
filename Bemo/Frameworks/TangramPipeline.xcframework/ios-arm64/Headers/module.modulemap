@@ -1,0 +1,6 @@
+framework module TangramPipeline {
+    umbrella header "ObjCBridge/TPTangramPipelineWrapper.h"
+    
+    export *
+    module * { export * }
+}
