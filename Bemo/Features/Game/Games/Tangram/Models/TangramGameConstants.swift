@@ -104,5 +104,46 @@ enum TangramGameConstants {
             }
         }
     }
+    
+    // MARK: - Difficulty Progression
+    
+    enum DifficultyProgression {
+        /// Minimum number of Easy puzzles that must be completed to unlock Medium
+        static let easyPuzzlesRequiredForMedium: Int = 1
+        
+        /// Minimum completion percentage of Medium puzzles required to unlock Hard (0.0 to 1.0)
+        static let mediumCompletionRequiredForHard: Double = 0.5
+        
+        /// Percentage multiplier for display (converts 0.0-1.0 to 0-100)
+        static let percentageMultiplier: Double = 100.0
+        
+        /// Star rating ranges for each difficulty level
+        enum StarRating {
+            static let easyStars: [Int] = [1, 2]      // 1-2 star puzzles
+            static let mediumStars: [Int] = [3, 4]    // 3-4 star puzzles  
+            static let hardStars: [Int] = [5]         // 5 star puzzles
+        }
+        
+        /// Check if a difficulty should be unlocked based on progress
+        static func isDifficultyUnlocked(
+            _ difficulty: UserPreferences.DifficultySetting,
+            easyCompleted: Int,
+            mediumCompleted: Int,
+            mediumTotal: Int
+        ) -> Bool {
+            switch difficulty {
+            case .easy:
+                return true // Always unlocked
+                
+            case .normal:
+                return easyCompleted >= easyPuzzlesRequiredForMedium
+                
+            case .hard:
+                guard mediumTotal > 0 else { return false }
+                let completionRatio = Double(mediumCompleted) / Double(mediumTotal)
+                return completionRatio >= mediumCompletionRequiredForHard
+            }
+        }
+    }
 }
 

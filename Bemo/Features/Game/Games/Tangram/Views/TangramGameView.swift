@@ -29,26 +29,62 @@ struct TangramGameView: View {
         self._viewModel = State(initialValue: viewModel)
     }
     
+    // MARK: - Computed Properties
+    
+    private var isSelectionPhase: Bool {
+        switch viewModel.currentPhase {
+        case .selectingDifficulty, .map, .promotion:
+            return true
+        case .playingPuzzle, .puzzleComplete:
+            return false
+        }
+    }
+    
     var body: some View {
         NavigationStack {
             Group {
                 switch viewModel.currentPhase {
-                case .selectingPuzzle:
+                case .selectingDifficulty:
+                    difficultySelectionView
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
+                    
+                case .map:
+                    // TODO: Phase 3 - Add map view  
                     puzzleSelectionView
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
+                    
+                case .promotion:
+                    // TODO: Phase 4 - Add promotion view
+                    puzzleSelectionView
+                        .transition(.asymmetric(
+                            insertion: .scale.combined(with: .opacity),
+                            removal: .scale.combined(with: .opacity)
+                        ))
                     
                 case .playingPuzzle:
                     gamePlayView
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                            removal: .move(edge: .bottom).combined(with: .opacity)
+                        ))
                     
                 case .puzzleComplete:
                     completionView
+                        .transition(.asymmetric(
+                            insertion: .scale.combined(with: .opacity),
+                            removal: .scale.combined(with: .opacity)
+                        ))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                viewModel.currentPhase == .selectingPuzzle 
-                    ? TangramTheme.Backgrounds.editor 
-                    : TangramTheme.Backgrounds.gameScene
-            )
+            .background(isSelectionPhase ? TangramTheme.Backgrounds.editor : TangramTheme.Backgrounds.gameScene)
+            .animation(.easeInOut(duration: 0.3), value: viewModel.currentPhase)
         }
         .onAppear {
             updateNavigationBarAppearance()
@@ -66,7 +102,7 @@ struct TangramGameView: View {
         
         // Set background color based on current phase
         let backgroundColor = switch viewModel.currentPhase {
-        case .selectingPuzzle:
+        case .selectingDifficulty, .map, .promotion:
             UIColor(TangramTheme.Backgrounds.editor)  // Beige for library
         case .playingPuzzle, .puzzleComplete:
             UIColor(TangramTheme.Backgrounds.gameScene)  // White for game
@@ -98,6 +134,64 @@ struct TangramGameView: View {
             UINavigationBar.appearance().compactAppearance = appearance
         }
         UINavigationBar.appearance().tintColor = UIColor(TangramTheme.Text.primary)
+    }
+    
+    // MARK: - Difficulty Selection View
+    
+    private var difficultySelectionView: some View {
+        Group {
+            if let difficultyViewModel = viewModel.makeDifficultySelectionViewModel() {
+                DifficultySelectionView(viewModel: difficultyViewModel)
+            } else {
+                // Fallback if no child profile is set
+                VStack(spacing: BemoTheme.Spacing.large) {
+                    Image(systemName: "person.crop.circle.badge.exclamationmark")
+                        .font(.system(size: 48))
+                        .foregroundColor(.orange)
+                    
+                    Text("No Profile Selected")
+                        .font(BemoTheme.font(for: .heading3))
+                        .foregroundColor(BemoTheme.Colors.gray1)
+                    
+                    Text("Please select a child profile to continue")
+                        .font(BemoTheme.font(for: .body))
+                        .foregroundColor(BemoTheme.Colors.gray2)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, BemoTheme.Spacing.large)
+                    
+                    Button("Back to Lobby") {
+                        viewModel.requestQuit()
+                    }
+                    .primaryButtonStyle()
+                }
+                .padding(BemoTheme.Spacing.xlarge)
+            }
+        }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(TangramTheme.Backgrounds.editor, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    viewModel.requestQuit()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16))
+                        Text("Back")
+                            .font(.system(size: 16))
+                    }
+                    .foregroundColor(TangramTheme.UI.primaryButton)
+                }
+            }
+            
+            ToolbarItem(placement: .principal) {
+                Text("Choose Difficulty")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(TangramTheme.Text.primary)
+            }
+        }
     }
     
     // MARK: - Puzzle Selection View
