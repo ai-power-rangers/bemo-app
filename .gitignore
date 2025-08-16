@@ -2,6 +2,8 @@
 .DS_Store
 .Trashes
 
+Frameworks/
+
 # Xcode project files that cause merge conflicts
 *.xcodeproj/project.pbxproj
 *.xcworkspace/xcuserdata/
