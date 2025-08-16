@@ -96,6 +96,13 @@ class TangramGame: Game {
         let base = delegate.getChildDifficultySetting()
         vm.setEffectiveDifficulty(overrideDifficulty ?? base)
         
+        // Always re-determine initial phase when creating game view
+        // This ensures the correct phase is shown even when reusing view models
+        #if DEBUG
+        print("🎯 [TangramGame] Re-determining initial phase for game launch")
+        #endif
+        vm.determineInitialPhase()
+        
         return AnyView(
             TangramGameView(viewModel: vm)
         )
