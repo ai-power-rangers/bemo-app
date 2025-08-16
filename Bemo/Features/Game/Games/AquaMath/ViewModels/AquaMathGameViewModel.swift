@@ -23,6 +23,9 @@ class AquaMathGameViewModel {
     private(set) var isGameActive: Bool = false
     private(set) var levelConfig: LevelConfig
     
+    // Configuration
+    private let initialBubbleCount: Int = 15
+    
     // MARK: - UI State
     
     var selectedMode: GameMode {
@@ -116,6 +119,11 @@ class AquaMathGameViewModel {
         
         // Notify scene to reset
         gameScene?.resetScene()
+        
+        // Spawn initial bubbles
+        for _ in 0..<initialBubbleCount {
+            spawnBubble()
+        }
     }
     
     func pauseGame() {

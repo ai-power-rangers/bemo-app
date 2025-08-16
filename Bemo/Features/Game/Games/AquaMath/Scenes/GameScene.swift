@@ -211,9 +211,10 @@ class GameScene: SKScene {
         aquariumNode.addChild(node)
         bubbleNodes[bubble.id] = node
         
-        // Animate floating down
+        // Animate floating down to just above the water line (bottom of aquarium area)
         let duration = TimeInterval(CGFloat.random(in: 6...10))
-        let moveAction = SKAction.moveTo(y: -60, duration: duration)
+        let bottomOfAquarium: CGFloat = 80  // Stop bubbles at the bottom of aquarium area, above workspace
+        let moveAction = SKAction.moveTo(y: bottomOfAquarium, duration: duration)
         moveAction.timingMode = .easeInEaseOut
         
         // Add gentle sway
@@ -233,15 +234,15 @@ class GameScene: SKScene {
         let bubbleTexture = SKTexture(imageNamed: "bubble_1")
         
         let node = SKSpriteNode(texture: bubbleTexture)
-        node.size = CGSize(width: 80, height: 80)
+        node.size = CGSize(width: 160, height: 160)  // Doubled from 80x80
         node.name = "bubble_\(bubble.id)"
         
         switch bubble.type {
         case .normal:
-            // Add number label with better visibility
+            // Add number label with better visibility (doubled font size)
             let label = SKLabelNode(text: "\(bubble.value)")
             label.fontName = "Helvetica-Bold"
-            label.fontSize = 28
+            label.fontSize = 56  // Doubled from 28
             label.fontColor = .white  // White text on bubble
             label.verticalAlignmentMode = .center
             label.horizontalAlignmentMode = .center
@@ -250,11 +251,11 @@ class GameScene: SKScene {
             // Add shadow for better readability
             let shadowLabel = SKLabelNode(text: "\(bubble.value)")
             shadowLabel.fontName = "Helvetica-Bold"
-            shadowLabel.fontSize = 28
+            shadowLabel.fontSize = 56  // Doubled from 28
             shadowLabel.fontColor = .black.withAlphaComponent(0.3)
             shadowLabel.verticalAlignmentMode = .center
             shadowLabel.horizontalAlignmentMode = .center
-            shadowLabel.position = CGPoint(x: 1, y: -1)
+            shadowLabel.position = CGPoint(x: 2, y: -2)  // Adjusted shadow position for larger text
             shadowLabel.zPosition = 9
             
             node.addChild(shadowLabel)
@@ -279,15 +280,15 @@ class GameScene: SKScene {
             addSpongeIcon(to: node)
             
         case .crate:
-            // Replace with crate shape
+            // Replace with crate shape (doubled size)
             node.texture = nil
-            let crate = SKSpriteNode(color: .brown, size: CGSize(width: 60, height: 60))
+            let crate = SKSpriteNode(color: .brown, size: CGSize(width: 120, height: 120))  // Doubled from 60x60
             crate.zPosition = 1
             node.addChild(crate)
         }
         
-        // Add physics body for collisions
-        node.physicsBody = SKPhysicsBody(circleOfRadius: 35)
+        // Add physics body for collisions (doubled radius)
+        node.physicsBody = SKPhysicsBody(circleOfRadius: 70)  // Doubled from 35
         node.physicsBody?.isDynamic = true
         node.physicsBody?.affectedByGravity = false
         node.physicsBody?.collisionBitMask = 0x1
@@ -298,7 +299,7 @@ class GameScene: SKScene {
     
     private func addLightningIcon(to node: SKSpriteNode) {
         let label = SKLabelNode(text: "⚡")
-        label.fontSize = 30
+        label.fontSize = 60  // Doubled from 30
         label.verticalAlignmentMode = .center
         label.zPosition = 2
         node.addChild(label)
@@ -306,7 +307,7 @@ class GameScene: SKScene {
     
     private func addBombIcon(to node: SKSpriteNode) {
         let label = SKLabelNode(text: "💣")
-        label.fontSize = 30
+        label.fontSize = 60  // Doubled from 30
         label.verticalAlignmentMode = .center
         label.zPosition = 2
         node.addChild(label)
@@ -314,7 +315,7 @@ class GameScene: SKScene {
     
     private func addSpongeIcon(to node: SKSpriteNode) {
         let label = SKLabelNode(text: "🧽")
-        label.fontSize = 30
+        label.fontSize = 60  // Doubled from 30
         label.verticalAlignmentMode = .center
         label.zPosition = 2
         node.addChild(label)
@@ -831,12 +832,6 @@ class GameScene: SKScene {
             vm.spawnBubble()
         }
         
-        // Remove off-screen bubbles
-        for (id, node) in bubbleNodes {
-            if node.position.y < -100 {
-                node.removeFromParent()
-                bubbleNodes.removeValue(forKey: id)
-            }
-        }
+        // Bubbles now stay until popped - no automatic removal
     }
 }
