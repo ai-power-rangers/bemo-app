@@ -63,7 +63,7 @@ struct TangramProgressTester {
         // Test progress creation
         let progress = service.getProgress(for: childId)
         assert(progress.childProfileId == childId)
-        assert(service.progressByChild.count == 1)
+        assert(service.childCount == 1)
         print("   ✅ Progress creation works")
         
         // Test puzzle completion through service

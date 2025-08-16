@@ -19,7 +19,7 @@ class TangramProgressService {
     // MARK: - Observable Properties
     
     /// Progress data by child profile ID
-    var progressByChild: [String: TangramProgress] = [:]
+    private var progressByChild: [String: TangramProgress] = [:]
     
     /// Whether the service is currently syncing with remote
     var isSyncing: Bool = false
@@ -49,6 +49,40 @@ class TangramProgressService {
         self.supabaseService = supabaseService
         
         loadProgressFromLocal()
+    }
+    
+    // MARK: - Access Methods
+    
+    /// Get the number of children with progress data
+    /// - Returns: Count of children with progress
+    var childCount: Int {
+        progressByChild.count
+    }
+    
+    /// Get all child IDs that have progress data
+    /// - Returns: Array of child profile IDs
+    var childIds: [String] {
+        Array(progressByChild.keys)
+    }
+    
+    /// Check if progress exists for a specific child
+    /// - Parameter childId: Child profile ID to check
+    /// - Returns: True if progress exists for the child
+    func hasProgress(for childId: String) -> Bool {
+        progressByChild[childId] != nil
+    }
+    
+    /// Get progress for a specific child without creating new one
+    /// - Parameter childId: Child profile ID
+    /// - Returns: TangramProgress if it exists, nil otherwise
+    func getExistingProgress(for childId: String) -> TangramProgress? {
+        progressByChild[childId]
+    }
+    
+    /// Get all progress data for debugging/admin purposes
+    /// - Returns: Dictionary of child ID to progress data
+    func getAllProgressData() -> [String: TangramProgress] {
+        progressByChild
     }
     
     // MARK: - Core Progress Methods
@@ -299,7 +333,7 @@ class TangramProgressService {
     /// Print current progress state for debugging (DEBUG only)
     func debugPrintProgress() {
         print("📊 TangramProgressService Debug:")
-        print("  Total children: \(progressByChild.count)")
+        print("  Total children: \(childCount)")
         
         for (childId, progress) in progressByChild {
             print("  Child \(childId):")

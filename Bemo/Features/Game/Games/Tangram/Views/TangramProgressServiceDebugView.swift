@@ -95,7 +95,7 @@ struct TangramProgressServiceDebugView: View {
                                 .font(.caption)
                         }
                         
-                        Text("Total Children: \(progressService.progressByChild.count)")
+                        Text("Total Children: \(progressService.childCount)")
                             .font(.caption)
                         Text("Active Child: \(selectedChildId)")
                             .font(.caption)
@@ -275,13 +275,13 @@ struct TangramProgressServiceDebugView: View {
                     }
                     
                     // Multi-Child Comparison
-                    if progressService.progressByChild.count > 1 {
+                    if progressService.childCount > 1 {
                         VStack(alignment: .leading) {
                             Text("All Children Progress:")
                                 .font(.headline)
                             
-                            ForEach(Array(progressService.progressByChild.keys).sorted(), id: \.self) { childId in
-                                let childProgress = progressService.progressByChild[childId]!
+                            ForEach(Array(progressService.getAllProgressData().keys).sorted(), id: \.self) { childId in
+                                let childProgress = progressService.getAllProgressData()[childId]!
                                 HStack {
                                     Text(childId)
                                         .font(.caption)
@@ -638,7 +638,7 @@ struct TangramProgressServiceDebugView: View {
             // Test progress creation
             let progress = testService.getProgress(for: testChild)
             guard progress.childProfileId == testChild,
-                  testService.progressByChild.count >= 1 else {
+                  testService.childCount >= 1 else {
                 results += "   ❌ Progress creation failed\n"
                 allPassed = false
                 throw TestError.failed

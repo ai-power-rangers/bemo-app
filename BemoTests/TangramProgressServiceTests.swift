@@ -65,7 +65,7 @@ final class TangramProgressServiceTests: XCTestCase {
     
     func testInitialization() {
         XCTAssertNotNil(service)
-        XCTAssertTrue(service.progressByChild.isEmpty)
+        XCTAssertTrue(service.childCount == 0)
         XCTAssertFalse(service.isSyncing)
     }
     
@@ -77,8 +77,8 @@ final class TangramProgressServiceTests: XCTestCase {
         XCTAssertTrue(progress.completedPuzzlesByDifficulty.isEmpty)
         
         // Should be stored in service
-        XCTAssertEqual(service.progressByChild.count, 1)
-        XCTAssertNotNil(service.progressByChild[testChildId])
+        XCTAssertEqual(service.childCount, 1)
+        XCTAssertTrue(service.hasProgress(for: testChildId))
     }
     
     func testGetProgressReturnsExistingForKnownChild() {
@@ -95,7 +95,7 @@ final class TangramProgressServiceTests: XCTestCase {
         XCTAssertTrue(retrievedProgress.isPuzzleCompleted(puzzleId: "test-puzzle", difficulty: .easy))
         
         // Should be same instance
-        XCTAssertEqual(service.progressByChild.count, 1)
+        XCTAssertEqual(service.childCount, 1)
     }
     
     // MARK: - Puzzle Completion Tests
@@ -312,7 +312,7 @@ final class TangramProgressServiceTests: XCTestCase {
         // Service should handle corruption gracefully
         let newService = TangramProgressService(userDefaults: mockUserDefaults, supabaseService: nil)
         
-        XCTAssertTrue(newService.progressByChild.isEmpty)
+        XCTAssertTrue(newService.childCount == 0)
         
         // Should still be able to create new progress
         let progress = newService.getProgress(for: testChildId)
@@ -339,7 +339,7 @@ final class TangramProgressServiceTests: XCTestCase {
         XCTAssertTrue(child2Progress.isPuzzleCompleted(puzzleId: "normal-01", difficulty: .normal))
         XCTAssertFalse(child2Progress.isPuzzleCompleted(puzzleId: "easy-01", difficulty: .easy))
         
-        XCTAssertEqual(service.progressByChild.count, 2)
+        XCTAssertEqual(service.childCount, 2)
     }
     
     // MARK: - Edge Cases Tests
@@ -376,21 +376,21 @@ final class TangramProgressServiceTests: XCTestCase {
     func testResetAllProgress() {
         // Add some progress
         service.markPuzzleCompleted(childId: testChildId, puzzleId: "easy-01", difficulty: .easy)
-        XCTAssertEqual(service.progressByChild.count, 1)
+        XCTAssertEqual(service.childCount, 1)
         
         // Reset all progress
         service.resetAllProgress()
         
-        XCTAssertTrue(service.progressByChild.isEmpty)
+        XCTAssertTrue(service.childCount == 0)
     }
     
     func testAddTestData() {
-        XCTAssertTrue(service.progressByChild.isEmpty)
+        XCTAssertTrue(service.childCount == 0)
         
         service.addTestData()
         
-        XCTAssertFalse(service.progressByChild.isEmpty)
-        XCTAssertTrue(service.progressByChild.contains { $0.key == "debug-test-child" })
+        XCTAssertFalse(service.childCount == 0)
+        XCTAssertTrue(service.hasProgress(for: "debug-test-child"))
     }
     
     func testDebugPrintProgress() {
@@ -410,11 +410,11 @@ final class TangramProgressServiceTests: XCTestCase {
         // Here we just verify the basic property changes work
         
         XCTAssertFalse(service.isSyncing)
-        XCTAssertTrue(service.progressByChild.isEmpty)
+        XCTAssertTrue(service.childCount == 0)
         
         // Adding progress should update the observable property
         let progress = service.getProgress(for: testChildId)
-        XCTAssertFalse(service.progressByChild.isEmpty)
+        XCTAssertFalse(service.childCount == 0)
         
         // Completing puzzles should update progress
         service.markPuzzleCompleted(childId: testChildId, puzzleId: "easy-01", difficulty: .easy)
