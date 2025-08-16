@@ -98,6 +98,8 @@ class TangramValidationEngine {
     private let nudgeManager: SmartNudgeManager
     private let hintEngine: TangramHintEngine
     private let optimizationValidator: OptimizationValidator
+    private let pairScorer: TangramPairScorer
+    private let anchorMapper: TangramAnchorMapper
     private var currentDifficulty: UserPreferences.DifficultySetting
     
     // MARK: - State
@@ -139,6 +141,11 @@ class TangramValidationEngine {
         self.nudgeManager = SmartNudgeManager()
         self.hintEngine = TangramHintEngine()
         self.optimizationValidator = OptimizationValidator(difficulty: difficulty)
+        self.pairScorer = TangramPairScorer()
+        self.anchorMapper = TangramAnchorMapper(
+            mappingService: mappingService,
+            validator: validator
+        )
         self.currentDifficulty = difficulty
     }
     
