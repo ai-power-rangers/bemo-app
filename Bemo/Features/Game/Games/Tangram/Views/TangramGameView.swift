@@ -29,6 +29,17 @@ struct TangramGameView: View {
         self._viewModel = State(initialValue: viewModel)
     }
     
+    // MARK: - Computed Properties
+    
+    private var isSelectionPhase: Bool {
+        switch viewModel.currentPhase {
+        case .selectingDifficulty, .map, .promotion:
+            return true
+        case .playingPuzzle, .puzzleComplete:
+            return false
+        }
+    }
+    
     var body: some View {
         NavigationStack {
             Group {
@@ -53,11 +64,7 @@ struct TangramGameView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                viewModel.currentPhase == .selectingPuzzle 
-                    ? TangramTheme.Backgrounds.editor 
-                    : TangramTheme.Backgrounds.gameScene
-            )
+            .background(isSelectionPhase ? TangramTheme.Backgrounds.editor : TangramTheme.Backgrounds.gameScene)
         }
         .onAppear {
             updateNavigationBarAppearance()
@@ -75,7 +82,7 @@ struct TangramGameView: View {
         
         // Set background color based on current phase
         let backgroundColor = switch viewModel.currentPhase {
-        case .selectingPuzzle:
+        case .selectingDifficulty, .map, .promotion:
             UIColor(TangramTheme.Backgrounds.editor)  // Beige for library
         case .playingPuzzle, .puzzleComplete:
             UIColor(TangramTheme.Backgrounds.gameScene)  // White for game
