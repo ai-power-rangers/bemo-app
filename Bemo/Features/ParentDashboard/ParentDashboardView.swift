@@ -333,6 +333,7 @@ struct ParentDashboardView: View {
                 UINavigationBar.appearance().compactAppearance = appearance
             }
         }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
 }
 

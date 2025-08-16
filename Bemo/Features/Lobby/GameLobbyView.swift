@@ -107,13 +107,17 @@ struct GameLobbyView: View {
                 onParentDashboardTapped: {
                     showingSideMenu = false
                     viewModel.requestParentalAccess()
-                }
+                },
+                audioService: viewModel.audioService,
+                profileService: viewModel.profileService
             )
         }
         .sheet(isPresented: $viewModel.showProfileDetails) {
             if let currentProfile = viewModel.currentUserProfile {
                 ProfileDetailsView(
                     profile: currentProfile,
+                    profileService: viewModel.profileService,
+                    audioService: viewModel.audioService,
                     onSwitchProfile: {
                         viewModel.switchProfileFromDetails()
                     },

@@ -31,6 +31,8 @@ class GameHostViewModel {
     private let supabaseService: SupabaseService
     private let learningService: LearningService
     private let errorTrackingService: ErrorTrackingService?
+    private let audioService: AudioService?
+    private let characterAnimationService: CharacterAnimationService?
     private var currentSessionId: String?
     private let currentChildProfileId: String
     private let onQuit: () -> Void
@@ -44,6 +46,8 @@ class GameHostViewModel {
         supabaseService: SupabaseService,
         learningService: LearningService,
         errorTrackingService: ErrorTrackingService? = nil,
+        audioService: AudioService? = nil,
+        characterAnimationService: CharacterAnimationService? = nil,
         currentChildProfileId: String,
         onQuit: @escaping () -> Void
     ) {
@@ -53,6 +57,8 @@ class GameHostViewModel {
         self.supabaseService = supabaseService
         self.errorTrackingService = errorTrackingService
         self.learningService = learningService
+        self.audioService = audioService
+        self.characterAnimationService = characterAnimationService
         self.currentChildProfileId = currentChildProfileId
         self.onQuit = onQuit
         
@@ -147,6 +153,8 @@ class GameHostViewModel {
         
     func handleQuitRequest() {
         endSession()
+        // Switch back to lobby music
+        audioService?.switchToLobbyMusic()
         onQuit()
     }
     
@@ -234,5 +242,17 @@ extension GameHostViewModel: GameDelegate {
     func getChildDifficultySetting() -> UserPreferences.DifficultySetting {
         // Fallback to .normal if no active profile
         return profileService.currentProfile?.preferences.difficultySetting ?? .normal
+    }
+    
+    func showCelebrationAnimation(at position: CharacterAnimationService.AnimationPosition) {
+        characterAnimationService?.showCelebration(at: position)
+    }
+    
+    func showCharacterAnimation(
+        _ character: CharacterAnimationService.CharacterType,
+        at position: CharacterAnimationService.AnimationPosition,
+        duration: TimeInterval
+    ) {
+        characterAnimationService?.showCharacter(character, at: position, duration: duration)
     }
 }

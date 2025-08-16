@@ -59,6 +59,17 @@ struct OnboardingView: View {
             withAnimation(.easeOut(duration: 0.6)) {
                 animateContent = true
             }
+            // Show character for the initial step
+            viewModel.showCharacterForStep(currentStep)
+        }
+        .onChange(of: currentStep) { _, newStep in
+            // Show character animation for each new step
+            if newStep < onboardingSteps.count {
+                viewModel.showCharacterForStep(newStep)
+            } else {
+                // Show character on sign-in screen
+                viewModel.showSignInCharacter()
+            }
         }
         .alert("Authentication Error", isPresented: .constant(viewModel.authenticationError != nil)) {
             Button("OK") {
@@ -487,6 +498,7 @@ struct OnboardingView_Previews: PreviewProvider {
     static var previews: some View {
         OnboardingView(viewModel: OnboardingViewModel(
             authenticationService: AuthenticationService(),
+            characterAnimationService: CharacterAnimationService(),
             onAuthenticationComplete: { _ in }
         ))
     }
