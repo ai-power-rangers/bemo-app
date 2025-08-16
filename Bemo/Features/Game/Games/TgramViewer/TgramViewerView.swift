@@ -58,19 +58,80 @@ struct TgramViewerView: View {
                     // Main canvas
                     GeometryReader { geometry in
                         ZStack {
-                            // Grid background
-                            GridBackground()
-                            
-                            // Pieces
-                            ForEach(viewModel.pieces) { piece in
-                                TgramPieceView(piece: piece)
+                            // Show CV overlay image if available
+                            if let overlayImage = viewModel.overlayImage {
+                                Image(uiImage: overlayImage)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            } else {
+                                // Grid background when no overlay
+                                GridBackground()
+                                
+                                // Pieces
+                                ForEach(viewModel.pieces) { piece in
+                                    TgramPieceView(piece: piece)
+                                }
+                                
+                                // Origin marker
+                                Circle()
+                                    .fill(Color.red.opacity(0.5))
+                                    .frame(width: 10, height: 10)
+                                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
                             }
                             
-                            // Origin marker
-                            Circle()
-                                .fill(Color.red.opacity(0.5))
-                                .frame(width: 10, height: 10)
-                                .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                            // Show status overlay
+                            VStack {
+                                HStack {
+                                    // Session status
+                                    if viewModel.isSessionActive {
+                                        Label("Live", systemImage: "video.fill")
+                                            .font(BemoTheme.font(for: .caption))
+                                            .padding(8)
+                                            .background(Color.green.opacity(0.8))
+                                            .foregroundColor(.white)
+                                            .cornerRadius(8)
+                                    } else if viewModel.isPlayingRecording {
+                                        Label("Playback", systemImage: "play.fill")
+                                            .font(BemoTheme.font(for: .caption))
+                                            .padding(8)
+                                            .background(Color.blue.opacity(0.8))
+                                            .foregroundColor(.white)
+                                            .cornerRadius(8)
+                                    }
+                                    
+                                    // Recording indicator
+                                    if viewModel.isRecording {
+                                        Label("REC", systemImage: "record.circle.fill")
+                                            .font(BemoTheme.font(for: .caption))
+                                            .padding(8)
+                                            .background(Color.red.opacity(0.8))
+                                            .foregroundColor(.white)
+                                            .cornerRadius(8)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    // Detection info
+                                    if viewModel.isSessionActive || viewModel.isPlayingRecording {
+                                        Label("\(viewModel.detectionCount) detected", systemImage: "viewfinder")
+                                            .font(BemoTheme.font(for: .caption))
+                                            .padding(8)
+                                            .background(Color.black.opacity(0.7))
+                                            .foregroundColor(.white)
+                                            .cornerRadius(8)
+                                        
+                                        Label(String(format: "%.1f FPS", viewModel.fps), systemImage: "speedometer")
+                                            .font(BemoTheme.font(for: .caption))
+                                            .padding(8)
+                                            .background(Color.black.opacity(0.7))
+                                            .foregroundColor(.white)
+                                            .cornerRadius(8)
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .padding()
                         }
                         .onAppear {
                             viewModel.updateCanvasSize(to: geometry.size)
@@ -85,16 +146,40 @@ struct TgramViewerView: View {
             .navigationTitle("CV Output Viewer")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button(action: {
-                        viewModel.cycleToNextFile()
+                        viewModel.toggleMode()
                     }) {
                         HStack(spacing: 6) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                            Text(String(format: "#%02d", viewModel.currentFileIndex))
+                            if viewModel.isSessionActive {
+                                Image(systemName: "video.fill")
+                                Text("Live")
+                            } else if viewModel.isPlayingRecording {
+                                Image(systemName: "play.fill")
+                                Text("Playback")
+                            } else {
+                                Image(systemName: "video")
+                                Text("Start")
+                            }
                         }
+                        .foregroundColor(viewModel.isSessionActive ? .green : (viewModel.isPlayingRecording ? .blue : .primary))
                     }
                     .font(BemoTheme.font(for: .body))
+                }
+                
+                ToolbarItem(placement: .topBarTrailing) {
+                    if viewModel.isSessionActive {
+                        Button(action: {
+                            viewModel.toggleRecording()
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: viewModel.isRecording ? "record.circle.fill" : "record.circle")
+                                Text(viewModel.isRecording ? "Stop Rec" : "Record")
+                            }
+                            .foregroundColor(viewModel.isRecording ? .red : .primary)
+                        }
+                        .font(BemoTheme.font(for: .body))
+                    }
                 }
             }
         }
@@ -109,6 +194,13 @@ struct TgramViewerView: View {
             UINavigationBar.appearance().standardAppearance = appearance
             UINavigationBar.appearance().scrollEdgeAppearance = appearance
             UINavigationBar.appearance().compactAppearance = appearance
+            
+            // Start CV session automatically
+            viewModel.startCVSession()
+        }
+        .onDisappear {
+            // Clean up when view disappears
+            viewModel.reset()
         }
     }
 }
@@ -169,54 +261,5 @@ struct GridBackground: View {
             }
             .stroke(Color.gray.opacity(0.2), lineWidth: 0.5)
         }
-    }
-}
-
-// MARK: - Preview
-
-struct TgramViewerView_Previews: PreviewProvider {
-    static var previews: some View {
-        // Create a mock delegate for preview
-        let mockDelegate = MockGameDelegate()
-        let viewModel = TgramViewerViewModel(delegate: mockDelegate)
-        
-        TgramViewerView(viewModel: viewModel)
-            .previewDevice("iPhone 14 Pro")
-            .previewDisplayName("TgramViewer - CV Output")
-    }
-}
-
-// Mock delegate for preview
-class MockGameDelegate: GameDelegate {
-    func gameDidRequestHint() {
-        print("")
-    }
-    
-    func gameDidEncounterError(_ error: any Error) {
-        print("")
-    }
-    
-    func gameDidDetectFrustration(level: Float) {
-        print("")
-    }
-    
-    func gameDidCompleteLevel(xpAwarded: Int) {
-        print("Level completed with \(xpAwarded) XP")
-    }
-    
-    func gameDidRequestQuit() {
-        print("Game quit requested")
-    }
-    
-    func gameDidRequestPause() {
-        print("Game pause requested")
-    }
-    
-    func gameDidUpdateScore(_ score: Int) {
-        print("Score updated: \(score)")
-    }
-    
-    func gameDidUpdateProgress(_ progress: Float) {
-        print("Progress updated: \(progress)")
     }
 }

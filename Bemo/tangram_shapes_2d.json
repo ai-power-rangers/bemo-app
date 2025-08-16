@@ -1,0 +1,60 @@
+{
+  "tangram_parallelogram": {
+    "type": "parallelogram",
+    "vertices": [
+      [ -72.998001, -13.0 ],
+      [ -17.0, -13.0 ],
+      [ -44.0, 14.0 ],
+      [ -99.998001, 14.0 ]
+    ]
+  },
+  "tangram_square": {
+    "type": "square",
+    "vertices": [
+      [ -42.000999, -43.748001 ],
+      [ -14.748, -71.000999 ],
+      [ 13.0, -43.251999 ],
+      [ -14.252, -15.999 ]
+    ]
+  },
+  "tangram_triangle_lrg": {
+    "type": "triangle",
+    "vertices": [
+      [ -98.000999, -102.000999 ],
+      [ 12.001, -102.000999 ],
+      [ -43.0, -47.0 ]
+    ]
+  },
+  "tangram_triangle_lrg2": {
+    "type": "triangle",
+    "vertices": [
+      [ -100.000999, -100.000999 ],
+      [ -45.0, -45.0 ],
+      [ -100.000999, 10.001 ]
+    ]
+  },
+  "tangram_triangle_med": {
+    "type": "triangle",
+    "vertices": [
+      [ 13.0, -40.000999 ],
+      [ 13.0, 14.0 ],
+      [ -41.000999, 14.0 ]
+    ]
+  },
+  "tangram_triangle_sml": {
+    "type": "triangle",
+    "vertices": [
+      [ -43.0, -43.000999 ],
+      [ -15.0, -15.0 ],
+      [ -71.0, -15.0 ]
+    ]
+  },
+  "tangram_triangle_sml2": {
+    "type": "triangle",
+    "vertices": [
+      [ 14.001, -100.0 ],
+      [ 14.0, -44.0 ],
+      [ -14.001, -72.0 ]
+    ]
+  }
+}

@@ -20,5 +20,7 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Bemo needs access to your camera to detect tangram pieces for gameplay.</string>
 </dict>
 </plist>
