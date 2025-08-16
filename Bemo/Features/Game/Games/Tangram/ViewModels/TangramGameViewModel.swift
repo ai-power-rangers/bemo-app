@@ -25,6 +25,12 @@ class TangramGameViewModel {
         case promotion(from: UserPreferences.DifficultySetting, to: UserPreferences.DifficultySetting)  // NEW: Auto-promotion flow
     }
     
+    enum UserType {
+        case new                    // First time player
+        case returning(lastDifficulty: UserPreferences.DifficultySetting, lastPuzzleId: String?)  // Player with progress
+        case completed(allDifficulties: Bool)  // Completed some or all difficulties
+    }
+    
     var currentPhase: GamePhase = .selectingDifficulty
     var selectedPuzzle: GamePuzzleData?
     var gameState: PuzzleGameState?
@@ -219,23 +225,99 @@ class TangramGameViewModel {
     
     /// Determine initial phase based on child's progress
     func determineInitialPhase() {
-        guard let childId = currentChildProfileId else {
+        guard currentChildProfileId != nil else {
             // No child selected, default to difficulty selection
             currentPhase = .selectingDifficulty
             return
         }
         
+        // Detect user type and route accordingly
+        let userType = detectUserType()
+        currentPhase = getInitialPhaseForUserType(userType)
+        
+        // Track user flow for analytics
+        trackUserFlow()
+        
+        // Validate progress data
+        _ = validateProgressData()
+    }
+    
+    /// Detect what type of user this is based on their progress
+    private func detectUserType() -> UserType {
+        guard let childId = currentChildProfileId else {
+            return .new
+        }
+        
         // Get child's progress
         currentProgress = progressService.getProgress(for: childId)
         
-        if let lastDifficulty = currentProgress?.lastSelectedDifficulty {
-            // Returning user - go to map for last played difficulty
-            selectedDifficulty = lastDifficulty
-            currentPhase = .map(lastDifficulty)
-        } else {
-            // New user - start with difficulty selection
-            currentPhase = .selectingDifficulty
+        guard let progress = currentProgress else {
+            return .new
         }
+        
+        // Check if user has completed all difficulties
+        let easyCompletion = getCompletionPercentage(for: .easy)
+        let normalCompletion = getCompletionPercentage(for: .normal)
+        let hardCompletion = getCompletionPercentage(for: .hard)
+        
+        // User completed all difficulties
+        if easyCompletion >= 1.0 && normalCompletion >= 1.0 && hardCompletion >= 1.0 {
+            return .completed(allDifficulties: true)
+        }
+        
+        // User has some progress but not all complete
+        if let lastDifficulty = progress.lastSelectedDifficulty {
+            // Get last played puzzle from current level
+            let lastPuzzleId = progress.currentLevelByDifficulty[lastDifficulty.rawValue] ?? nil
+            return .returning(lastDifficulty: lastDifficulty, lastPuzzleId: lastPuzzleId)
+        }
+        
+        // New user with no progress
+        return .new
+    }
+    
+    /// Get the initial phase based on user type
+    private func getInitialPhaseForUserType(_ userType: UserType) -> GamePhase {
+        switch userType {
+        case .new:
+            // New users start with difficulty selection
+            return .selectingDifficulty
+            
+        case .returning(let lastDifficulty, _):
+            // Returning users go to their last difficulty map
+            selectedDifficulty = lastDifficulty
+            return .map(lastDifficulty)
+            
+        case .completed(let allDifficulties):
+            if allDifficulties {
+                // All complete - let them choose what to replay
+                return .selectingDifficulty
+            } else {
+                // Some complete - go to difficulty selection to choose next
+                return .selectingDifficulty
+            }
+        }
+    }
+    
+    /// Get completion percentage for a difficulty
+    private func getCompletionPercentage(for difficulty: UserPreferences.DifficultySetting) -> Double {
+        guard let childId = currentChildProfileId else { return 0.0 }
+        
+        let puzzlesForDifficulty = availablePuzzles
+            .filter { difficulty.containsPuzzleLevel($0.difficulty) }
+        
+        guard !puzzlesForDifficulty.isEmpty else { return 0.0 }
+        
+        // Get completed puzzles for this difficulty
+        let progress = progressService.getProgress(for: childId)
+        let completedPuzzles = progress.getCompletedPuzzles(for: difficulty)
+        let completedCount = puzzlesForDifficulty
+            .filter { puzzle in
+                completedPuzzles.contains(puzzle.id)
+            }
+            .count
+        
+        return Double(completedCount) / Double(puzzlesForDifficulty.count)
     }
     
     /// Select a difficulty level and proceed to map
@@ -246,6 +328,9 @@ class TangramGameViewModel {
         if let childId = currentChildProfileId {
             progressService.setLastSelectedDifficulty(childId: childId, difficulty: difficulty)
             currentProgress = progressService.getProgress(for: childId)
+            
+            // Track difficulty selection analytics
+            trackDifficultySelection(difficulty: difficulty)
         }
         
         // Transition to map for selected difficulty
@@ -277,6 +362,44 @@ class TangramGameViewModel {
         clearHint()
         endGameSession(completed: false)
         delegate?.gameDidRequestQuit()
+    }
+    
+    // MARK: - Progress Validation
+    
+    /// Validate that progress data is consistent with available puzzles
+    func validateProgressData() -> Bool {
+        guard let childId = currentChildProfileId,
+              let progress = currentProgress else {
+            return true // No data to validate
+        }
+        
+        var isValid = true
+        var inconsistencies: [String] = []
+        
+        // Check each difficulty's progress
+        for difficulty in UserPreferences.DifficultySetting.allCases {
+            let completedPuzzles = progress.getCompletedPuzzles(for: difficulty)
+            for puzzleId in completedPuzzles {
+                // Check if puzzle exists in available puzzles
+                let puzzleExists = availablePuzzles.contains { $0.id == puzzleId }
+                if !puzzleExists {
+                    inconsistencies.append("Missing puzzle: \(puzzleId) for difficulty: \(difficulty)")
+                    isValid = false
+                }
+            }
+        }
+        
+        // Log inconsistencies for debugging
+        if !inconsistencies.isEmpty {
+            #if DEBUG
+            print("⚠️ Progress validation found inconsistencies:")
+            for inconsistency in inconsistencies {
+                print("  - \(inconsistency)")
+            }
+            #endif
+        }
+        
+        return isValid
     }
     
     /// Select and start a puzzle from the map (if unlocked)
@@ -1116,6 +1239,73 @@ class TangramGameViewModel {
         case .firstPiece:
             return "first_piece"
         }
+    }
+    
+    // MARK: - Analytics for User Flow
+    
+    /// Track when a user selects a difficulty
+    private func trackDifficultySelection(difficulty: UserPreferences.DifficultySetting) {
+        guard let learningService = self.learningService else { return }
+        
+        let userType = detectUserType()
+        var userTypeString: String
+        
+        switch userType {
+        case .new:
+            userTypeString = "new_user"
+        case .returning(_, _):
+            userTypeString = "returning_user"
+        case .completed(_):
+            userTypeString = "completed_user"
+        }
+        
+        // Track the difficulty selection event
+        learningService.recordEvent(
+            gameId: "tangram",
+            eventType: "difficulty_selected",
+            eventData: [
+                "difficulty": difficulty.rawValue,
+                "user_type": userTypeString,
+                "has_prior_progress": currentProgress != nil
+            ]
+        )
+        
+        #if DEBUG
+        print("📊 Analytics: Difficulty selected - \(difficulty.rawValue) by \(userTypeString)")
+        #endif
+    }
+    
+    /// Track user flow patterns when starting the game
+    func trackUserFlow() {
+        guard let learningService = self.learningService,
+              let childId = currentChildProfileId else { return }
+        
+        let userType = detectUserType()
+        var flowType: String
+        
+        switch userType {
+        case .new:
+            flowType = "new_user_onboarding"
+        case .returning(let lastDifficulty, _):
+            flowType = "returning_to_\(lastDifficulty.rawValue)"
+        case .completed(let allComplete):
+            flowType = allComplete ? "all_complete_replay" : "partial_complete_continue"
+        }
+        
+        // Track the user flow
+        learningService.recordEvent(
+            gameId: "tangram",
+            eventType: "user_flow",
+            eventData: [
+                "flow_type": flowType,
+                "child_id": childId,
+                "session_start": Date().timeIntervalSince1970
+            ]
+        )
+        
+        #if DEBUG
+        print("📊 Analytics: User flow tracked - \(flowType)")
+        #endif
     }
     
 }
