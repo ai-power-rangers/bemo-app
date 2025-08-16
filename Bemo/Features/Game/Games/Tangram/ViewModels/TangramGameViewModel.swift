@@ -885,6 +885,35 @@ class TangramGameViewModel {
         return max(10, baseXP + timeBonus - hintPenalty)
     }
     
+    // MARK: - Factory Methods
+    
+    /// Create DifficultySelectionViewModel with proper dependencies
+    func makeDifficultySelectionViewModel() -> DifficultySelectionViewModel? {
+        guard let childId = currentChildProfileId else {
+            #if DEBUG
+            print("❌ Cannot create DifficultySelectionViewModel - no child profile ID set")
+            #endif
+            return nil
+        }
+        
+        // Use the puzzle library service directly 
+        let puzzleService: PuzzleLibraryProviding = container.puzzleLibraryService
+        
+        return DifficultySelectionViewModel(
+            childProfileId: childId,
+            progressService: progressService,
+            puzzleLibraryService: puzzleService,
+            onDifficultySelected: { [weak self] difficulty in
+                self?.handleDifficultySelected(difficulty)
+            }
+        )
+    }
+    
+    /// Handle difficulty selection from DifficultySelectionView
+    private func handleDifficultySelected(_ difficulty: UserPreferences.DifficultySetting) {
+        selectDifficulty(difficulty)
+    }
+    
     // MARK: - Game State Management
     
     func resetGame() {
