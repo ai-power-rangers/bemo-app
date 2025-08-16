@@ -53,23 +53,49 @@ class TangramGame: Game {
     // MARK: - Game Protocol Methods
     
     func makeGameView(delegate: GameDelegate) -> AnyView {
-        let vm = TangramGameViewModel(
-            delegate: delegate,
-            supabaseService: supabaseService,
-            puzzleManagementService: puzzleManagementService,
-            learningService: learningService
-        )
+        // Reuse existing view model if available, otherwise create new one
+        let vm: TangramGameViewModel
+        let isNewViewModel: Bool
         
-        // Set child profile ID if available
+        if let existingVM = self.viewModel {
+            vm = existingVM
+            isNewViewModel = false
+            #if DEBUG
+            print("🔄 [TangramGame] Reusing existing view model")
+            #endif
+        } else {
+            vm = TangramGameViewModel(
+                delegate: delegate,
+                supabaseService: supabaseService,
+                puzzleManagementService: puzzleManagementService,
+                learningService: learningService
+            )
+            self.viewModel = vm
+            isNewViewModel = true
+            #if DEBUG
+            print("🆕 [TangramGame] Created new view model")
+            #endif
+        }
+        
+        // Set child profile ID if available and changed
         if let childId = childProfileId {
-            vm.setChildProfileId(childId)
+            // Only set if it's a new view model or if the child ID has changed
+            if isNewViewModel || vm.childProfileId != childId {
+                #if DEBUG
+                print("👤 [TangramGame] Setting child profile ID: \(childId) (was: \(vm.childProfileId ?? "nil"))")
+                #endif
+                vm.setChildProfileId(childId)
+            } else {
+                #if DEBUG
+                print("👤 [TangramGame] Child profile ID unchanged: \(childId)")
+                #endif
+            }
         }
 
         // Provide effective difficulty (parent default with optional override)
         let base = delegate.getChildDifficultySetting()
         vm.setEffectiveDifficulty(overrideDifficulty ?? base)
         
-        self.viewModel = vm
         return AnyView(
             TangramGameView(viewModel: vm)
         )

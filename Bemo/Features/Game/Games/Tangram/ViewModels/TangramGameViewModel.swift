@@ -38,6 +38,9 @@ class TangramGameViewModel {
     
     /// Current child's progress data
     var currentProgress: TangramProgress?
+    
+    /// Difficulty selection view model for new flow
+    var difficultySelectionViewModel: DifficultySelectionViewModel?
     var showHints: Bool = false
     var canvasSize: CGSize = CGSize(width: 600, height: 600)
     var showPlacementCelebration: Bool = false
@@ -134,6 +137,11 @@ class TangramGameViewModel {
     private var currentSessionId: String?
     private var currentChildProfileId: String?
     
+    /// Public getter for current child profile ID
+    var childProfileId: String? {
+        return currentChildProfileId
+    }
+    
     // MARK: - Initialization
     
     init(delegate: GameDelegate, container: TangramDependencyContainer, learningService: LearningService?) {
@@ -146,21 +154,39 @@ class TangramGameViewModel {
         // Load puzzles using container's services
         Task { @MainActor [weak self] in
             guard let self = self else { return }
+            
+            #if DEBUG
+            print("🧩 [TangramGameViewModel] Starting puzzle loading...")
+            #endif
+            
             if let managementService = container.puzzleManagementService {
                 // Use cached puzzles for instant loading!
                 let puzzles = await managementService.getTangramPuzzles()
                 self.availablePuzzles = puzzles
+                
+                #if DEBUG
+                print("🧩 [TangramGameViewModel] Loaded \(puzzles.count) puzzles from management service")
+                #endif
             } else {
                 // Fallback to direct database loading
                 do {
                     let puzzles = try await self.container.databaseLoader.loadOfficialPuzzles()
                     self.availablePuzzles = puzzles
+                    
+                    #if DEBUG
+                    print("🧩 [TangramGameViewModel] Loaded \(puzzles.count) puzzles from database loader")
+                    #endif
                 } catch {
-                    // Handle error silently
+                    #if DEBUG
+                    print("❌ [TangramGameViewModel] Failed to load puzzles: \(error)")
+                    #endif
                 }
             }
             
             // After puzzles are loaded, determine initial phase
+            #if DEBUG
+            print("🎯 [TangramGameViewModel] Determining initial phase...")
+            #endif
             self.determineInitialPhase()
         }
     }
@@ -238,6 +264,21 @@ class TangramGameViewModel {
         currentPhase = .selectingDifficulty
     }
     
+    /// Return to difficulty selection from map view
+    func returnToDifficultySelection() {
+        selectedDifficulty = nil
+        difficultySelectionViewModel = nil
+        currentPhase = .selectingDifficulty
+    }
+    
+    /// Exit completely to lobby
+    func exitToLobby() {
+        stopTimer()
+        clearHint()
+        endGameSession(completed: false)
+        delegate?.gameDidRequestQuit()
+    }
+    
     /// Select and start a puzzle from the map (if unlocked)
     func selectPuzzleFromMap(_ puzzle: GamePuzzleData) {
         guard let childId = currentChildProfileId,
@@ -261,6 +302,11 @@ class TangramGameViewModel {
     }
     
     // MARK: - Computed Properties for New Flow
+    
+    /// Determine if difficulty selection should be shown
+    var shouldShowDifficultySelection: Bool {
+        return currentPhase == .selectingDifficulty
+    }
     
     /// Get puzzles for the currently selected difficulty
     var puzzlesForSelectedDifficulty: [GamePuzzleData] {
@@ -896,10 +942,15 @@ class TangramGameViewModel {
             return nil
         }
         
+        // Return existing view model if available
+        if let existingViewModel = difficultySelectionViewModel {
+            return existingViewModel
+        }
+        
         // Use the puzzle library service directly 
         let puzzleService: PuzzleLibraryProviding = container.puzzleLibraryService
         
-        return DifficultySelectionViewModel(
+        let viewModel = DifficultySelectionViewModel(
             childProfileId: childId,
             progressService: progressService,
             puzzleLibraryService: puzzleService,
@@ -907,6 +958,10 @@ class TangramGameViewModel {
                 self?.handleDifficultySelected(difficulty)
             }
         )
+        
+        // Store reference to avoid recreation
+        difficultySelectionViewModel = viewModel
+        return viewModel
     }
     
     /// Handle difficulty selection from DifficultySelectionView
@@ -948,6 +1003,14 @@ class TangramGameViewModel {
     
     func setChildProfileId(_ childId: String) {
         currentChildProfileId = childId
+        
+        // Reset difficulty selection state when changing child profiles
+        selectedDifficulty = nil
+        difficultySelectionViewModel = nil
+        currentProgress = nil
+        
+        // Determine initial phase for new child
+        determineInitialPhase()
     }
     
     private func startGameSession(puzzleId: String, puzzleName: String, difficulty: Int) {
