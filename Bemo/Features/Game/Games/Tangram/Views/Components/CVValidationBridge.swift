@@ -104,7 +104,9 @@ class CVValidationBridge {
                 nudgeCooldown: TangramValidationEngine.ValidationOptions.default.nudgeCooldown,
                 dwellValidateInterval: 0.0,
                 orientationToleranceDeg: TangramValidationEngine.ValidationOptions.default.orientationToleranceDeg,
-                rotationNudgeUpperDeg: TangramValidationEngine.ValidationOptions.default.rotationNudgeUpperDeg
+                rotationNudgeUpperDeg: TangramValidationEngine.ValidationOptions.default.rotationNudgeUpperDeg,
+                focusPieceId: piece.name,
+                settleVelocityThreshold: 12.0
             )
         )
         
