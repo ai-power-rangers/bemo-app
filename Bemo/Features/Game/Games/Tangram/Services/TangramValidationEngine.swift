@@ -171,11 +171,20 @@ class TangramValidationEngine {
 
             // Prefer existing anchor pair if still present; otherwise choose best oriented pair (then closest)
             var candidatePair: (PieceObservation, PieceObservation)? = nil
-            if anchorPieceIds.count == 2,
-               let a = anchorPieceIds.first, let b = anchorPieceIds.dropFirst().first,
-               let obsA = idToObs[a], let obsB = idToObs[b] {
-                candidatePair = (obsA, obsB)
-            } else {
+            if anchorPieceIds.count == 2 {
+                // Stabilize ordering: anchor first is the committed mapping's anchorPieceId when available
+                if let gid = mainGroupId, let committed = mappingService.mapping(for: gid),
+                   let obs0 = idToObs[committed.anchorPieceId],
+                   let otherId = anchorPieceIds.first(where: { $0 != committed.anchorPieceId }),
+                   let obs1 = idToObs[otherId ?? ""] {
+                    candidatePair = (obs0, obs1)
+                } else if let a = anchorPieceIds.sorted().first,
+                          let b = anchorPieceIds.sorted().last,
+                          let obsA = idToObs[a], let obsB = idToObs[b] {
+                    candidatePair = (obsA, obsB)
+                }
+            }
+            if candidatePair == nil {
                 // Compute orientation deltas to pick a pair likely to be aligned to targets
                 struct OrientInfo { let obs: PieceObservation; let bestTargetId: String; let deltaDeg: CGFloat; let flipOK: Bool }
                 var oriented: [OrientInfo] = []
@@ -251,9 +260,8 @@ class TangramValidationEngine {
             if let pair = candidatePair {
                 let groupId: UUID = mainGroupId ?? UUID()
                 // Compute mapping using plan doc method (pair-centric centroid + relative rotation)
-                let mapping = computePairDocMapping(pair: pair, puzzle: puzzle)
-
-                if let mapping = mapping, let anchorObs = idToObs[mapping.anchorPieceId] {
+                if var mapping = computePairDocMapping(pair: pair, puzzle: puzzle, preferredTargetIds: nil),
+                   let anchorObs = idToObs[mapping.anchorPieceId] {
                     // Validate both pieces under this mapping
                     let pairObs: [PieceObservation] = [pair.0, pair.1]
                     var localStates: [String: PieceValidationState] = [:]
@@ -272,6 +280,7 @@ class TangramValidationEngine {
 
                     // Anchor is established if both pass strict validation, or
                     // both pass relaxed gating based on residuals (doc spirit: enable when geometry matches)
+                    // Add pair-separation guard to avoid validating pieces far apart
                     let bothStrict = pairObs.allSatisfy { localStates[$0.pieceId]?.isValid == true }
                     var bothRelaxed = false
                     if !bothStrict {
@@ -314,8 +323,47 @@ class TangramValidationEngine {
                         }
                         bothRelaxed = (okCount == pairObs.count)
                     }
+                    // Enforce maximum distance between the two observed anchors before allowing commit
+                    let maxPairSeparation: CGFloat = 140 // px in scene space; adjust per level
+                    let pA = pairObs[0].position
+                    let pB = pairObs[1].position
+                    let pairDist = hypot(pA.x - pB.x, pA.y - pB.y)
 
-                    if bothStrict || bothRelaxed {
+                    if (bothStrict || bothRelaxed) && pairDist <= maxPairSeparation {
+                        // Refine mapping using the actual target ids selected for the pair (avoids first-of-type skew)
+                        if let t0 = localStates[pair.0.pieceId]?.targetId, let t1 = localStates[pair.1.pieceId]?.targetId {
+                            if let refined = computePairDocMapping(pair: pair, puzzle: puzzle, preferredTargetIds: (t0, t1)) {
+                                mapping = refined
+                            }
+                        }
+                        // Optional: further refine using mapping service with committed pairs to minimize residuals
+                        let committedPairs: [(pieceId: String, targetId: String)] = [pair.0.pieceId, pair.1.pieceId].compactMap { pid in
+                            if let tid = localStates[pid]?.targetId { return (pid, tid) }
+                            return nil
+                        }
+                        if !committedPairs.isEmpty {
+                            for (pid, tid) in committedPairs {
+                                mappingService.appendPair(groupId: groupId, pieceId: pid, targetId: tid)
+                            }
+                            if let refined = mappingService.refineMapping(
+                                groupId: groupId,
+                                pairs: committedPairs,
+                                anchorPieceId: mapping.anchorPieceId,
+                                anchorTargetId: mapping.anchorTargetId,
+                                pieceScenePosProvider: { id in idToObs[id]?.position },
+                                targetScenePosProvider: { tid in
+                                    if let t = puzzle.targetPieces.first(where: { $0.id == tid }) {
+                                        let verts = TangramBounds.computeSKTransformedVertices(for: t)
+                                        let cx = verts.map { $0.x }.reduce(0, +) / CGFloat(max(1, verts.count))
+                                        let cy = verts.map { $0.y }.reduce(0, +) / CGFloat(max(1, verts.count))
+                                        return CGPoint(x: cx, y: cy)
+                                    }
+                                    return nil
+                                }
+                            ) {
+                                mapping = refined
+                            }
+                        }
                         // Reuse existing mapping if very similar to avoid noisy re-commits
                         if let existing = mappingService.mapping(for: groupId) {
                             let dTheta = abs(angleDifference(existing.rotationDelta, mapping.rotationDelta)) * 180 / .pi
@@ -470,9 +518,24 @@ class TangramValidationEngine {
             }
         }
 
-        // If we have an established anchor mapping, validate all observed pieces relative to it
-        if enableAnchorMapping, let gid = mainGroupId, let mapping = mappingService.mapping(for: gid) {
-            // Find current anchor observation (fallback to first anchor id present)
+        // If we have an established anchor mapping, update it from live anchors then validate relative to it
+        if enableAnchorMapping, let gid = mainGroupId, var mapping = mappingService.mapping(for: gid) {
+            // Recompute mapping from current anchor observations to ensure the top world follows live movement
+            if anchorPieceIds.count == 2 {
+                let anchors = Array(anchorPieceIds)
+                if let obs0 = frame.first(where: { $0.pieceId == anchors[0] }),
+                   let obs1 = frame.first(where: { $0.pieceId == anchors[1] }) {
+                    // Use committed target ids for anchors if available
+                    let t0 = pieceBindings[obs0.pieceId]
+                    let t1 = pieceBindings[obs1.pieceId]
+                    if let t0 = t0, let t1 = t1,
+                       let updated = computePairDocMapping(pair: (obs0, obs1), puzzle: puzzle, preferredTargetIds: (t0, t1)) {
+                        mapping = updated
+                        mappingService.setMapping(for: gid, mapping: updated)
+                    }
+                }
+            }
+            // Find current anchor observation (fallback to committed anchor id)
             let anchorId = mapping.anchorPieceId
             let anchorObs: PieceObservation? = frame.first(where: { $0.pieceId == anchorId })
             if let anchorObs = anchorObs {
@@ -914,14 +977,52 @@ class TangramValidationEngine {
     // MARK: - Pair Mapping per plan doc (centroid + relative)
     private func computePairDocMapping(
         pair: (TangramValidationEngine.PieceObservation, TangramValidationEngine.PieceObservation),
-        puzzle: GamePuzzleData
+        puzzle: GamePuzzleData,
+        preferredTargetIds: (String, String)?
     ) -> AnchorMapping? {
         let p0 = pair.0
         let p1 = pair.1
-        guard let t0 = puzzle.targetPieces.first(where: { $0.pieceType == p0.pieceType }),
-              let t1 = puzzle.targetPieces.first(where: { $0.pieceType == p1.pieceType }) else {
-            return nil
-        }
+        // Choose concrete targets
+        let tPair: (GamePuzzleData.TargetPiece, GamePuzzleData.TargetPiece)? = {
+            if let pref = preferredTargetIds {
+                if let a = puzzle.targetPieces.first(where: { $0.id == pref.0 }),
+                   let b = puzzle.targetPieces.first(where: { $0.id == pref.1 }) {
+                    return (a, b)
+                }
+                return nil
+            }
+            // No preferred ids: select the target pair that best matches observed pair by angle + length
+            let candA = puzzle.targetPieces.filter { $0.pieceType == p0.pieceType }
+            let candB = puzzle.targetPieces.filter { $0.pieceType == p1.pieceType }
+            if candA.isEmpty || candB.isEmpty { return nil }
+            let vp = CGVector(dx: p1.position.x - p0.position.x, dy: p1.position.y - p0.position.y)
+            let vpLen = hypot(vp.dx, vp.dy)
+            if vpLen < 1e-3 { return nil }
+            var best: (pair: (GamePuzzleData.TargetPiece, GamePuzzleData.TargetPiece), cost: CGFloat)? = nil
+            for a in candA {
+                let cA = TangramBounds.computeSKTransformedVertices(for: a)
+                let cAc = CGPoint(x: cA.map { $0.x }.reduce(0, +) / CGFloat(max(1, cA.count)),
+                                  y: cA.map { $0.y }.reduce(0, +) / CGFloat(max(1, cA.count)))
+                for b in candB {
+                    let cB = TangramBounds.computeSKTransformedVertices(for: b)
+                    let cBc = CGPoint(x: cB.map { $0.x }.reduce(0, +) / CGFloat(max(1, cB.count)),
+                                      y: cB.map { $0.y }.reduce(0, +) / CGFloat(max(1, cB.count)))
+                    let vt = CGVector(dx: cBc.x - cAc.x, dy: cBc.y - cAc.y)
+                    let vtLen = hypot(vt.dx, vt.dy)
+                    if vtLen < 1e-3 { continue }
+                    // angle residual
+                    let dot = vp.dx * vt.dx + vp.dy * vt.dy
+                    let cross = vp.dx * vt.dy - vp.dy * vt.dx
+                    let angle = abs(atan2(cross, dot))
+                    // length residual (absolute difference)
+                    let lenDiff = abs(vpLen - vtLen)
+                    let cost = angle * 180 / .pi * 2.0 + lenDiff * 0.2 // weights: 2 deg weight, 0.2 px weight
+                    if best == nil || cost < best!.cost { best = ((a, b), cost) }
+                }
+            }
+            return best?.pair
+        }()
+        guard let (t0, t1) = tPair else { return nil }
         // Compute target centroids in SK space
         func centroid(of verts: [CGPoint]) -> CGPoint {
             guard !verts.isEmpty else { return .zero }
@@ -931,25 +1032,22 @@ class TangramValidationEngine {
         }
         let c0 = centroid(of: TangramBounds.computeSKTransformedVertices(for: t0))
         let c1 = centroid(of: TangramBounds.computeSKTransformedVertices(for: t1))
-        // Pair centroids
-        let Cp = CGPoint(x: (p0.position.x + p1.position.x) / 2, y: (p0.position.y + p1.position.y) / 2)
-        let Ct = CGPoint(x: (c0.x + c1.x) / 2, y: (c0.y + c1.y) / 2)
-        // Relative vectors from centroids
-        let rp0 = CGVector(dx: p0.position.x - Cp.x, dy: p0.position.y - Cp.y)
-        let rp1 = CGVector(dx: p1.position.x - Cp.x, dy: p1.position.y - Cp.y)
-        let rt0 = CGVector(dx: c0.x - Ct.x, dy: c0.y - Ct.y)
-        let rt1 = CGVector(dx: c1.x - Ct.x, dy: c1.y - Ct.y)
-        // Least squares rotation using two correspondences
-        let sumDot = rp0.dx * rt0.dx + rp0.dy * rt0.dy + rp1.dx * rt1.dx + rp1.dy * rt1.dy
-        let sumCross = rp0.dx * rt0.dy - rp0.dy * rt0.dx + rp1.dx * rt1.dy - rp1.dy * rt1.dx
-        let theta = atan2(sumCross, sumDot)
-        // Translation aligns centroids (in SK space since positions are SK)
+        
+        // Direct two-point alignment: rotate (p1 - p0) onto (c1 - c0), then translate p0 to c0
+        let vp = CGVector(dx: p1.position.x - p0.position.x, dy: p1.position.y - p0.position.y)
+        let vt = CGVector(dx: c1.x - c0.x, dy: c1.y - c0.y)
+        // Compute rotation that maps vp to vt
+        let dot = vp.dx * vt.dx + vp.dy * vt.dy
+        let cross = vp.dx * vt.dy - vp.dy * vt.dx
+        let theta = atan2(cross, dot)
         let cosT = cos(theta), sinT = sin(theta)
-        let CpRot = CGPoint(x: Cp.x * cosT - Cp.y * sinT, y: Cp.x * sinT + Cp.y * cosT)
-        let Tdx = Ct.x - CpRot.x
-        let Tdy = Ct.y - CpRot.y
+        // Translation that takes rotated p0 exactly to c0
+        let p0Rot = CGPoint(x: p0.position.x * cosT - p0.position.y * sinT,
+                            y: p0.position.x * sinT + p0.position.y * cosT)
+        let Tdx = c0.x - p0Rot.x
+        let Tdy = c0.y - p0Rot.y
         // Build mapping (anchor first piece)
-        let mapping = AnchorMapping(
+        var mapping = AnchorMapping(
             translationOffset: CGVector(dx: Tdx, dy: Tdy),
             rotationDelta: theta,
             flipParity: false,
@@ -959,6 +1057,12 @@ class TangramValidationEngine {
             pairCount: 2,
             confidence: 1.0
         )
+        // Set flip parity for parallelogram based on anchor vs target parity
+        if p0.pieceType == .parallelogram {
+            let targetDet = t0.transform.a * t0.transform.d - t0.transform.b * t0.transform.c
+            let targetIsFlipped = targetDet < 0
+            mapping.flipParity = (targetIsFlipped != p0.isFlipped)
+        }
         return mapping
     }
     

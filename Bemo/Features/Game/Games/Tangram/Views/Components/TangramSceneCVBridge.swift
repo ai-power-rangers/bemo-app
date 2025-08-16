@@ -90,6 +90,71 @@ extension TangramPuzzleScene {
             }
         }
         
+        // If we have an established anchor mapping, render non-validated pieces in target-space
+        if let mapping = userData?["mainGroupMapping"] as? AnchorMapping,
+           let anchorId = userData?["mainAnchorPieceId"] as? String,
+           let anchorNode = availablePieces.first(where: { $0.name == anchorId }),
+           let container = targetSection.childNode(withName: "puzzleContainer") {
+            // Hide the generic physical mirror to avoid duplicates
+            topMirrorContent?.isHidden = true
+            let anchorScenePos = physicalWorldSection.convert(anchorNode.position, to: self)
+            var usedOverlayNames: Set<String> = []
+            for piece in availablePieces {
+                guard let pid = piece.name, let ptype = piece.pieceType else { continue }
+                // Skip pieces that have already validated (they are shown via filled silhouette)
+                if piece.userData?["validatedTargetId"] != nil {
+                    if let existing = container.childNode(withName: "mapped_\(pid)") { existing.removeFromParent() }
+                    continue
+                }
+                // Map physical scene pose → SK target space using committed mapping
+                let scenePos = physicalWorldSection.convert(piece.position, to: self)
+                let mapped = mappingService.mapPieceToTargetSpace(
+                    piecePositionScene: scenePos,
+                    pieceRotation: piece.zRotation,
+                    pieceIsFlipped: piece.isFlipped,
+                    mapping: mapping,
+                    anchorPositionScene: anchorScenePos
+                )
+                // Convert SK target space → puzzleContainer local coordinates
+                let localPos: CGPoint = {
+                    // Place directly at mapped SK position relative to the silhouette container (same math as silhouettes)
+                    let x = (mapped.positionSK.x - puzzleBoundsCenterSK.x) * targetDisplayScale
+                    let y = (mapped.positionSK.y - puzzleBoundsCenterSK.y) * targetDisplayScale
+                    return CGPoint(x: x, y: y)
+                }()
+                let nodeName = "mapped_\(pid)"
+                var ghost = container.childNode(withName: nodeName) as? SKShapeNode
+                if ghost == nil {
+                    ghost = createGhostPiece(pieceType: ptype, at: localPos, rotation: mapped.rotationSK)
+                    ghost?.name = nodeName
+                    // Slightly lighter than validated fill
+                    ghost?.alpha = 0.25
+                    container.addChild(ghost!)
+                } else {
+                    ghost?.position = localPos
+                    ghost?.zRotation = mapped.rotationSK
+                }
+                // Apply flip parity in container
+                if let g = ghost {
+                    // Ghost paths are centroid-anchored; apply flip by xScale sign only
+                    g.xScale = (mapped.isFlipped ? -abs(g.xScale) : abs(g.xScale))
+                    g.yScale = abs(g.yScale)
+                }
+                usedOverlayNames.insert(nodeName)
+            }
+            // Clean up overlays for pieces no longer needed
+            container.enumerateChildNodes(withName: "mapped_*") { node, _ in
+                if let name = node.name, !usedOverlayNames.contains(name) { node.removeFromParent() }
+            }
+            return
+        } else {
+            // No mapping yet → show physical mirror and remove any mapped overlays
+            topMirrorContent?.isHidden = false
+            if let container = targetSection.childNode(withName: "puzzleContainer") {
+                container.enumerateChildNodes(withName: "mapped_*") { node, _ in node.removeFromParent() }
+            }
+        }
+
         // Mirror physical pieces into a top-panel layer (topMirrorContent)
         let mirror = topMirrorContent!
         // Do not remove existing ghosts when a frame omits them; keep the last-known pose
