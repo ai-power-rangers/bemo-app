@@ -277,10 +277,20 @@ class ProfileService {
     
     
     func updatePreferences(_ preferences: UserPreferences, for profileId: String) {
-        guard activeProfile?.id == profileId else { return }
+        // Update in activeProfile if it's the current one
+        if activeProfile?.id == profileId {
+            activeProfile?.preferences = preferences
+            saveActiveProfile()
+        }
         
-        activeProfile?.preferences = preferences
-        saveActiveProfile()
+        // Update in childProfiles array
+        if let index = childProfiles.firstIndex(where: { $0.id == profileId }) {
+            childProfiles[index].preferences = preferences
+            saveChildProfiles()
+            
+            // Sync to Supabase if available (non-blocking)
+            syncProfileToSupabase(childProfiles[index])
+        }
     }
     
     // MARK: - Persistence

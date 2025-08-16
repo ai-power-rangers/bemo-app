@@ -244,13 +244,17 @@ class AppCoordinator {
     
     @ViewBuilder
     var rootView: some View {
-        switch currentState {
-        case .loading:
-            LoadingView()
+        ZStack {
+            // Main app content
+            Group {
+                switch currentState {
+                case .loading:
+                    LoadingView()
             
         case .onboarding:
             OnboardingView(viewModel: OnboardingViewModel(
                 authenticationService: self.dependencyContainer.authenticationService,
+                characterAnimationService: self.dependencyContainer.characterAnimationService,
                 onAuthenticationComplete: { [weak self] user in
                     // Navigate to profile setup or lobby based on existing profiles
                     self?.checkAuthenticationAndNavigate()
@@ -290,6 +294,7 @@ class AppCoordinator {
                 // User is not fully authenticated, redirect to onboarding
                 OnboardingView(viewModel: OnboardingViewModel(
                     authenticationService: self.dependencyContainer.authenticationService,
+                    characterAnimationService: self.dependencyContainer.characterAnimationService,
                     onAuthenticationComplete: { [weak self] user in
                         self?.checkAuthenticationAndNavigate()
                     }
@@ -303,6 +308,8 @@ class AppCoordinator {
                 puzzleManagementService: self.dependencyContainer.puzzleManagementService,
                 learningService: self.dependencyContainer.learningService,
                 developerService: self.dependencyContainer.developerService,
+                audioService: self.dependencyContainer.audioService,
+                characterAnimationService: self.dependencyContainer.characterAnimationService,
                 onGameSelected: { [weak self] selectedGame in
                     self?.currentState = .game(selectedGame)
                 },
@@ -342,6 +349,8 @@ class AppCoordinator {
                     supabaseService: self.dependencyContainer.supabaseService,
                     learningService: self.dependencyContainer.learningService,
                     errorTrackingService: self.dependencyContainer.errorTrackingService,
+                    audioService: self.dependencyContainer.audioService,
+                    characterAnimationService: self.dependencyContainer.characterAnimationService,
                     currentChildProfileId: self.dependencyContainer.profileService.activeProfile!.id,
                     onQuit: { [weak self] in
                         self?.currentState = .lobby
@@ -387,6 +396,15 @@ class AppCoordinator {
                     }
                 }
             ))
+                }
+            }
+            
+            // Character animation overlay - always on top
+            CharacterAnimationOverlay(
+                animationService: dependencyContainer.characterAnimationService
+            )
+            .allowsHitTesting(false) // Allow touches to pass through
+            .zIndex(9999) // Always on top
         }
     }
 }

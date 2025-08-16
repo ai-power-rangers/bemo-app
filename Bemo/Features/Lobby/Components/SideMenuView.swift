@@ -14,6 +14,8 @@ import SwiftUI
 struct SideMenuView: View {
     @Binding var isPresented: Bool
     let onParentDashboardTapped: () -> Void
+    let audioService: AudioService?
+    let profileService: ProfileService?
     
     var body: some View {
         NavigationView {
@@ -34,7 +36,8 @@ struct SideMenuView: View {
                     .padding(.bottom, BemoTheme.Spacing.large)
                     
                     // Menu Items
-                    VStack(spacing: BemoTheme.Spacing.small) {
+                    VStack(spacing: BemoTheme.Spacing.large) {
+                        // Parent Dashboard Section
                         MenuItemView(
                             icon: "person.2.fill",
                             title: "Parent Dashboard",
@@ -42,6 +45,85 @@ struct SideMenuView: View {
                             iconColor: BemoTheme.Colors.primary,
                             action: onParentDashboardTapped
                         )
+                        
+                        // Audio Preferences Section
+                        VStack(alignment: .leading, spacing: BemoTheme.Spacing.small) {
+                            Text("Audio Settings")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .foregroundColor(Color("AppPrimaryTextColor"))
+                                .padding(.horizontal, BemoTheme.Spacing.small)
+                            
+                            VStack(spacing: 0) {
+                                // Sound Effects Toggle
+                                HStack {
+                                    Image(systemName: "speaker.wave.2.fill")
+                                        .font(.system(size: 18))
+                                        .foregroundColor(.blue)
+                                        .frame(width: 24)
+                                    
+                                    Text("Sound Effects")
+                                        .font(.system(size: 15, design: .rounded))
+                                        .foregroundColor(Color("AppPrimaryTextColor"))
+                                    
+                                    Spacer()
+                                    
+                                    Toggle("", isOn: Binding(
+                                        get: { audioService?.isSoundEffectsEnabled ?? true },
+                                        set: { newValue in
+                                            audioService?.isSoundEffectsEnabled = newValue
+                                            // Update current profile preferences
+                                            if var profile = profileService?.activeProfile {
+                                                profile.preferences.soundEnabled = newValue
+                                                profileService?.updatePreferences(profile.preferences, for: profile.id)
+                                            }
+                                        }
+                                    ))
+                                    .labelsHidden()
+                                }
+                                .padding(.horizontal, BemoTheme.Spacing.medium)
+                                .padding(.vertical, BemoTheme.Spacing.small)
+                                
+                                Divider()
+                                    .padding(.leading, 48)
+                                
+                                // Background Music Toggle
+                                HStack {
+                                    Image(systemName: "music.note")
+                                        .font(.system(size: 18))
+                                        .foregroundColor(.blue)
+                                        .frame(width: 24)
+                                    
+                                    Text("Background Music")
+                                        .font(.system(size: 15, design: .rounded))
+                                        .foregroundColor(Color("AppPrimaryTextColor"))
+                                    
+                                    Spacer()
+                                    
+                                    Toggle("", isOn: Binding(
+                                        get: { audioService?.isBackgroundMusicEnabled ?? true },
+                                        set: { newValue in
+                                            audioService?.isBackgroundMusicEnabled = newValue
+                                            // Update current profile preferences
+                                            if var profile = profileService?.activeProfile {
+                                                profile.preferences.musicEnabled = newValue
+                                                profileService?.updatePreferences(profile.preferences, for: profile.id)
+                                            }
+                                        }
+                                    ))
+                                    .labelsHidden()
+                                }
+                                .padding(.horizontal, BemoTheme.Spacing.medium)
+                                .padding(.vertical, BemoTheme.Spacing.small)
+                            }
+                            .background(
+                                RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
+                                    .fill(Color.gray.opacity(0.04))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
+                                            .stroke(Color.gray.opacity(0.08), lineWidth: 1)
+                                    )
+                            )
+                        }
                     }
                     .padding(.horizontal, BemoTheme.Spacing.medium)
                     
@@ -162,6 +244,8 @@ struct MenuItemView: View {
         isPresented: .constant(true),
         onParentDashboardTapped: {
             print("Parent Dashboard tapped")
-        }
+        },
+        audioService: nil,
+        profileService: nil
     )
 }

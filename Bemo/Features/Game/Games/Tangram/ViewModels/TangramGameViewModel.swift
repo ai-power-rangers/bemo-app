@@ -477,6 +477,9 @@ class TangramGameViewModel {
         let xpAwarded = calculateXP()
         delegate?.gameDidCompleteLevel(xpAwarded: xpAwarded)
         
+        // Show celebration character animation
+        delegate?.showCelebrationAnimation(at: .center)
+        
         // Delay showing the completion modal to allow celebration animation
         Task { @MainActor [weak self] in
             // Wait for celebration animation (3 seconds)
