@@ -30,3 +30,6 @@ Config/
 
 # Personal documentation
 .doc/
+
+# Local temp
+tmp/
