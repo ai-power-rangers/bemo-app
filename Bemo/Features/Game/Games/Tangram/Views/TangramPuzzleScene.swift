@@ -29,7 +29,7 @@ class TangramPuzzleScene: SKScene {
     internal var physicalBounds: CGRect = .zero  // Internal for extensions
     
     // MARK: - Game State
-    
+    var canvasSize : CGSize = CGSize(width: 834, height: 1194)
     var puzzle: GamePuzzleData?
     var onPieceCompleted: ((String, Bool) -> Void)?
     var onPuzzleCompleted: (() -> Void)?

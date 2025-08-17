@@ -90,6 +90,7 @@ struct TangramSpriteView: View {
         tangramScene.size = size
         tangramScene.scaleMode = .resizeFill
         tangramScene.safeAreaTop = safeAreaTop  // Pass safe area to scene
+        tangramScene.canvasSize = CGSize(width: 834, height: 1194)
         tangramScene.puzzle = puzzle
         tangramScene.difficultySetting = difficultySetting
         tangramScene.onPieceCompleted = onPieceCompleted

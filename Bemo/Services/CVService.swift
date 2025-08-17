@@ -39,6 +39,8 @@ class CVService: NSObject {
     // MARK: - State
     private var cancellables = Set<AnyCancellable>()
     private var lastProcessingTime: TimeInterval = 0
+    private var lastRecognizedPieces: [RecognizedPiece] = []
+    private var lastFrameTimestamp: TimeInterval = 0
     
     // Public publishers
     var recognizedPiecesPublisher: AnyPublisher<[RecognizedPiece], Never> {
@@ -349,31 +351,79 @@ class CVService: NSObject {
         }
     }
     
-    private func convertDetectionsToRecognizedPieces(_ detections: [TPDetection]) -> [RecognizedPiece] {
-        var pieces: [RecognizedPiece] = []
-        
-        for detection in detections {
-            if let pieceType = mapDetectionToPieceType(Int(detection.classId)) {
-                // Convert normalized bbox to position
-                // For now, we'll use the center of the bounding box
-                let centerX = detection.bbox.origin.x + detection.bbox.width / 2
-                let centerY = detection.bbox.origin.y + detection.bbox.height / 2
-                
-                let piece = RecognizedPiece(
-                    id: UUID().uuidString,
-                    pieceTypeId: pieceType.rawValue, // Assumes TangramPieceType has a String raw value
-                    position: CGPoint(x: centerX, y: centerY),
-                    rotation: 0, // We'll get this from tangramResult if available
-                    velocity: .zero,
-                    isMoving: false,
-                    confidence: Double(detection.confidence),
-                    timestamp: Date(),
-                    frameNumber: 0 // TODO: Pass real frame number if available
-                )
-                pieces.append(piece)
-            }
+    private func convertDetectionsToRecognizedPieces(_ result: TPCompleteResult, viewSize: CGSize) -> [RecognizedPiece] {
+        guard let tangramResult = result.tangramResult,
+              let poses = tangramResult.poses as? [NSNumber: TPPose],
+              let hArray = tangramResult.h_3x3 as? [Double], hArray.count == 9 else {
+            return []
         }
-        
+
+        var pieces: [RecognizedPiece] = []
+        let detections = result.detections
+        let currentTimestamp = CACurrentMediaTime()
+        let dt = (lastFrameTimestamp > 0) ? (currentTimestamp - lastFrameTimestamp) : 0
+
+        for (classIdNum, pose) in poses {
+            let classId = classIdNum.intValue
+            guard let pieceType = mapDetectionToPieceType(classId) else { continue }
+
+            let planeX = pose.tx
+            let planeY = pose.ty
+
+            // Apply homography to get image coordinates
+            let projectedW = hArray[6] * planeX + hArray[7] * planeY + hArray[8]
+            guard abs(projectedW) > 1e-8 else { continue }
+
+            let projectedX = (hArray[0] * planeX + hArray[1] * planeY + hArray[2]) / projectedW
+            let projectedY = (hArray[3] * planeX + hArray[4] * planeY + hArray[5]) / projectedW
+
+            // The pipeline processes a square image cropped from the bottom.
+            // The viewSize passed to processFrame is portrait (e.g., 1080x1920).
+            // The effective processing size is a square based on the width.
+            let processingSquareSize = CGSize(width: viewSize.width, height: viewSize.width)
+
+            // Normalize coordinates to [0, 1] with origin at top-left.
+            let normalizedX = projectedX / processingSquareSize.width
+            let normalizedY = projectedY / processingSquareSize.height
+
+            // Convert rotation to degrees. `theta` is in radians, CCW.
+            // Our RecognizedPiece expects degrees. Let's assume CCW is positive.
+            let rotationDegrees = pose.theta * 180.0 / Double.pi
+
+            let confidence = detections.first { Int($0.classId) == classId }?.confidence ?? 1.0
+
+            // --- Velocity and isMoving calculation ---
+            var velocity: CGVector = .zero
+            var isMoving = false
+            if let lastPiece = self.lastRecognizedPieces.first(where: { $0.id == pieceType.rawValue }), dt > 0 {
+                // Positions are normalized, so velocity will be in normalized units per second.
+                let dx = (normalizedX - lastPiece.position.x) / CGFloat(dt)
+                let dy = (normalizedY - lastPiece.position.y) / CGFloat(dt)
+                velocity = CGVector(dx: dx, dy: dy)
+                // Threshold for movement in normalized space (e.g., 5% of screen width per second)
+                if hypot(dx, dy) > 0.05 {
+                    isMoving = true
+                }
+            }
+            // --- End Velocity calculation ---
+
+            let piece = RecognizedPiece(
+                id: pieceType.rawValue, // Use pieceType as a stable ID
+                pieceTypeId: pieceType.rawValue,
+                position: CGPoint(x: normalizedX, y: normalizedY),
+                rotation: rotationDegrees,
+                velocity: velocity,
+                isMoving: isMoving,
+                confidence: Double(confidence),
+                timestamp: Date(),
+                frameNumber: 0 // TODO: Pass real frame number if available
+            )
+            pieces.append(piece)
+        }
+
+        self.lastRecognizedPieces = pieces
+        self.lastFrameTimestamp = currentTimestamp
+
         return pieces
     }
 }
@@ -408,7 +458,7 @@ extension CVService: AVCaptureVideoDataOutputSampleBufferDelegate {
             let fps = 1000.0 / processingTime
             
             // Convert detections to recognized pieces
-            let recognizedPieces = convertDetectionsToRecognizedPieces(result.detections)
+            let recognizedPieces = convertDetectionsToRecognizedPieces(result, viewSize: viewSize)
             
             // Publish recognized pieces
             if !recognizedPieces.isEmpty {

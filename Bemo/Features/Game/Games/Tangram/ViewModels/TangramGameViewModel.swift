@@ -48,7 +48,7 @@ class TangramGameViewModel {
     /// Difficulty selection view model for new flow
     var difficultySelectionViewModel: DifficultySelectionViewModel?
     var showHints: Bool = false
-    var canvasSize: CGSize = CGSize(width: 600, height: 600)
+    var canvasSize: CGSize = CGSize(width: 1.0, height: 1.0) // Normalized canvas size
     var showPlacementCelebration: Bool = false
     var useSpriteKit: Bool = true // Toggle for SpriteKit vs SwiftUI canvas
     
