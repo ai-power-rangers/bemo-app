@@ -69,6 +69,8 @@ struct TangramGameView: View {
                     
                 case .playingPuzzle:
                     gamePlayView
+                        .onAppear { NotificationCenter.default.post(name: Notification.Name("TangramPlayingAppear"), object: nil) }
+                        .onDisappear { NotificationCenter.default.post(name: Notification.Name("TangramPlayingDisappear"), object: nil) }
                         .transition(.asymmetric(
                             insertion: .move(edge: .bottom).combined(with: .opacity),
                             removal: .move(edge: .bottom).combined(with: .opacity)

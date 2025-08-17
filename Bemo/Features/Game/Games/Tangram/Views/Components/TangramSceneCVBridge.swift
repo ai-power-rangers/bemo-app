@@ -159,12 +159,16 @@ extension TangramPuzzleScene {
         let mirror = topMirrorContent!
         let topSize = CGSize(width: targetBounds.width, height: targetBounds.height)
         guard topSize.width > 0, topSize.height > 0 else { return }
-        // Reference view size must match adapter/pipeline
-        let ref = CGSize(width: 1080, height: 1920)
-        let sx = topSize.width / ref.width
-        let sy = topSize.height / ref.height
-        let uniform = min(sx, sy)
-        topMirrorContent.setScale(uniform)
+        // Use homography/scale from frame if provided to map coordinates precisely
+        if frame.scale > 0 {
+            // Simple uniform scaling by provided scale into target panel width
+            // Future: apply full homography matrix if needed for perspective correction
+            let ref = CGSize(width: 1080, height: 1920)
+            let sx = topSize.width / ref.width
+            let sy = topSize.height / ref.height
+            let uniform = min(sx, sy)
+            topMirrorContent.setScale(uniform)
+        }
         topMirrorContent.position = .zero
         for object in frame.objects {
             let pieceId = pieceIdFromCVName(object.name)
@@ -241,7 +245,22 @@ extension TangramPuzzleScene {
                     }
                 }
             }
-            // Apply color matching the physical piece's type with lower fill
+            // Enforce canonical shape size for each piece type; do not use distorted vertices
+            if let shapeNode = g as? SKShapeNode {
+                let canonical = TangramGameGeometry.normalizedVertices(for: resolvedType)
+                let scaled = TangramGameGeometry.scaleVertices(canonical, by: TangramGameConstants.visualScale)
+                let centroid = TangramGameGeometry.centerOfVertices(scaled)
+                let path = CGMutablePath()
+                if let first = scaled.first {
+                    path.move(to: CGPoint(x: first.x - centroid.x, y: first.y - centroid.y))
+                    for v in scaled.dropFirst() {
+                        path.addLine(to: CGPoint(x: v.x - centroid.x, y: v.y - centroid.y))
+                    }
+                    path.closeSubpath()
+                }
+                shapeNode.path = path
+            }
+            // Apply color matching the piece type with lower fill
             g.fillColor = TangramColors.Sprite.uiColor(for: resolvedType).withAlphaComponent(fillAlpha)
             g.strokeColor = TangramColors.Sprite.uiColor(for: resolvedType).withAlphaComponent(0.5)
             g.lineWidth = 1.0

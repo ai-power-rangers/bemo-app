@@ -146,12 +146,10 @@ class TangramPuzzleScene: SKScene {
         let topPadding: CGFloat = safeAreaTop + navBarHeight
         let sectionGap: CGFloat = 20  // Gap between sections
         let availableHeight = size.height - topPadding - 10  // Minimal bottom padding
-        let sectionHeight = (availableHeight - sectionGap) / 2  // Account for gap between sections
+        let sectionHeight = availableHeight  // Full-height target area in CV-only mode
         
-        // Calculate section centers (Y=0 is at bottom in SpriteKit)
-        // Position top panel right below nav bar
-        let topSectionY = size.height - topPadding - (sectionHeight / 2)  // Higher position
-        let bottomSectionY = topSectionY - sectionHeight - sectionGap  // Bottom section moved up
+        // Calculate section center for full-height target area
+        let topSectionY = size.height - topPadding - (sectionHeight / 2)
         
         // TOP PANEL - Unified target display with mini CV in corner
         targetSection = SKNode()
@@ -170,13 +168,11 @@ class TangramPuzzleScene: SKScene {
         topMirrorContent.zPosition = 2     // above silhouettes so it's clearly visible
         targetSection.addChild(topMirrorContent)
         
-        // BOTTOM - Physical World Section
+        // No bottom section in CV-only mode
         physicalWorldSection = SKNode()
-        physicalWorldSection.position = CGPoint(x: halfWidth, y: bottomSectionY)
-        physicalWorldSection.zPosition = 2
-        addChild(physicalWorldSection)
-        
-        physicalBounds = CGRect(x: 0, y: 0, width: size.width, height: sectionHeight)
+        physicalWorldSection.isHidden = true
+        physicalWorldSection.removeAllChildren()
+        physicalBounds = .zero
     }
     
     private func setupSectionBackgrounds() {
@@ -187,25 +183,11 @@ class TangramPuzzleScene: SKScene {
         let availableHeight = size.height - topPadding - 10
         let sectionHeight = (availableHeight - sectionGap) / 2
         
-        // Top panel background (entire top section)
-        let targetBg = SKShapeNode(rectOf: CGSize(width: size.width - 20, height: sectionHeight))
-        targetBg.fillColor = SKColor.systemGray6.withAlphaComponent(0.3)
-        targetBg.strokeColor = SKColor.systemGray3
-        targetBg.lineWidth = 2
-        targetBg.position = .zero
-        targetBg.zPosition = -1
-        targetSection.addChild(targetBg)
+        // No background frame; keep silhouettes only centered
         
         // Mini CV background and label removed
         
-        // Physical world section - assembly area (bottom)
-        let assemblyArea = SKShapeNode(rectOf: CGSize(width: size.width - 30, height: sectionHeight))
-        assemblyArea.strokeColor = SKColor.systemGreen.withAlphaComponent(0.3)
-        assemblyArea.lineWidth = 3
-        assemblyArea.fillColor = SKColor.systemGreen.withAlphaComponent(0.02)
-        assemblyArea.position = .zero
-        assemblyArea.zPosition = -1
-        physicalWorldSection.addChild(assemblyArea)
+        // No bottom assembly area in CV-only mode
     }
     
     // MARK: - Puzzle Loading

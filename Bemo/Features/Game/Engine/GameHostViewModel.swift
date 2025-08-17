@@ -39,6 +39,7 @@ class GameHostViewModel {
     
     private var cancellables = Set<AnyCancellable>()
     private var tangramCVAdapter: TangramCVEventsAdapter?
+    private var tangramObservers: [NSObjectProtocol] = []
     
     init(
         game: Game,
@@ -69,6 +70,17 @@ class GameHostViewModel {
         }
         
         setupBindings()
+
+        // Listen for Tangram play view lifecycle to control CV only during active puzzle
+        if game is TangramGame {
+            let onAppear = NotificationCenter.default.addObserver(forName: Notification.Name("TangramPlayingAppear"), object: nil, queue: .main) { [weak self] _ in
+                self?.startTangramCV()
+            }
+            let onDisappear = NotificationCenter.default.addObserver(forName: Notification.Name("TangramPlayingDisappear"), object: nil, queue: .main) { [weak self] _ in
+                self?.stopTangramCV()
+            }
+            tangramObservers.append(contentsOf: [onAppear, onDisappear])
+        }
     }
     
     private func setupBindings() {
@@ -81,19 +93,13 @@ class GameHostViewModel {
     }
     
     func startSession() {
-        // Start CV service
-        cvService.startSession()
+        // Start CV service for non-Tangram games immediately; Tangram defers to play view lifecycle
+        if !(game is TangramGame) {
+            cvService.startSession()
+        }
         
         // Start game-scoped CV frame adapter when needed
-        if game is TangramGame {
-            // Ensure adapter starts on the main actor because it binds to Combine streams used on main runloop
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                let adapter = TangramCVEventsAdapter(cvService: self.cvService)
-                adapter.start()
-                self.tangramCVAdapter = adapter
-            }
-        }
+        // Adapter will be started when Tangram playing view appears
         
         // Reset game state
         game.reset()
@@ -118,6 +124,10 @@ class GameHostViewModel {
             self?.tangramCVAdapter?.stop()
             self?.tangramCVAdapter = nil
         }
+
+        // Remove observers
+        for obs in tangramObservers { NotificationCenter.default.removeObserver(obs) }
+        tangramObservers.removeAll()
         
         // Save game state
         if let _ = game.saveState() {
@@ -134,6 +144,27 @@ class GameHostViewModel {
                 "final_progress": progress
             ]
         )
+    }
+
+    // MARK: - Tangram CV control
+    private func startTangramCV() {
+        cvService.startSession()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if self.tangramCVAdapter == nil {
+                let adapter = TangramCVEventsAdapter(cvService: self.cvService)
+                adapter.start()
+                self.tangramCVAdapter = adapter
+            }
+        }
+    }
+
+    private func stopTangramCV() {
+        DispatchQueue.main.async { [weak self] in
+            self?.tangramCVAdapter?.stop()
+            self?.tangramCVAdapter = nil
+        }
+        cvService.stopSession()
     }
     
     private func handleRecognizedPieces(_ pieces: [RecognizedPiece]) {
