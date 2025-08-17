@@ -151,8 +151,22 @@ extension TangramPuzzleScene {
             let blendedRot = lastRot * (1 - alpha) + rotRad * alpha
             let moved = hypot(blendedPos.x - g.position.x, blendedPos.y - g.position.y) > cvRenderConfig.positionThreshold
             let rotChanged = abs((blendedRot - g.zRotation) * 180 / .pi) > cvRenderConfig.rotationThresholdDeg
-            if moved { g.position = blendedPos }
-            if rotChanged { g.zRotation = blendedRot }
+            // Stability gate: apply only after N consecutive frames
+            let required = 3
+            let key = "stable_\(pieceId)"
+            var count = (userData?[key] as? Int) ?? 0
+            if moved || rotChanged {
+                count += 1
+                if count >= required {
+                    if moved { g.position = blendedPos }
+                    if rotChanged { g.zRotation = blendedRot }
+                    count = 0
+                }
+            } else {
+                count = 0
+            }
+            if userData == nil { userData = NSMutableDictionary() }
+            userData?[key] = count
             cvSmoothedPose[pieceId] = (blendedPos, blendedRot)
             cvLastSeenAt[pieceId] = now
             g.isHidden = false

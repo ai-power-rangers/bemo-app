@@ -94,15 +94,15 @@ struct GameHostView: View {
 
             // Debug: small camera preview for Tangram game
             #if DEBUG
-            if viewModel.game.id == "tangram" {
-                CameraPreviewView(cvService: viewModel.cameraCVService)
-                    .frame(width: 160, height: 284) // 9:16 aspect
-                    .cornerRadius(10)
+            if viewModel.game.id == "tangram" && viewModel.isTangramPlaying {
+                CameraPreviewWithHUD(cvService: viewModel.cameraCVService)
+                    .frame(width: 120, height: 213) // smaller 9:16
+                    .cornerRadius(8)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: 8)
                             .stroke(Color.white.opacity(0.6), lineWidth: 1)
                     )
-                    .shadow(radius: 4)
+                    .shadow(radius: 3)
                     .padding()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }

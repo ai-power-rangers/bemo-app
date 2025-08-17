@@ -53,12 +53,12 @@ final class TangramCVEventsAdapter {
     // MARK: - Mapping
 
     private func buildFrame(from result: CVService.CVDetectionResult) -> CVFrameEvent {
-        // Prefer the integrated tangram result if available to get real rotation/vertices
+        // Prefer integrated Tangram result when available for correct orientation/vertices
         if let trAny: AnyObject = result.tangramResult, let frame = buildFrameFromTangramResult(trAny) {
             return frame
         }
 
-        // Fallback to bounding-box based approximation with stable per-class indexing
+        // Fallback to YOLO-only mapping
         struct Temp { let classId: Int; let rotation: Double; let translation: [Double]; let vertices: [[Double]] }
         var temps: [Temp] = []
         for det in result.detections {
@@ -72,7 +72,6 @@ final class TangramCVEventsAdapter {
             let vertices: [[Double]] = [[Double(x0), Double(y0)], [Double(x1), Double(y0)], [Double(x1), Double(y1)], [Double(x0), Double(y1)]]
             temps.append(Temp(classId: classId, rotation: 0, translation: [Double(centerX), Double(centerY)], vertices: vertices))
         }
-        // Group by class and assign deterministic indices by X then Y
         var objects: [CVPieceEvent] = []
         let grouped = Dictionary(grouping: temps, by: { $0.classId })
         for (classId, arr) in grouped {
