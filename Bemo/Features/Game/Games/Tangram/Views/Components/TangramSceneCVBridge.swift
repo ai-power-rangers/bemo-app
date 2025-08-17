@@ -155,35 +155,36 @@ extension TangramPuzzleScene {
             }
         }
 
-        // Mirror physical pieces into a top-panel layer (topMirrorContent)
+        // Mirror CV-detected pieces directly into top panel
         let mirror = topMirrorContent!
-        // Do not remove existing ghosts when a frame omits them; keep the last-known pose
-        // Pre-populated ghosts created at load are named "mirror_<pieceId>" and should persist
-        // Scale physical space uniformly into top panel space; both origins are centered, so no translation needed
-        let physSize = physicalBounds.size
         let topSize = CGSize(width: targetBounds.width, height: targetBounds.height)
-        guard physSize.width > 0, physSize.height > 0, topSize.width > 0, topSize.height > 0 else { return }
-        let sx = topSize.width / physSize.width
-        let sy = topSize.height / physSize.height
+        guard topSize.width > 0, topSize.height > 0 else { return }
+        // Reference view size must match adapter/pipeline
+        let ref = CGSize(width: 1080, height: 1920)
+        let sx = topSize.width / ref.width
+        let sy = topSize.height / ref.height
         let uniform = min(sx, sy)
         topMirrorContent.setScale(uniform)
         topMirrorContent.position = .zero
-        // Origin alignment: map physical origin (center of physicalWorldSection) to center of targetSection
-        // We'll convert via scene space and then into targetSection (mirror is at targetSection origin)
         for object in frame.objects {
             let pieceId = pieceIdFromCVName(object.name)
             let nodeName = "mirror_\(pieceId)"
             var ghost = mirror.childNode(withName: nodeName) as? SKShapeNode
 
-            // Resolve piece type and flip directly from the physical piece to ensure color/flip parity
-            let physicalPiece = availablePieces.first(where: { $0.name == pieceId })
+            // Resolve type directly from classId mapping
             let resolvedType: TangramPieceType = {
-                if let t = physicalPiece?.pieceType { return t }
-                // Fallback: parse from pieceId (e.g., "piece_smallTriangle1")
-                let raw = pieceId.hasPrefix("piece_") ? String(pieceId.dropFirst(6)) : pieceId
-                return TangramPieceType(rawValue: raw) ?? .smallTriangle1
+                switch object.classId {
+                case 0: return .parallelogram
+                case 1: return .square
+                case 2: return .largeTriangle1
+                case 3: return .largeTriangle2
+                case 4: return .mediumTriangle
+                case 5: return .smallTriangle1
+                case 6: return .smallTriangle2
+                default: return .smallTriangle1
+                }
             }()
-            let isFlippedPiece = physicalPiece?.isFlipped ?? false
+            let isFlippedPiece = false
 
             if ghost == nil {
                 ghost = createGhostPiece(pieceType: resolvedType, at: CGPoint.zero, rotation: 0)
@@ -193,11 +194,11 @@ extension TangramPuzzleScene {
             guard let g = ghost else { continue }
 
             // Position mapping phys → scene → targetSection → scaled into mirror
-            let physPosPoint = CGPoint(
+            let pos = CGPoint(
                 x: object.pose.translation.first ?? 0,
                 y: object.pose.translation.dropFirst().first ?? 0
             )
-            g.position = physPosPoint
+            g.position = pos
             g.setScale(1.0)
             // Apply flip parity with the physical piece
             g.xScale = isFlippedPiece ? -abs(g.xScale) : abs(g.xScale)

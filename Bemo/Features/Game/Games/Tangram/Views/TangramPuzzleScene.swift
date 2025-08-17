@@ -222,14 +222,7 @@ class TangramPuzzleScene: SKScene {
         // Setup target section with silhouettes
         setupTargetPuzzle(puzzle)
         
-        // Create physical pieces
-        createPhysicalPieces(puzzle)
-        
-        // Pre-populate top mirror from current physical piece poses so the top panel is populated immediately
-        prepopulateTopMirrorFromPhysical()
-        
-        // Emit initial CV frame
-        emitCVFrameUpdate()
+        // CV-only mode: no physical piece creation or simulated CV emission
     }
     
     /// Create top mirror ghosts at puzzle load based on physical piece positions

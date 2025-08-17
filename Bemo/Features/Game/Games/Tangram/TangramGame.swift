@@ -41,6 +41,7 @@ class TangramGame: Game {
     private let puzzleManagementService: PuzzleManagementService?
     private var childProfileId: String?
     private var overrideDifficulty: UserPreferences.DifficultySetting? = nil
+    private var cvAdapter: TangramCVEventsAdapter?
     
     // MARK: - Initialization
     
@@ -103,9 +104,7 @@ class TangramGame: Game {
         #endif
         vm.determineInitialPhase()
         
-        return AnyView(
-            TangramGameView(viewModel: vm)
-        )
+        return AnyView(TangramGameView(viewModel: vm))
     }
     
     // MARK: - Configuration

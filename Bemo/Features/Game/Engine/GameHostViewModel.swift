@@ -38,6 +38,7 @@ class GameHostViewModel {
     private let onQuit: () -> Void
     
     private var cancellables = Set<AnyCancellable>()
+    private var tangramCVAdapter: TangramCVEventsAdapter?
     
     init(
         game: Game,
@@ -83,6 +84,13 @@ class GameHostViewModel {
         // Start CV service
         cvService.startSession()
         
+        // Start game-scoped CV frame adapter when needed
+        if game is TangramGame {
+            let adapter = TangramCVEventsAdapter(cvService: cvService)
+            adapter.start()
+            tangramCVAdapter = adapter
+        }
+        
         // Reset game state
         game.reset()
         
@@ -100,6 +108,10 @@ class GameHostViewModel {
     func endSession() {
         // Stop CV service
         cvService.stopSession()
+        
+        // Stop adapter if running
+        tangramCVAdapter?.stop()
+        tangramCVAdapter = nil
         
         // Save game state
         if let _ = game.saveState() {
