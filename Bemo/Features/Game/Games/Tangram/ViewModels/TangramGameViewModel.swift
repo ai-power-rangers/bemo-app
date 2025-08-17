@@ -11,6 +11,7 @@
 
 import SwiftUI
 import Observation
+import Combine
 
 @Observable
 class TangramGameViewModel {
@@ -48,7 +49,7 @@ class TangramGameViewModel {
     /// Difficulty selection view model for new flow
     var difficultySelectionViewModel: DifficultySelectionViewModel?
     var showHints: Bool = false
-    var canvasSize: CGSize = CGSize(width: 1.0, height: 1.0) // Normalized canvas size
+    var canvasSize: CGSize = CGSize(width: 1080, height: 1920) // CV canvas size matches CVService viewSize
     var showPlacementCelebration: Bool = false
     var useSpriteKit: Bool = true // Toggle for SpriteKit vs SwiftUI canvas
     
@@ -61,6 +62,10 @@ class TangramGameViewModel {
     var placedPieces: [PlacedPiece] = []
     var anchorPiece: PlacedPiece?
     private var cvGroupId: UUID = UUID()
+    
+    // CV Overlay for display
+    var cvOverlayImage: UIImage?
+    var cvFPS: Double = 0.0
     
     // Hint System
     var currentHint: TangramHintEngine.HintData?
@@ -115,6 +120,8 @@ class TangramGameViewModel {
     private var learningService: LearningService?
     private let progressService: TangramProgressService
     var availablePuzzles: [GamePuzzleData] = []
+    private weak var cvService: CVService?
+    private var cvCancellable: AnyCancellable?
     
     // Unified validation engine
     private var _validationEngine: TangramValidationEngine?
@@ -817,7 +824,15 @@ class TangramGameViewModel {
     }
     
     func processCVInput(_ pieces: [PlacedPiece]) {
-        guard currentPhase == .playingPuzzle else { return }
+        guard currentPhase == .playingPuzzle else { 
+            print("🔴 [CV] Ignoring CV input - not in playingPuzzle phase (current: \(currentPhase))")
+            return 
+        }
+        
+        print("🟢 [CV] Processing \(pieces.count) pieces from CV")
+        for piece in pieces {
+            print("  📍 \(piece.pieceType): pos=(\(Int(piece.position.x)), \(Int(piece.position.y))), rot=\(Int(piece.rotation))°, moving=\(piece.isMoving)")
+        }
         
         // Check if any hinted piece is being moved
         if let hint = currentHint {
@@ -1130,6 +1145,20 @@ class TangramGameViewModel {
         // Restore placed pieces (not optional - array is always present)
         placedPieces = state.placedPieces
         updateAnchorPiece()
+    }
+    
+    // MARK: - CV Service Setup
+    
+    func setCVService(_ service: CVService) {
+        self.cvService = service
+        
+        // Subscribe to CV detection results for overlay image
+        cvCancellable = service.detectionResultsPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] result in
+                self?.cvOverlayImage = result.overlayImage
+                self?.cvFPS = result.fps
+            }
     }
     
     // MARK: - Metrics Tracking

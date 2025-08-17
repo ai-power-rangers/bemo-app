@@ -400,6 +400,8 @@ struct TangramGameView: View {
                     isPuzzleComplete: viewModel.currentPhase == .puzzleComplete,
                     showHints: viewModel.showHints,
                     currentHint: viewModel.currentHint,
+                    cvOverlayImage: viewModel.cvOverlayImage,
+                    cvFPS: viewModel.cvFPS,
                     onPieceCompleted: { pieceType, isFlipped in
                         viewModel.handlePieceCompletion(pieceType: pieceType, isFlipped: isFlipped)
                     },

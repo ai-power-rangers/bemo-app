@@ -12,7 +12,7 @@
 import Foundation
 import CoreGraphics
 
-struct PlacedPiece: Identifiable, Codable {
+struct PlacedPiece: Identifiable, Codable, Equatable {
     
     // MARK: - Properties from CV
     
@@ -49,13 +49,29 @@ struct PlacedPiece: Identifiable, Codable {
     init(from recognized: RecognizedPiece) {
         self.id = recognized.id
         self.pieceType = TangramPieceType(rawValue: recognized.pieceTypeId) ?? .smallTriangle1
-        self.position = recognized.position
+        
+        // Convert from normalized (0-1) to canvas coordinates (1080x1920)
+        // CV provides normalized coordinates, but game expects canvas pixels
+        let canvasSize = CGSize(width: 1080, height: 1920)
+        self.position = CGPoint(
+            x: recognized.position.x * canvasSize.width,
+            y: recognized.position.y * canvasSize.height
+        )
+        
         self.rotation = recognized.rotation
-        self.velocity = recognized.velocity
+        
+        // Scale velocity to canvas coordinates as well
+        self.velocity = CGVector(
+            dx: recognized.velocity.dx * canvasSize.width,
+            dy: recognized.velocity.dy * canvasSize.height
+        )
+        
         self.isMoving = recognized.isMoving
         self.confidence = recognized.confidence
         self.timestamp = recognized.timestamp
         self.frameNumber = recognized.frameNumber
+        
+        print("🔄 [PlacedPiece] Converted \(pieceType): normalized(\(String(format: "%.3f", recognized.position.x)), \(String(format: "%.3f", recognized.position.y))) → canvas(\(Int(position.x)), \(Int(position.y)))")
         
         // Mark as placed if not moving
         if !isMoving {

@@ -41,6 +41,7 @@ class TangramGame: Game {
     private let puzzleManagementService: PuzzleManagementService?
     private var childProfileId: String?
     private var overrideDifficulty: UserPreferences.DifficultySetting? = nil
+    private weak var cvService: CVService?
     
     // MARK: - Initialization
     
@@ -72,6 +73,12 @@ class TangramGame: Game {
             )
             self.viewModel = vm
             isNewViewModel = true
+            
+            // Set CVService if available
+            if let cvService = self.cvService {
+                vm.setCVService(cvService)
+            }
+            
             #if DEBUG
             print("🆕 [TangramGame] Created new view model")
             #endif
@@ -124,7 +131,18 @@ class TangramGame: Game {
         }
     }
     
+    /// Set CVService reference for overlay display
+    func setCVService(_ service: CVService) {
+        self.cvService = service
+        viewModel?.setCVService(service)
+    }
+    
     func processRecognizedPieces(_ pieces: [RecognizedPiece]) -> PlayerActionOutcome {
+        print("🎮 [TangramGame] Processing \(pieces.count) recognized pieces")
+        for piece in pieces {
+            print("  📦 \(piece.pieceTypeId): pos=(\(String(format: "%.3f", piece.position.x)), \(String(format: "%.3f", piece.position.y)))")
+        }
+        
         // Convert CV pieces directly to PlacedPieces (no color mapping needed)
         let placedPieces = pieces.map { PlacedPiece(from: $0) }
         
