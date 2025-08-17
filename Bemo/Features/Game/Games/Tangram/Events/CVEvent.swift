@@ -42,6 +42,13 @@ struct CVFrameEvent: Codable {
     let homography: [[Double]]
     let scale: Double
     let objects: [CVPieceEvent]
+    // Optional: canonical model plane polygons and colors (for debug/QA overlays)
+    // Keyed by class id; each value is a flat [x0,y0,x1,y1,...] in plane coordinates
+    let planeModelPolygons: [Int: [Double]]?
+    // Optional RGB colors 0..255 per class id
+    let modelColorsRGB: [Int: [Double]]?
+    // Optional: pipeline-composited overlay image (PNG data) for debug/QA
+    let overlayPNGData: Data?
     
     init() {
         // Default homography matrix (identity-ish for our simulation)
@@ -52,6 +59,9 @@ struct CVFrameEvent: Codable {
         ]
         self.scale = 2.609
         self.objects = []
+        self.planeModelPolygons = nil
+        self.modelColorsRGB = nil
+        self.overlayPNGData = nil
     }
     
     init(objects: [CVPieceEvent]) {
@@ -63,12 +73,18 @@ struct CVFrameEvent: Codable {
         ]
         self.scale = 2.609
         self.objects = objects
+        self.planeModelPolygons = nil
+        self.modelColorsRGB = nil
+        self.overlayPNGData = nil
     }
 
-    init(homography: [[Double]], scale: Double, objects: [CVPieceEvent]) {
+    init(homography: [[Double]], scale: Double, objects: [CVPieceEvent], planeModelPolygons: [Int: [Double]]? = nil, modelColorsRGB: [Int: [Double]]? = nil, overlayPNGData: Data? = nil) {
         self.homography = homography
         self.scale = scale
         self.objects = objects
+        self.planeModelPolygons = planeModelPolygons
+        self.modelColorsRGB = modelColorsRGB
+        self.overlayPNGData = overlayPNGData
     }
 }
 

@@ -29,6 +29,36 @@ This document lays out a concrete, step‑by‑step plan from “unstable protot
 
 ---
 
+## Progress Update (current)
+
+What’s implemented now:
+
+1) Coordinate space normalization
+   - Adapter emits positions in normalized model space (0..1) and prefers refined polygon centroids when available.
+   - Scene maps normalized → SpriteKit target space explicitly with Y inversion, no container scaling.
+
+2) Optional global 180° adjustment
+   - Config flag `rotate180` rotates both position (around target center) and orientation by 180° to address consistent camera mounting/model orientation.
+
+3) Optional mirror control
+   - Config flag `mirrorX` for front‑camera parity when needed.
+
+4) Identity stabilization
+   - Per‑class nearest‑neighbor identity assignment to keep duplicate triangles stable across frames.
+
+5) Stability gate + smoothing
+   - Exponential smoothing + small movement/rotation thresholds + a brief multi‑frame gate to avoid flicker.
+
+6) Noise reduction and lifecycle
+   - Noisy per‑frame logs removed; camera/CV start/stop gated to the playing view.
+
+Observed state:
+
+- Piece ordering/placement: now consistent in the correct relative order/space.
+- Rotations: still not reliably updating in the view; need a single, authoritative transform pipeline to compute orientation and apply canonical offsets consistently.
+
+---
+
 ## Phase A — Stabilize MVP (Sizes Correct + Visual Stability)
 
 Goal: Canonical‑sized, correctly colored ghosts that are stable when pieces are still.
@@ -86,6 +116,39 @@ Deliverable of Phase B: accurate, repeatable alignment between physical plane an
 
 ---
 
+## Centralized CV Transform (Proposed Consolidation)
+
+Problem: Transform logic is spread across adapter + scene; orientation/canonical offsets live in multiple places, causing drift and missed updates.
+
+Solution: Create a single transformer used by all consumers (scene, validation, hints):
+
+- File: `Bemo/Features/Game/Games/Tangram/Services/TangramCVTransform.swift`
+- Input: `TPTangramResult` (poses, homography, scale) + tuning flags (`useHomography`, `mirrorX`, `rotate180`)
+- Output per class instance:
+  - normalizedPosition (0..1, 0..1)
+  - targetPositionSK (centered SK coords after mapping and optional 180°)
+  - rotationRadiansSK (theta adjusted for mirror and optional 180°)
+  - classId, tracking id
+  - quality metrics (from `trackingQuality`, timing)
+- Responsibilities:
+  1. Choose authoritative position source: refined polygon centroid if present, else pose (tx, ty).
+  2. Normalize to model space; convert to pixel space only for homography path.
+  3. Apply mapping (homography or linear 1080×1920 reference) into target SK space (centered, Y inverted).
+  4. Apply global adjustments: mirrorX, rotate180.
+  5. Apply canonical orientation offsets per piece type (triangles vs square vs parallelogram parity).
+  6. Provide smoothed/thresholded poses (α, Δpos, Δrot, dwell) and identity assignment across frames.
+
+Consumers:
+ - Scene: renders canonical geometry at `targetPositionSK` with `rotationRadiansSK`.
+ - Validation: uses the same adjusted pose so orientation correctness and hints match visuals.
+
+Benefits:
+ - One source of truth for mapping/orientation
+ - Easier testing (golden frames / unit tests)
+ - Fewer parameters bouncing among layers
+
+---
+
 ## Phase C — Validation + Hints Integration
 
 1) Orientation correctness indicator
@@ -139,10 +202,14 @@ Deliverable of Phase C: cohesive feedback loop (orientation, nudges, validation)
 
 ## Next Concrete Changes (Short List)
 
-1) Replace container uniform scaling with explicit CV→SK mapping function; stop scaling `topMirrorContent`.
-2) Multiply ghost canonical path by `targetDisplayScale` so it matches silhouettes exactly.
-3) Add smoothing + thresholds + dwell gating in `TangramSceneCVBridge` (per‑piece pose cache, α≈0.2, 2–3px/° thresholds, 300–500ms dwell).
-4) Implement sticky identity per class using nearest‑neighbor association across frames.
-5) Integrate homography mapping (Phase B) after stability is verified.
+1) Centralize transform in `TangramCVTransform` (as above) and route both scene and validation through it.
+2) Confirm rotation source = `poses[classId].theta` (radians), then:
+   - Apply `mirrorX` (θ = −θ when mirrored)
+   - Apply `rotate180` (θ += π)
+   - Apply canonical per‑type offset for triangle feature alignment
+   - Normalize to shortest‑arc range (−π..π)
+3) Keep mapping normalized→SK centered with Y inversion. For homography path, convert normalized→pixels→H mapping→centered SK.
+4) Verify with a test grid overlay + logs for (nx, ny, θ) to assert live transform is consistent.
+5) Add golden frame tests with recorded `TPTangramResult` ensuring rotations update and relative stacking matches physical layout.
 
 

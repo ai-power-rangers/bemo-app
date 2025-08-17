@@ -42,24 +42,21 @@ class CVEventBus: ObservableObject {
     /// Emit a frame event with all current piece states (private, timer-based)
     private func emitFrame() {
         guard !currentPieces.isEmpty else { return }
-        
+        // Emit exactly the last received objects; do not synthesize or carry over stale pieces
         let frame = CVFrameEvent(objects: Array(currentPieces.values))
         lastFrame = frame
-        
-        frameSubscribers.values.forEach { handler in
-            handler(frame)
-        }
+        frameSubscribers.values.forEach { handler in handler(frame) }
+        // Immediately clear to prevent ghost carryover when next frame has fewer detections
+        currentPieces.removeAll()
     }
     
     /// Public method to emit a custom frame event
     func emitFrame(_ frame: CVFrameEvent) {
         lastFrame = frame
         
-        // Update current pieces from frame without collapsing duplicates
+        // Exact passthrough of current frame only
         currentPieces.removeAll()
-        for object in frame.objects {
-            currentPieces[object.name] = object
-        }
+        for object in frame.objects { currentPieces[object.name] = object }
         
         // Notify subscribers
         frameSubscribers.values.forEach { handler in

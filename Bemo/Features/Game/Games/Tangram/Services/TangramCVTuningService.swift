@@ -28,8 +28,11 @@ final class TangramCVTuning {
 
     // Mapping controls
     var useHomography: Bool = false
-    var mirrorX: Bool = false
-    var rotate180: Bool = true
+    // Match prototype: front camera mirrored, no extra 180°
+    var mirrorX: Bool = true
+    var rotate180: Bool = false
+    // Toggle validation scheduling; disable to remove interference while stabilizing CV mirror
+    var validationEnabled: Bool = false
 }
 
 

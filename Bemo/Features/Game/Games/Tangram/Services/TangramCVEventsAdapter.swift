@@ -54,7 +54,7 @@ final class TangramCVEventsAdapter {
 
     private func buildFrame(from result: CVService.CVDetectionResult) -> CVFrameEvent {
         // Prefer integrated Tangram result when available for correct orientation/vertices
-        if let trAny: AnyObject = result.tangramResult, let frame = buildFrameFromTangramResult(trAny) {
+        if let trAny: AnyObject = result.tangramResult, let frame = buildFrameFromTangramResult(trAny, overlay: result.overlayImage) {
             return frame
         }
 
@@ -70,7 +70,8 @@ final class TangramCVEventsAdapter {
             let x1 = (det.bbox.origin.x + det.bbox.width) * referenceViewSize.width
             let y1 = (det.bbox.origin.y + det.bbox.height) * referenceViewSize.height
             let vertices: [[Double]] = [[Double(x0), Double(y0)], [Double(x1), Double(y0)], [Double(x1), Double(y1)], [Double(x0), Double(y1)]]
-            temps.append(Temp(classId: classId, rotation: 0, translation: [Double(centerX), Double(centerY)], vertices: vertices))
+            // Normalize translation to 0..1 (prototype parity expects normalized in downstream mapping)
+            temps.append(Temp(classId: classId, rotation: 0, translation: [Double(centerX / referenceViewSize.width), Double(centerY / referenceViewSize.height)], vertices: vertices))
         }
         var objects: [CVPieceEvent] = []
         let grouped = Dictionary(grouping: temps, by: { $0.classId })
@@ -85,11 +86,18 @@ final class TangramCVEventsAdapter {
                 objects.append(CVPieceEvent(name: name, classId: classId, pose: pose, vertices: t.vertices))
             }
         }
-        return CVFrameEvent(objects: objects)
+        // Attach overlay if present
+        var overlayData: Data? = nil
+        if let img = result.overlayImage, let data = img.pngData() { overlayData = data }
+        return CVFrameEvent(homography: [
+            [0.915, 0.406, 35.684],
+            [-0.017, -0.485, 77.180],
+            [-0.0000185, 0.000657, 1.0]
+        ], scale: 2.609, objects: objects, planeModelPolygons: nil, modelColorsRGB: nil, overlayPNGData: overlayData)
     }
 
     // MARK: - KVC bridge for TPTangramResult → CVFrameEvent
-    private func buildFrameFromTangramResult(_ tr: AnyObject) -> CVFrameEvent? {
+    private func buildFrameFromTangramResult(_ tr: AnyObject, overlay: UIImage?) -> CVFrameEvent? {
         // TPTangramResult API: H_3x3 (homography), scale, poses (classId->TPPose {theta,tx,ty}), refinedPolygons (classId->flat array)
         guard let hom = tr.value(forKey: "H_3x3") as? [NSNumber], hom.count == 9 else { return nil }
         let scale: Double = (tr.value(forKey: "scale") as? NSNumber)?.doubleValue ?? 0
@@ -162,7 +170,8 @@ final class TangramCVEventsAdapter {
                 return lhs.translation[0] < rhs.translation[0]
             }
             for (idx, e) in sorted.enumerated() {
-                let name = "\(cvName(for: classId))_\(idx)"
+                // Ensure unique identity names are stable: "cv_..._<index>"
+                let name = "cv_\(cvName(for: classId))_\(idx)"
                 let pose = CVPieceEvent.Pose(rotationDegrees: e.rotationDeg, translation: e.translation)
                 objects.append(CVPieceEvent(name: name, classId: classId, pose: pose, vertices: e.vertices))
             }
@@ -174,7 +183,27 @@ final class TangramCVEventsAdapter {
             [hom[6].doubleValue, hom[7].doubleValue, hom[8].doubleValue]
         ]
 
-        let frame = CVFrameEvent(homography: H, scale: scale, objects: objects)
+        // Plane model polygons and colors are exposed via KVC on some builds; guard with responds(to:)
+        var planePolys: [Int: [Double]]? = nil
+        var planeColors: [Int: [Double]]? = nil
+        if let ns = tr as? NSObject {
+            let planeSel = NSSelectorFromString("planeModelPolygons")
+            if ns.responds(to: planeSel), let planeAny = ns.value(forKey: "planeModelPolygons") as? [NSNumber: [NSNumber]] {
+                var tmp: [Int: [Double]] = [:]
+                for (k,v) in planeAny { tmp[k.intValue] = v.map { $0.doubleValue } }
+                planePolys = tmp
+            }
+            let colorSel = NSSelectorFromString("modelColorsRGB")
+            if ns.responds(to: colorSel), let colorsAny = ns.value(forKey: "modelColorsRGB") as? [NSNumber: [NSNumber]] {
+                var tmp: [Int: [Double]] = [:]
+                for (k,v) in colorsAny { tmp[k.intValue] = v.map { $0.doubleValue } }
+                planeColors = tmp
+            }
+        }
+
+        var overlayData: Data? = nil
+        if let img = overlay, let data = img.pngData() { overlayData = data }
+        let frame = CVFrameEvent(homography: H, scale: scale, objects: objects, planeModelPolygons: planePolys, modelColorsRGB: planeColors, overlayPNGData: overlayData)
         return frame
     }
 
