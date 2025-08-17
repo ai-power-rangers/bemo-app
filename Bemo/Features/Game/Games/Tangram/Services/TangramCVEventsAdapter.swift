@@ -13,7 +13,6 @@ import Foundation
 import Combine
 import CoreGraphics
 
-@MainActor
 final class TangramCVEventsAdapter {
     private let cvService: CVService
     private var cancellables = Set<AnyCancellable>()

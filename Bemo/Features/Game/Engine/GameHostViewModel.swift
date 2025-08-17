@@ -86,9 +86,13 @@ class GameHostViewModel {
         
         // Start game-scoped CV frame adapter when needed
         if game is TangramGame {
-            let adapter = TangramCVEventsAdapter(cvService: cvService)
-            adapter.start()
-            tangramCVAdapter = adapter
+            // Ensure adapter starts on the main actor because it binds to Combine streams used on main runloop
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                let adapter = TangramCVEventsAdapter(cvService: self.cvService)
+                adapter.start()
+                self.tangramCVAdapter = adapter
+            }
         }
         
         // Reset game state
@@ -110,8 +114,10 @@ class GameHostViewModel {
         cvService.stopSession()
         
         // Stop adapter if running
-        tangramCVAdapter?.stop()
-        tangramCVAdapter = nil
+        DispatchQueue.main.async { [weak self] in
+            self?.tangramCVAdapter?.stop()
+            self?.tangramCVAdapter = nil
+        }
         
         // Save game state
         if let _ = game.saveState() {
