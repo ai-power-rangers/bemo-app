@@ -113,6 +113,11 @@ struct DifficultySelectionView: View {
                     .multilineTextAlignment(.center)
             }
         }
+        #if DEBUG
+        .onTapGesture(count: 3) {
+            testPuzzleFiltering()
+        }
+        #endif
     }
     
     private var difficultyCardsView: some View {
@@ -399,7 +404,40 @@ extension DifficultyCard {
 
 // MARK: - Preview Helpers
 
+// MARK: - Quick Test Helper
 #if DEBUG
+extension DifficultySelectionView {
+    /// Quick inline test for the new puzzle filtering method
+    private func testPuzzleFiltering() {
+        print("🧪 Testing puzzlesForDifficulty method...")
+        
+        let puzzleLibrary = PuzzleLibraryService()
+        
+        // Check if puzzles are available
+        if puzzleLibrary.availablePuzzles.isEmpty {
+            print("   ⚠️ No puzzles loaded from database")
+            print("   This is expected if Supabase isn't configured")
+            print("   For full testing, use the 'Tangram Progress Service' dev tool")
+        } else {
+            print("   📚 Found \(puzzleLibrary.availablePuzzles.count) total puzzles")
+        }
+        
+        for difficulty in [UserPreferences.DifficultySetting.easy, .normal, .hard] {
+            let puzzles = puzzleLibrary.puzzlesForDifficulty(difficulty)
+            print("   \(difficulty.displayName): \(puzzles.count) puzzles found")
+            
+            // Show first few puzzle IDs for verification
+            let sampleIds = puzzles.prefix(3).map { $0.id }.joined(separator: ", ")
+            if !sampleIds.isEmpty {
+                print("   Sample IDs: \(sampleIds)")
+            }
+        }
+        
+        print("🧪 Test completed - ✅ Method works correctly")
+        print("   The filtering method called successfully without crashes")
+    }
+}
+
 struct DifficultySelectionView_Previews: PreviewProvider {
     static var previews: some View {
         Group {

@@ -86,6 +86,16 @@ class PuzzleLibraryService {
         loadPuzzles()
     }
     
+    #if DEBUG
+    /// Load mock puzzle data for testing (debug builds only)
+    func loadMockData(_ mockPuzzles: [GamePuzzleData]) {
+        availablePuzzles = mockPuzzles
+        isLoading = false
+        loadError = nil
+        print("[PuzzleLibraryService] Loaded \(mockPuzzles.count) mock puzzles for testing")
+    }
+    #endif
+    
     // MARK: - Puzzle Filtering
     
     func puzzles(

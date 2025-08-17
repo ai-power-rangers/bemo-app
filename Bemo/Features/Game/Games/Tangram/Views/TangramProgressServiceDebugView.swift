@@ -22,6 +22,7 @@ struct TangramProgressServiceDebugView: View {
     // Test the new PuzzleLibraryService filtering
     @State private var puzzleLibraryService = PuzzleLibraryService()
     @State private var puzzleFilterTestResults: String = ""
+    @State private var usingMockData: Bool = false
     
     // DifficultySelectionViewModel testing
     @State private var difficultySelectionViewModel: DifficultySelectionViewModel?
@@ -77,7 +78,7 @@ struct TangramProgressServiceDebugView: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     
@@ -257,6 +258,38 @@ struct TangramProgressServiceDebugView: View {
                             .buttonStyle(.bordered)
                         }
                         
+                        // Puzzle Library Status
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("📚 Puzzle Library Status:")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                            
+                            HStack {
+                                Circle()
+                                    .fill(puzzleLibraryService.isLoading ? Color.orange : 
+                                          puzzleLibraryService.availablePuzzles.isEmpty ? Color.red : Color.green)
+                                    .frame(width: 8, height: 8)
+                                
+                                if puzzleLibraryService.isLoading {
+                                    Text("Loading puzzles...")
+                                } else if puzzleLibraryService.availablePuzzles.isEmpty {
+                                    Text("No puzzles loaded (using mock data)")
+                                } else {
+                                    Text("\(puzzleLibraryService.availablePuzzles.count) puzzles loaded")
+                                }
+                            }
+                            .font(.caption)
+                            
+                            if let error = puzzleLibraryService.loadError {
+                                Text("⚠️ Error: \(error)")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
+                        }
+                        .padding()
+                        .background(puzzleLibraryService.availablePuzzles.isEmpty ? Color.orange.opacity(0.1) : Color.green.opacity(0.1))
+                        .cornerRadius(8)
+                        
                         // Test new puzzle filtering functionality
                         VStack(alignment: .leading, spacing: 8) {
                             Text("🧪 New Filtering Tests:")
@@ -280,10 +313,25 @@ struct TangramProgressServiceDebugView: View {
                                 .buttonStyle(.bordered)
                             }
                             
+                            HStack {
+                                Button("Use Mock Data") {
+                                    loadMockPuzzles()
+                                }
+                                .buttonStyle(.bordered)
+                                .foregroundColor(.blue)
+                                
+                                Button("Retry Database") {
+                                    puzzleLibraryService.loadPuzzles()
+                                    usingMockData = false
+                                }
+                                .buttonStyle(.bordered)
+                                .foregroundColor(.green)
+                            }
+                            
                             if !puzzleFilterTestResults.isEmpty {
                                 ScrollView {
                                     Text(puzzleFilterTestResults)
-                                        .font(.system(size: 11, family: .monospaced))
+                                        .font(.system(size: 11).monospaced())
                                         .padding(8)
                                         .background(Color.gray.opacity(0.1))
                                         .cornerRadius(4)
@@ -619,8 +667,59 @@ struct TangramProgressServiceDebugView: View {
         }
     }
     
+    private func loadMockPuzzles() {
+        puzzleFilterTestResults = "Loading mock puzzle data...\n\n"
+        
+        // Create mock puzzles for testing
+        let mockPuzzles = [
+            // Easy puzzles (1-2 star)
+            GamePuzzleData(id: "easy-001", name: "Simple Cat", category: "Animals", difficulty: 1, targetPieces: []),
+            GamePuzzleData(id: "easy-002", name: "Basic House", category: "Buildings", difficulty: 1, targetPieces: []),
+            GamePuzzleData(id: "easy-003", name: "Small Tree", category: "Nature", difficulty: 2, targetPieces: []),
+            GamePuzzleData(id: "easy-004", name: "Fish Shape", category: "Animals", difficulty: 2, targetPieces: []),
+            
+            // Medium puzzles (3-4 star)
+            GamePuzzleData(id: "medium-010", name: "Flying Bird", category: "Animals", difficulty: 3, targetPieces: []),
+            GamePuzzleData(id: "medium-015", name: "Tall Tower", category: "Buildings", difficulty: 3, targetPieces: []),
+            GamePuzzleData(id: "medium-020", name: "Running Person", category: "People", difficulty: 4, targetPieces: []),
+            GamePuzzleData(id: "medium-025", name: "Complex Flower", category: "Nature", difficulty: 4, targetPieces: []),
+            
+            // Hard puzzles (5 star)
+            GamePuzzleData(id: "hard-030", name: "Dragon", category: "Fantasy", difficulty: 5, targetPieces: []),
+            GamePuzzleData(id: "hard-035", name: "Castle", category: "Buildings", difficulty: 5, targetPieces: []),
+            GamePuzzleData(id: "hard-040", name: "Sailing Ship", category: "Transport", difficulty: 5, targetPieces: [])
+        ]
+        
+        // Load mock data into the service
+        puzzleLibraryService.loadMockData(mockPuzzles)
+        usingMockData = true
+        
+        puzzleFilterTestResults += "✅ Loaded \(mockPuzzles.count) mock puzzles!\n"
+        puzzleFilterTestResults += "📊 Distribution:\n"
+        puzzleFilterTestResults += "   • Easy (1-2⭐): \(mockPuzzles.filter { $0.difficulty <= 2 }.count) puzzles\n"
+        puzzleFilterTestResults += "   • Medium (3-4⭐): \(mockPuzzles.filter { $0.difficulty >= 3 && $0.difficulty <= 4 }.count) puzzles\n"
+        puzzleFilterTestResults += "   • Hard (5⭐): \(mockPuzzles.filter { $0.difficulty == 5 }.count) puzzles\n\n"
+        puzzleFilterTestResults += "🎯 Now you can test the filtering methods!\n"
+        
+        print("🧪 Mock data loaded successfully")
+    }
+    
     private func testPuzzleFiltering(_ difficulty: UserPreferences.DifficultySetting) {
-        puzzleFilterTestResults = "Testing puzzlesForDifficulty(\(difficulty))...\n\n"
+        // Check if we have any puzzles to test with
+        if puzzleLibraryService.availablePuzzles.isEmpty {
+            puzzleFilterTestResults = "⚠️  No puzzles available for testing!\n\n"
+            puzzleFilterTestResults += "The database connection failed and no mock data is loaded.\n"
+            puzzleFilterTestResults += "Please try:\n"
+            puzzleFilterTestResults += "1. Click 'Use Mock Data' to load test puzzles\n"
+            puzzleFilterTestResults += "2. Or click 'Retry Database' to reconnect\n"
+            return
+        }
+        
+        puzzleFilterTestResults = "Testing puzzlesForDifficulty(\(difficulty))...\n"
+        if usingMockData {
+            puzzleFilterTestResults += "(Using mock data - not real database)\n"
+        }
+        puzzleFilterTestResults += "\n"
         
         // Test the new filtering method
         let filteredPuzzles = puzzleLibraryService.puzzlesForDifficulty(difficulty)
@@ -633,7 +732,7 @@ struct TangramProgressServiceDebugView: View {
         
         if filteredPuzzles.isEmpty {
             puzzleFilterTestResults += "⚠️  No puzzles found for this difficulty\n"
-            puzzleFilterTestResults += "   This might be expected if no puzzles exist in the database\n\n"
+            puzzleFilterTestResults += "   This might mean no puzzles exist for difficulty \(difficulty.displayName)\n\n"
         } else {
             puzzleFilterTestResults += "🔍 Sample puzzles (first 5):\n"
             for (index, puzzle) in filteredPuzzles.prefix(5).enumerated() {
