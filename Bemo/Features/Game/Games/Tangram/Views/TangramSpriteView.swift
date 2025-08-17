@@ -78,11 +78,6 @@ struct TangramSpriteView: View {
             }
         }
         .onChange(of: currentHint) { oldValue, newValue in
-            print("DEBUG: onChange triggered - old: \(oldValue != nil), new: \(newValue != nil)")
-            if let hint = newValue {
-                print("DEBUG: New hint details - type: \(hint.hintType), piece: \(hint.targetPiece.rawValue)")
-            }
-            
             if let tangramScene = scene as? TangramPuzzleScene {
                 if let hint = newValue {
                     tangramScene.showStructuredHint(hint)

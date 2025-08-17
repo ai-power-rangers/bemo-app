@@ -128,23 +128,42 @@ extension TangramPuzzleScene {
             guard let g = ghost else { continue }
 
             // Map CV pixel coords; use simple mapping unless tuning enables homography
-            let px = CGFloat(object.pose.translation.first ?? 0)
-            let py = CGFloat(object.pose.translation.dropFirst().first ?? 0)
-            let mapped: CGPoint = {
+            // Object pose translation expected in normalized model space [0,1] (from adapter)
+            let nx = CGFloat(object.pose.translation.first ?? 0)
+            let ny = CGFloat(object.pose.translation.dropFirst().first ?? 0)
+            var mapped: CGPoint = {
                 if TangramCVTuning.shared.useHomography {
+                    // Homography path expects pixel space; derive pixels from normalized by reference size
+                    let px = nx * 1080.0
+                    let py = ny * 1920.0
                     return mapCVToTarget(cvX: px, cvY: py, frame: frame, targetSize: topSize)
                 } else {
-                    let ref = CGSize(width: 1080, height: 1920)
-                    return CGPoint(x: (px / ref.width - 0.5) * topSize.width,
-                                   y: (py / ref.height - 0.5) * topSize.height)
+                    // Normalized (0..1) to centered target coords; invert Y
+                    let x = (nx - 0.5) * topSize.width
+                    let y = (0.5 - ny) * topSize.height
+                    return CGPoint(x: x, y: y)
                 }
             }()
+            if TangramCVTuning.shared.rotate180 {
+                // Rotate around center (0,0) by 180°: (x,y) -> (-x,-y)
+                mapped.x = -mapped.x
+                mapped.y = -mapped.y
+            }
+            if TangramCVTuning.shared.mirrorX {
+                mapped.x = -mapped.x
+            }
             let now = CACurrentMediaTime()
 
             // Smoothing + threshold gating
             let last = cvSmoothedPose[pieceId]?.pos ?? mapped
             let lastRot = cvSmoothedPose[pieceId]?.rot ?? 0
-            let rotRad = CGFloat(object.pose.rotationDegrees) * .pi / 180
+            var rotRad = CGFloat(object.pose.rotationDegrees) * .pi / 180
+            if TangramCVTuning.shared.mirrorX {
+                rotRad = -rotRad
+            }
+            if TangramCVTuning.shared.rotate180 {
+                rotRad += .pi
+            }
             let alpha = cvRenderConfig.smoothingAlpha
             let blendedPos = CGPoint(x: last.x * (1 - alpha) + mapped.x * alpha,
                                      y: last.y * (1 - alpha) + mapped.y * alpha)
@@ -174,8 +193,8 @@ extension TangramPuzzleScene {
             // Flip parity disabled until we detect flip
             g.xScale = abs(g.xScale)
 
-            // Base visual at 10–20% (use 0.2 = 20% for tracked mirror)
-            var fillAlpha: CGFloat = 0.2
+            // Base visual at 30–40% for visibility while debugging mapping
+            var fillAlpha: CGFloat = 0.3
             // Orientation-only correctness bumps to 40% and triggers top checkmark once
             if let puz = puzzle {
                 // Compute feature angle for piece
@@ -226,8 +245,8 @@ extension TangramPuzzleScene {
             shapeNode.path = path
             // Apply color matching the piece type with lower fill
             g.fillColor = TangramColors.Sprite.uiColor(for: resolvedType).withAlphaComponent(fillAlpha)
-            g.strokeColor = TangramColors.Sprite.uiColor(for: resolvedType).withAlphaComponent(0.5)
-            g.lineWidth = 1.0
+            g.strokeColor = TangramColors.Sprite.uiColor(for: resolvedType).withAlphaComponent(0.7)
+            g.lineWidth = 2.0
         }
 
         // Hide ghosts that have not been seen recently
@@ -251,10 +270,10 @@ extension TangramPuzzleScene {
         // Frame.homography is 3x3 in row-major order. We’ll compute inverse and map to plane coordinates, then center/scale into target.
         let H = frame.homography
         guard H.count == 3, H[0].count == 3 else {
-            // Fallback to simple reference mapping
+            // Fallback to simple mapping with Y inversion
             let ref = CGSize(width: 1080, height: 1920)
             return CGPoint(x: (cvX / ref.width - 0.5) * targetSize.width,
-                           y: (cvY / ref.height - 0.5) * targetSize.height)
+                           y: (0.5 - cvY / ref.height) * targetSize.height)
         }
         // Build matrix and inverse
         let h00 = H[0][0], h01 = H[0][1], h02 = H[0][2]
@@ -265,7 +284,7 @@ extension TangramPuzzleScene {
         if abs(det) < 1e-9 {
             let ref = CGSize(width: 1080, height: 1920)
             return CGPoint(x: (cvX / ref.width - 0.5) * targetSize.width,
-                           y: (cvY / ref.height - 0.5) * targetSize.height)
+                           y: (0.5 - cvY / ref.height) * targetSize.height)
         }
         let inv00 =  (h11*h22 - h12*h21) / det
         let inv01 = -(h01*h22 - h02*h21) / det
@@ -289,7 +308,7 @@ extension TangramPuzzleScene {
         // This is a pragmatic initial mapping; Phase B calibration will refine this.
         let ref = CGSize(width: 1080, height: 1920)
         let tx = (nx / ref.width - 0.5) * targetSize.width
-        let ty = (ny / ref.height - 0.5) * targetSize.height
+        let ty = (0.5 - ny / ref.height) * targetSize.height
         return CGPoint(x: tx, y: ty)
     }
     

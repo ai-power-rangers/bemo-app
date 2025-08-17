@@ -28,6 +28,8 @@ final class TangramCVTuning {
 
     // Mapping controls
     var useHomography: Bool = false
+    var mirrorX: Bool = false
+    var rotate180: Bool = true
 }
 
 

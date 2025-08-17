@@ -104,34 +104,53 @@ final class TangramCVEventsAdapter {
             let classId = cid
 
             var rotationDeg = 0.0
-            var translation: [Double] = [0, 0]
+            var translationNorm: [Double] = [0, 0]
             if let p = poses[NSNumber(value: classId)] {
                 let theta = (p.value(forKey: "theta") as? NSNumber)?.doubleValue ?? 0
-                var tx = (p.value(forKey: "tx") as? NSNumber)?.doubleValue ?? 0
-                var ty = (p.value(forKey: "ty") as? NSNumber)?.doubleValue ?? 0
+                let tx = (p.value(forKey: "tx") as? NSNumber)?.doubleValue ?? 0
+                let ty = (p.value(forKey: "ty") as? NSNumber)?.doubleValue ?? 0
                 rotationDeg = theta * 180.0 / .pi
-                // Heuristic: if tx/ty look normalized (<= 2), scale to reference view size
-                if abs(tx) <= 2.0 && abs(ty) <= 2.0 {
-                    tx *= Double(referenceViewSize.width)
-                    ty *= Double(referenceViewSize.height)
+                // Assume tx,ty may already be normalized; normalize if they look like pixels
+                if abs(tx) > 1.5 || abs(ty) > 1.5 {
+                    translationNorm = [tx / Double(referenceViewSize.width), ty / Double(referenceViewSize.height)]
+                } else {
+                    translationNorm = [tx, ty]
                 }
-                translation = [tx, ty]
             }
 
+            // Prefer refined polygon centroid when available
+            var centroidNorm: [Double]? = nil
+            if let arr = polys[NSNumber(value: classId)], arr.count >= 2 {
+                var sumX = 0.0, sumY = 0.0
+                var count = 0
+                var i = 0
+                while i + 1 < arr.count {
+                    sumX += arr[i].doubleValue
+                    sumY += arr[i+1].doubleValue
+                    count += 1
+                    i += 2
+                }
+                if count > 0 {
+                    centroidNorm = [sumX / Double(count), sumY / Double(count)]
+                }
+            }
+
+            let finalTranslation = centroidNorm ?? translationNorm
+            // Vertices stay normalized (0..1) so downstream can map consistently
             var vertices: [[Double]] = []
             if let arr = polys[NSNumber(value: classId)] {
                 var tmp: [[Double]] = []
                 var i = 0
                 while i + 1 < arr.count {
-                    let x = arr[i].doubleValue * referenceViewSize.width
-                    let y = arr[i+1].doubleValue * referenceViewSize.height
+                    let x = arr[i].doubleValue
+                    let y = arr[i+1].doubleValue
                     tmp.append([x, y])
                     i += 2
                 }
                 vertices = tmp
             }
 
-            entries.append(Entry(classId: classId, rotationDeg: rotationDeg, translation: translation, vertices: vertices))
+            entries.append(Entry(classId: classId, rotationDeg: rotationDeg, translation: finalTranslation, vertices: vertices))
         }
 
         // Group by class and index deterministically by X then Y

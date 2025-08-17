@@ -410,6 +410,7 @@ extension CVService: AVCaptureVideoDataOutputSampleBufferDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             do {
+                pipeline.enablePortraitCropping = true
                 let result = try pipeline.processFrame(
                     pixelBuffer,
                     viewSize: viewSize,
@@ -449,19 +450,8 @@ extension CVService: AVCaptureVideoDataOutputSampleBufferDelegate {
                 
                 self.detectionResultsSubject.send(detectionResult)
                 
-                // Log results
-                if result.detections.isEmpty {
-                    print("📦 No tangrams detected")
-                } else {
-                    print("📦 Detected \(result.detections.count) tangram(s):")
-                    for detection in result.detections {
-                        let className = detection.className
-                        let confidence = detection.confidence
-                        print("   - \(className): \(String(format: "%.1f%%", confidence * 100))")
-                    }
-                }
-                
-                print(String(format: "⚡ %.1f FPS", fps))
+                // Note: noisy per-frame logs disabled to avoid console spam
+                // If needed for debugging, re-enable under a debug flag
             } catch {
                 print("❌ Processing error: \(error)")
             }
