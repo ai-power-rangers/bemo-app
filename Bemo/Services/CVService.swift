@@ -101,6 +101,13 @@ class CVService: NSObject {
         // Perform any necessary initialization
         print("CVService initialized")
     }
+
+    // MARK: - Debug Preview Accessor
+    /// Returns the active AVCaptureSession for preview purposes (read-only)
+    /// Intended for debug overlays. Do not hold a strong reference.
+    func getCaptureSessionForPreview() -> AVCaptureSession? {
+        return captureSession
+    }
     
     // MARK: - Session Management
     

@@ -91,6 +91,22 @@ struct GameHostView: View {
                 }
                 .allowsHitTesting(true)
             }
+
+            // Debug: small camera preview for Tangram game
+            #if DEBUG
+            if viewModel.game.id == "tangram" {
+                CameraPreviewView(cvService: viewModel.cameraCVService)
+                    .frame(width: 160, height: 284) // 9:16 aspect
+                    .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.white.opacity(0.6), lineWidth: 1)
+                    )
+                    .shadow(radius: 4)
+                    .padding()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            }
+            #endif
         }
         .alert(isPresented: $viewModel.showError) {
             Alert(

@@ -82,6 +82,10 @@ class GameHostViewModel {
             tangramObservers.append(contentsOf: [onAppear, onDisappear])
         }
     }
+
+    // MARK: - Exposed Services (read-only)
+    /// Expose CV service for debug overlays (e.g., camera preview)
+    var cameraCVService: CVService { cvService }
     
     private func setupBindings() {
         // Subscribe to CV service recognition events

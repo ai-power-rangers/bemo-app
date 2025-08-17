@@ -40,7 +40,8 @@ final class TangramCVEventsAdapter {
             .sink { [weak self] result in
                 guard let self else { return }
                 let frame = self.buildFrame(from: result)
-                CVEventBus.shared.emitFrame(frame)
+                let stabilized = self.assignIdentity(in: frame)
+                CVEventBus.shared.emitFrame(stabilized)
             }
             .store(in: &cancellables)
     }
@@ -107,9 +108,14 @@ final class TangramCVEventsAdapter {
             var translation: [Double] = [0, 0]
             if let p = poses[NSNumber(value: classId)] {
                 let theta = (p.value(forKey: "theta") as? NSNumber)?.doubleValue ?? 0
-                let tx = (p.value(forKey: "tx") as? NSNumber)?.doubleValue ?? 0
-                let ty = (p.value(forKey: "ty") as? NSNumber)?.doubleValue ?? 0
+                var tx = (p.value(forKey: "tx") as? NSNumber)?.doubleValue ?? 0
+                var ty = (p.value(forKey: "ty") as? NSNumber)?.doubleValue ?? 0
                 rotationDeg = theta * 180.0 / .pi
+                // Heuristic: if tx/ty look normalized (<= 2), scale to reference view size
+                if abs(tx) <= 2.0 && abs(ty) <= 2.0 {
+                    tx *= Double(referenceViewSize.width)
+                    ty *= Double(referenceViewSize.height)
+                }
                 translation = [tx, ty]
             }
 
@@ -156,10 +162,6 @@ final class TangramCVEventsAdapter {
 
     // MARK: - Identity Assignment (Nearest Neighbor per Class)
     private func assignIdentity(in frame: CVFrameEvent) -> CVFrameEvent {
-        // Simplified: disabled for now
-        return frame
-        
-        /*
         // Group by class_id
         var grouped: [Int: [Int]] = [:] // classId -> indices in frame.objects
         for (idx, obj) in frame.objects.enumerated() {
@@ -231,7 +233,6 @@ final class TangramCVEventsAdapter {
         }
 
         return CVFrameEvent(objects: newObjects)
-        */
     }
 
     private func cvName(for classId: Int) -> String {

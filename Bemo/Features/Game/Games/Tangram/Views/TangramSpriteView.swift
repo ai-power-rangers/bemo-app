@@ -41,13 +41,18 @@ struct TangramSpriteView: View {
     
     var body: some View {
         GeometryReader { geometry in
-            // Full-screen SpriteKit scene
-            SpriteView(
-                scene: scene
-            )
-            .ignoresSafeArea()
-            .onAppear {
-                configureScene(size: geometry.size, safeAreaTop: geometry.safeAreaInsets.top)
+            ZStack(alignment: .topTrailing) {
+                // Full-screen SpriteKit scene
+                SpriteView(
+                    scene: scene
+                )
+                .ignoresSafeArea()
+                .onAppear {
+                    configureScene(size: geometry.size, safeAreaTop: geometry.safeAreaInsets.top)
+                }
+
+                // Placeholder for future in-scene mini CV (we currently add preview in host overlay)
+                EmptyView()
             }
         }
         .onChange(of: puzzle) { oldValue, newValue in
