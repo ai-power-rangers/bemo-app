@@ -35,7 +35,7 @@
             parallelizable = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "BD0449812E4275C2003B72D1"
+               BlueprintIdentifier = "6ED041122E510A8F00EC88BE"
                BuildableName = "BemoTests.xctest"
                BlueprintName = "BemoTests"
                ReferencedContainer = "container:Bemo.xcodeproj">

@@ -19,6 +19,10 @@ struct TangramProgressServiceDebugView: View {
     @State private var testResults: String = ""
     @State private var testStatus: TestStatus = .notRun
     
+    // Test the new PuzzleLibraryService filtering
+    @State private var puzzleLibraryService = PuzzleLibraryService()
+    @State private var puzzleFilterTestResults: String = ""
+    
     // DifficultySelectionViewModel testing
     @State private var difficultySelectionViewModel: DifficultySelectionViewModel?
     @State private var viewModelTestStatus: TestStatus = .notRun
@@ -251,6 +255,41 @@ struct TangramProgressServiceDebugView: View {
                                 progressService.debugPrintProgress()
                             }
                             .buttonStyle(.bordered)
+                        }
+                        
+                        // Test new puzzle filtering functionality
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("🧪 New Filtering Tests:")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                            
+                            HStack {
+                                Button("Test Easy Puzzles") {
+                                    testPuzzleFiltering(.easy)
+                                }
+                                .buttonStyle(.bordered)
+                                
+                                Button("Test Medium Puzzles") {
+                                    testPuzzleFiltering(.normal)
+                                }
+                                .buttonStyle(.bordered)
+                                
+                                Button("Test Hard Puzzles") {
+                                    testPuzzleFiltering(.hard)
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                            
+                            if !puzzleFilterTestResults.isEmpty {
+                                ScrollView {
+                                    Text(puzzleFilterTestResults)
+                                        .font(.system(size: 11, family: .monospaced))
+                                        .padding(8)
+                                        .background(Color.gray.opacity(0.1))
+                                        .cornerRadius(4)
+                                }
+                                .frame(maxHeight: 120)
+                            }
                         }
                         
                         // Test Suite Button
@@ -578,6 +617,43 @@ struct TangramProgressServiceDebugView: View {
             
             await captureTestResults()
         }
+    }
+    
+    private func testPuzzleFiltering(_ difficulty: UserPreferences.DifficultySetting) {
+        puzzleFilterTestResults = "Testing puzzlesForDifficulty(\(difficulty))...\n\n"
+        
+        // Test the new filtering method
+        let filteredPuzzles = puzzleLibraryService.puzzlesForDifficulty(difficulty)
+        
+        puzzleFilterTestResults += "✅ Method called successfully!\n"
+        puzzleFilterTestResults += "📊 Results:\n"
+        puzzleFilterTestResults += "   • Total puzzles found: \(filteredPuzzles.count)\n"
+        puzzleFilterTestResults += "   • Difficulty filter: \(difficulty.displayName)\n"
+        puzzleFilterTestResults += "   • Expected star levels: \(difficulty.puzzleLevels)\n\n"
+        
+        if filteredPuzzles.isEmpty {
+            puzzleFilterTestResults += "⚠️  No puzzles found for this difficulty\n"
+            puzzleFilterTestResults += "   This might be expected if no puzzles exist in the database\n\n"
+        } else {
+            puzzleFilterTestResults += "🔍 Sample puzzles (first 5):\n"
+            for (index, puzzle) in filteredPuzzles.prefix(5).enumerated() {
+                puzzleFilterTestResults += "   \(index + 1). ID: \(puzzle.id), Difficulty: \(puzzle.difficulty)⭐, Name: \(puzzle.name)\n"
+            }
+            
+            // Verify filtering worked correctly
+            let correctlyFiltered = filteredPuzzles.allSatisfy { puzzle in
+                difficulty.containsPuzzleLevel(puzzle.difficulty)
+            }
+            
+            let sortedByID = filteredPuzzles.sorted { $0.id < $1.id } == filteredPuzzles
+            
+            puzzleFilterTestResults += "\n✨ Validation:\n"
+            puzzleFilterTestResults += "   • All puzzles match difficulty: \(correctlyFiltered ? "✅" : "❌")\n"
+            puzzleFilterTestResults += "   • Sorted by ID: \(sortedByID ? "✅" : "❌")\n"
+        }
+        
+        print("🧪 Puzzle filtering test results:")
+        print(puzzleFilterTestResults)
     }
     
     private func captureTestResults() async {

@@ -112,6 +112,41 @@ class PuzzleLibraryService {
         return filtered.sorted { $0.name < $1.name }
     }
     
+    /// Get puzzles for a specific difficulty band, sorted by database ID for map progression
+    /// - Parameter difficulty: The difficulty setting (easy/normal/hard)
+    /// - Returns: Puzzles filtered by difficulty and sorted by ID for sequential unlock
+    func puzzlesForDifficulty(_ difficulty: UserPreferences.DifficultySetting) -> [GamePuzzleData] {
+        return availablePuzzles
+            .filter { puzzle in 
+                difficulty.containsPuzzleLevel(puzzle.difficulty)
+            }
+            .sorted { $0.id < $1.id } // Sort by Supabase ID for map order
+    }
+    
+    /// Get puzzles sorted by different criteria
+    /// - Parameter sortBy: The sorting criteria to use
+    /// - Returns: All puzzles sorted by the specified criteria
+    func sortedPuzzles(by sortBy: PuzzleSortCriteria) -> [GamePuzzleData] {
+        switch sortBy {
+        case .id:
+            return availablePuzzles.sorted { $0.id < $1.id }
+        case .name:
+            return availablePuzzles.sorted { $0.name < $1.name }
+        case .difficulty:
+            return availablePuzzles.sorted { $0.difficulty < $1.difficulty }
+        case .category:
+            return availablePuzzles.sorted { $0.category < $1.category }
+        }
+    }
+    
+    /// Sorting criteria for puzzle lists
+    enum PuzzleSortCriteria {
+        case id         // Sort by database ID
+        case name       // Sort alphabetically by name
+        case difficulty // Sort by star difficulty (1-5)
+        case category   // Sort alphabetically by category
+    }
+    
     // MARK: - Thumbnail Management
     
     func thumbnailImage(for puzzle: GamePuzzleData) -> Image? {
