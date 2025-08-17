@@ -24,6 +24,11 @@ struct TangramProgressServiceDebugView: View {
     @State private var puzzleFilterTestResults: String = ""
     @State private var usingMockData: Bool = false
     
+    // Test TangramMapViewModel
+    @State private var mapViewModel: TangramMapViewModel?
+    @State private var mapTestResults: String = ""
+    @State private var selectedMapDifficulty: UserPreferences.DifficultySetting = .easy
+    
     // DifficultySelectionViewModel testing
     @State private var difficultySelectionViewModel: DifficultySelectionViewModel?
     @State private var viewModelTestStatus: TestStatus = .notRun
@@ -340,6 +345,78 @@ struct TangramProgressServiceDebugView: View {
                             }
                         }
                         
+                        // Test TangramMapViewModel
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("🗺️ Map ViewModel Tests:")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                            
+                            // Difficulty selector for map testing
+                            HStack {
+                                Text("Test Difficulty:")
+                                    .font(.caption)
+                                
+                                Picker("Map Difficulty", selection: $selectedMapDifficulty) {
+                                    ForEach([UserPreferences.DifficultySetting.easy, .normal, .hard], id: \.self) { difficulty in
+                                        Text(difficulty.displayName).tag(difficulty)
+                                    }
+                                }
+                                .pickerStyle(SegmentedPickerStyle())
+                            }
+                            
+                            HStack {
+                                Button("Create MapViewModel") {
+                                    createMapViewModel()
+                                }
+                                .buttonStyle(.bordered)
+                                .foregroundColor(.blue)
+                                
+                                Button("Test Map Logic") {
+                                    testMapViewModel()
+                                }
+                                .buttonStyle(.bordered)
+                                .foregroundColor(.green)
+                                .disabled(mapViewModel == nil)
+                                
+                                Button("Simulate Completion") {
+                                    simulatePuzzleCompletion()
+                                }
+                                .buttonStyle(.bordered)
+                                .foregroundColor(.orange)
+                                .disabled(mapViewModel == nil)
+                            }
+                            
+                            HStack {
+                                Button("Reset Child Progress") {
+                                    resetCurrentChildProgress()
+                                }
+                                .buttonStyle(.bordered)
+                                .foregroundColor(.red)
+                                
+                                Button("Refresh ViewModel") {
+                                    mapViewModel?.refresh()
+                                    mapTestResults += "\n🔄 ViewModel refreshed manually\n"
+                                }
+                                .buttonStyle(.bordered)
+                                .foregroundColor(.purple)
+                                .disabled(mapViewModel == nil)
+                            }
+                            
+                            if !mapTestResults.isEmpty {
+                                ScrollView {
+                                    Text(mapTestResults)
+                                        .font(.system(size: 11).monospaced())
+                                        .padding(8)
+                                        .background(Color.gray.opacity(0.1))
+                                        .cornerRadius(4)
+                                }
+                                .frame(maxHeight: 150)
+                            }
+                        }
+                        .padding()
+                        .background(Color.purple.opacity(0.1))
+                        .cornerRadius(8)
+                        
                         // Test Suite Button
                         HStack {
                             Button("🧪 Run Test Suite") {
@@ -368,26 +445,27 @@ struct TangramProgressServiceDebugView: View {
                                 .font(.headline)
                             
                             ForEach(Array(progressService.getAllProgressData().keys).sorted(), id: \.self) { childId in
-                                let childProgress = progressService.getAllProgressData()[childId]!
-                                HStack {
-                                    Text(childId)
-                                        .font(.caption)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    
-                                    Text("Easy: \(childProgress.getCompletedCount(for: UserPreferences.DifficultySetting.easy))")
+                                if let childProgress = progressService.getAllProgressData()[childId] {
+                                    HStack {
+                                        Text(childId)
+                                            .font(.caption)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        
+                                        Text("Easy: \(childProgress.getCompletedCount(for: UserPreferences.DifficultySetting.easy))")
+                                            .font(.caption2)
+                                        Text("Med: \(childProgress.getCompletedCount(for: UserPreferences.DifficultySetting.normal))")
+                                            .font(.caption2)
+                                        Text("Hard: \(childProgress.getCompletedCount(for: UserPreferences.DifficultySetting.hard))")
+                                            .font(.caption2)
+                                        
+                                        Button("Select") {
+                                            selectedChildId = childId
+                                        }
+                                        .buttonStyle(.borderless)
                                         .font(.caption2)
-                                    Text("Med: \(childProgress.getCompletedCount(for: UserPreferences.DifficultySetting.normal))")
-                                        .font(.caption2)
-                                    Text("Hard: \(childProgress.getCompletedCount(for: UserPreferences.DifficultySetting.hard))")
-                                        .font(.caption2)
-                                    
-                                    Button("Select") {
-                                        selectedChildId = childId
                                     }
-                                    .buttonStyle(.borderless)
-                                    .font(.caption2)
+                                    .padding(.vertical, 2)
                                 }
-                                .padding(.vertical, 2)
                             }
                         }
                         .padding()
@@ -753,6 +831,176 @@ struct TangramProgressServiceDebugView: View {
         
         print("🧪 Puzzle filtering test results:")
         print(puzzleFilterTestResults)
+    }
+    
+    // MARK: - TangramMapViewModel Testing
+    
+    private func createMapViewModel() {
+        mapTestResults = "Creating TangramMapViewModel for \(selectedMapDifficulty.displayName)...\n\n"
+        
+        // Ensure we have mock data
+        if puzzleLibraryService.availablePuzzles.isEmpty {
+            loadMockPuzzles()
+            mapTestResults += "📚 Loaded mock data first\n\n"
+        }
+        
+        // Create the map view model
+        mapViewModel = TangramMapViewModel(
+            difficulty: selectedMapDifficulty,
+            childProfileId: selectedChildId,
+            puzzleLibraryService: puzzleLibraryService,
+            progressService: progressService,
+            onPuzzleSelected: { puzzle in
+                print("🎯 Puzzle selected: \(puzzle.name)")
+            },
+            onBackToDifficulty: {
+                print("🔙 Back to difficulty selection")
+            }
+        )
+        
+        mapTestResults += "✅ TangramMapViewModel created successfully!\n"
+        mapTestResults += "📊 Initial state:\n"
+        mapTestResults += "   • Difficulty: \(selectedMapDifficulty.displayName)\n"
+        mapTestResults += "   • Total puzzles: \(mapViewModel?.totalCount ?? 0)\n"
+        mapTestResults += "   • Unlocked puzzles: \(mapViewModel?.unlockedPuzzleIds.count ?? 0)\n"
+        mapTestResults += "   • Completed puzzles: \(mapViewModel?.completedCount ?? 0)\n"
+        mapTestResults += "   • Current puzzle index: \(mapViewModel?.currentPuzzleIndex ?? 0)\n"
+        
+        if let nextPuzzle = mapViewModel?.nextPuzzle {
+            mapTestResults += "   • Next puzzle: \(nextPuzzle.name)\n"
+        }
+        
+        mapTestResults += "\n🎯 Ready for testing!\n"
+        print("🧪 TangramMapViewModel created and initialized")
+    }
+    
+    private func testMapViewModel() {
+        guard let viewModel = mapViewModel else {
+            mapTestResults = "❌ No MapViewModel created. Click 'Create MapViewModel' first.\n"
+            return
+        }
+        
+        mapTestResults = "Testing TangramMapViewModel functionality...\n\n"
+        
+        // Test basic properties
+        mapTestResults += "📊 Map State:\n"
+        mapTestResults += "   • Difficulty: \(viewModel.difficulty.displayName)\n"
+        mapTestResults += "   • Total puzzles: \(viewModel.totalCount)\n"
+        mapTestResults += "   • Unlocked puzzles: \(viewModel.unlockedPuzzleIds.count)\n"
+        mapTestResults += "   • Completed puzzles: \(viewModel.completedCount)\n"
+        mapTestResults += "   • Completion %: \(Int(viewModel.completionPercentage * 100))%\n"
+        mapTestResults += "   • All completed: \(viewModel.isAllCompleted ? "Yes" : "No")\n\n"
+        
+        // Test puzzle node states
+        mapTestResults += "🗺️ Puzzle Node States:\n"
+        for (index, puzzle) in viewModel.puzzles.prefix(5).enumerated() {
+            let state = viewModel.getNodeState(for: puzzle)
+            let canSelect = viewModel.canSelectPuzzle(puzzle)
+            let isCurrent = viewModel.isCurrentPuzzle(puzzle)
+            let isCompleted = viewModel.isCompleted(puzzle.id)
+            
+            mapTestResults += "   \(index + 1). \(puzzle.name):\n"
+            mapTestResults += "      • State: \(state)\n"
+            mapTestResults += "      • Can select: \(canSelect ? "✅" : "❌")\n"
+            mapTestResults += "      • Is current: \(isCurrent ? "🎯" : "⚪")\n"
+            mapTestResults += "      • Is completed: \(isCompleted ? "✅" : "❌")\n"
+        }
+        
+        if viewModel.puzzles.count > 5 {
+            mapTestResults += "   ... and \(viewModel.puzzles.count - 5) more puzzles\n"
+        }
+        
+        // Test puzzle selection
+        mapTestResults += "\n🎮 Testing Puzzle Selection:\n"
+        if let nextPuzzle = viewModel.nextPuzzle {
+            if viewModel.canSelectPuzzle(nextPuzzle) {
+                mapTestResults += "   ✅ Can select next puzzle: \(nextPuzzle.name)\n"
+                mapTestResults += "   🎯 This would trigger: onPuzzleSelected(\(nextPuzzle.name))\n"
+            } else {
+                mapTestResults += "   ❌ Cannot select next puzzle: \(nextPuzzle.name)\n"
+            }
+        } else {
+            mapTestResults += "   🏁 No next puzzle - all completed or no puzzles available\n"
+        }
+        
+        mapTestResults += "\n✅ TangramMapViewModel test completed successfully!\n"
+        print("🧪 TangramMapViewModel test completed")
+    }
+    
+    private func simulatePuzzleCompletion() {
+        guard let viewModel = mapViewModel else {
+            mapTestResults = "❌ No MapViewModel created. Click 'Create MapViewModel' first.\n"
+            return
+        }
+        
+        guard let nextPuzzle = viewModel.nextPuzzle else {
+            mapTestResults += "\n🏁 No more puzzles to complete!\n"
+            return
+        }
+        
+        mapTestResults += "\n🎮 Simulating completion of: \(nextPuzzle.name) (ID: \(nextPuzzle.id))\n"
+        
+        // Debug: Show state before completion
+        let beforeCompleted = viewModel.completedCount
+        let beforeUnlocked = viewModel.unlockedPuzzleIds.count
+        mapTestResults += "🔍 BEFORE completion:\n"
+        mapTestResults += "   • Completed: \(beforeCompleted), Unlocked: \(beforeUnlocked)\n"
+        mapTestResults += "   • Unlocked IDs: \(Array(viewModel.unlockedPuzzleIds).sorted())\n"
+        
+        // Get progress before marking as completed
+        let progressBefore = progressService.getProgress(for: selectedChildId)
+        let completedBefore = progressBefore.getCompletedPuzzles(for: selectedMapDifficulty)
+        mapTestResults += "   • Progress service completed before: \(completedBefore)\n"
+        
+        // Mark the puzzle as completed in the progress service
+        progressService.markPuzzleCompleted(
+            childId: selectedChildId,
+            puzzleId: nextPuzzle.id,
+            difficulty: selectedMapDifficulty
+        )
+        
+        // Debug: Check progress service after marking
+        let progressAfter = progressService.getProgress(for: selectedChildId)
+        let completedAfter = progressAfter.getCompletedPuzzles(for: selectedMapDifficulty)
+        mapTestResults += "🔍 AFTER marking completed:\n"
+        mapTestResults += "   • Progress service completed after: \(completedAfter)\n"
+        
+        // Refresh the view model to update state
+        viewModel.refresh()
+        
+        // Debug: Show state after refresh
+        mapTestResults += "🔍 AFTER viewModel.refresh():\n"
+        mapTestResults += "   • Completed: \(viewModel.completedCount), Unlocked: \(viewModel.unlockedPuzzleIds.count)\n"
+        mapTestResults += "   • Unlocked IDs: \(Array(viewModel.unlockedPuzzleIds).sorted())\n"
+        
+        mapTestResults += "✅ Puzzle marked as completed!\n"
+        mapTestResults += "📊 Final state:\n"
+        mapTestResults += "   • Completed puzzles: \(viewModel.completedCount)\n"
+        mapTestResults += "   • Completion %: \(Int(viewModel.completionPercentage * 100))%\n"
+        mapTestResults += "   • Current puzzle index: \(viewModel.currentPuzzleIndex)\n"
+        
+        if let newNextPuzzle = viewModel.nextPuzzle {
+            mapTestResults += "   • New next puzzle: \(newNextPuzzle.name)\n"
+        } else {
+            mapTestResults += "   🏁 All puzzles completed for this difficulty!\n"
+        }
+        
+        print("🧪 Simulated puzzle completion: \(nextPuzzle.name)")
+    }
+    
+    private func resetCurrentChildProgress() {
+        // Reset progress for the current child
+        let emptyProgress = TangramProgress(childProfileId: selectedChildId)
+        progressService.updateProgress(emptyProgress)
+        
+        // Refresh the map view model if it exists
+        mapViewModel?.refresh()
+        
+        mapTestResults += "\n🔄 Progress reset for child: \(selectedChildId)\n"
+        mapTestResults += "   • All puzzles marked as incomplete\n"
+        mapTestResults += "   • Only first puzzle should be unlocked now\n"
+        
+        print("🧪 Reset progress for child: \(selectedChildId)")
     }
     
     private func captureTestResults() async {
