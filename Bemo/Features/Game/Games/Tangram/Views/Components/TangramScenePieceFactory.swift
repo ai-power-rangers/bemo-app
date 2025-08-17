@@ -87,7 +87,8 @@ extension TangramPuzzleScene {
             piece.markAsDetected(at: piece.position, rotation: piece.zRotation)
             
             availablePieces.append(piece)
-            physicalWorldSection.addChild(piece)
+            // CV-driven mode: Don't add pieces to physical world section
+            // physicalWorldSection.addChild(piece)
         }
     }
     

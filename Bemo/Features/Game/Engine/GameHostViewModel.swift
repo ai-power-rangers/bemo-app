@@ -64,6 +64,10 @@ class GameHostViewModel {
         
         // Defer game view creation until after initialization
         defer {
+            // Pass CVService to Tangram game if applicable
+            if let tangramGame = game as? TangramGame {
+                tangramGame.setCVService(cvService)
+            }
             self.gameView = game.makeGameView(delegate: self)
         }
         

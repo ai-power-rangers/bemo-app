@@ -22,6 +22,8 @@ struct TangramSpriteView: View {
     let isPuzzleComplete: Bool
     let showHints: Bool
     let currentHint: TangramHintEngine.HintData?
+    let cvOverlayImage: UIImage?
+    let cvFPS: Double
     let onPieceCompleted: (String, Bool) -> Void  // pieceType and isFlipped
     let onPuzzleCompleted: () -> Void
     let onBackPressed: () -> Void
@@ -39,13 +41,32 @@ struct TangramSpriteView: View {
     
     var body: some View {
         GeometryReader { geometry in
-            // Full-screen SpriteKit scene
-            SpriteView(
-                scene: scene
-            )
-            .ignoresSafeArea()
-            .onAppear {
-                configureScene(size: geometry.size, safeAreaTop: geometry.safeAreaInsets.top)
+            ZStack {
+                // Main SpriteKit scene showing puzzle outline and CV-recognized pieces
+                SpriteView(
+                    scene: scene
+                )
+                .ignoresSafeArea()
+                .onAppear {
+                    configureScene(size: geometry.size, safeAreaTop: geometry.safeAreaInsets.top)
+                }
+                
+                // FPS overlay (top-right corner)
+                VStack {
+                    HStack {
+                        Spacer()
+                        if cvFPS > 0 {
+                            Text(String(format: "%.1f FPS", cvFPS))
+                                .font(.caption)
+                                .foregroundColor(.white)
+                                .padding(8)
+                                .background(Color.black.opacity(0.5))
+                                .cornerRadius(4)
+                        }
+                    }
+                    Spacer()
+                }
+                .padding()
             }
         }
         .onChange(of: puzzle) { oldValue, newValue in
@@ -81,6 +102,12 @@ struct TangramSpriteView: View {
                 }
             }
         }
+        .onChange(of: placedPieces) { _, newPieces in
+            // Update scene with CV-detected pieces
+            if let tangramScene = scene as? TangramPuzzleScene {
+                tangramScene.updateFromCVPieces(newPieces)
+            }
+        }
     }
     
     private func configureScene(size: CGSize, safeAreaTop: CGFloat) {
@@ -90,6 +117,7 @@ struct TangramSpriteView: View {
         tangramScene.size = size
         tangramScene.scaleMode = .resizeFill
         tangramScene.safeAreaTop = safeAreaTop  // Pass safe area to scene
+        tangramScene.canvasSize = CGSize(width: 1080, height: 1920) // Match CVService viewSize
         tangramScene.puzzle = puzzle
         tangramScene.difficultySetting = difficultySetting
         tangramScene.onPieceCompleted = onPieceCompleted
