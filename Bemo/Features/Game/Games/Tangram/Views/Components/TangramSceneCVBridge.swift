@@ -90,85 +90,15 @@ extension TangramPuzzleScene {
             }
         }
         
-        // If we have an established anchor mapping, render non-validated pieces in target-space
-        if let mapping = userData?["mainGroupMapping"] as? AnchorMapping,
-           let anchorId = userData?["mainAnchorPieceId"] as? String,
-           let anchorNode = availablePieces.first(where: { $0.name == anchorId }),
-           let container = targetSection.childNode(withName: "puzzleContainer") {
-            // Hide the generic physical mirror to avoid duplicates
-            topMirrorContent?.isHidden = true
-            let anchorScenePos = physicalWorldSection.convert(anchorNode.position, to: self)
-            var usedOverlayNames: Set<String> = []
-            for piece in availablePieces {
-                guard let pid = piece.name, let ptype = piece.pieceType else { continue }
-                // Skip pieces that have already validated (they are shown via filled silhouette)
-                if piece.userData?["validatedTargetId"] != nil {
-                    if let existing = container.childNode(withName: "mapped_\(pid)") { existing.removeFromParent() }
-                    continue
-                }
-                // Map physical scene pose → SK target space using committed mapping
-                let scenePos = physicalWorldSection.convert(piece.position, to: self)
-                let mapped = mappingService.mapPieceToTargetSpace(
-                    piecePositionScene: scenePos,
-                    pieceRotation: piece.zRotation,
-                    pieceIsFlipped: piece.isFlipped,
-                    mapping: mapping,
-                    anchorPositionScene: anchorScenePos
-                )
-                // Convert SK target space → puzzleContainer local coordinates
-                let localPos: CGPoint = {
-                    // Place directly at mapped SK position relative to the silhouette container (same math as silhouettes)
-                    let x = (mapped.positionSK.x - puzzleBoundsCenterSK.x) * targetDisplayScale
-                    let y = (mapped.positionSK.y - puzzleBoundsCenterSK.y) * targetDisplayScale
-                    return CGPoint(x: x, y: y)
-                }()
-                let nodeName = "mapped_\(pid)"
-                var ghost = container.childNode(withName: nodeName) as? SKShapeNode
-                if ghost == nil {
-                    ghost = createGhostPiece(pieceType: ptype, at: localPos, rotation: mapped.rotationSK)
-                    ghost?.name = nodeName
-                    // Slightly lighter than validated fill
-                    ghost?.alpha = 0.25
-                    container.addChild(ghost!)
-                } else {
-                    ghost?.position = localPos
-                    ghost?.zRotation = mapped.rotationSK
-                }
-                // Apply flip parity in container
-                if let g = ghost {
-                    // Ghost paths are centroid-anchored; apply flip by xScale sign only
-                    g.xScale = (mapped.isFlipped ? -abs(g.xScale) : abs(g.xScale))
-                    g.yScale = abs(g.yScale)
-                }
-                usedOverlayNames.insert(nodeName)
-            }
-            // Clean up overlays for pieces no longer needed
-            container.enumerateChildNodes(withName: "mapped_*") { node, _ in
-                if let name = node.name, !usedOverlayNames.contains(name) { node.removeFromParent() }
-            }
-            return
-        } else {
-            // No mapping yet → show physical mirror and remove any mapped overlays
-            topMirrorContent?.isHidden = false
-            if let container = targetSection.childNode(withName: "puzzleContainer") {
-                container.enumerateChildNodes(withName: "mapped_*") { node, _ in node.removeFromParent() }
-            }
-        }
+        // Disable anchor/mapped overlay path for now; always show CV mirror
+        topMirrorContent?.isHidden = false
 
         // Mirror CV-detected pieces directly into top panel
         let mirror = topMirrorContent!
         let topSize = CGSize(width: targetBounds.width, height: targetBounds.height)
         guard topSize.width > 0, topSize.height > 0 else { return }
-        // Use homography/scale from frame if provided to map coordinates precisely
-        if frame.scale > 0 {
-            // Simple uniform scaling by provided scale into target panel width
-            // Future: apply full homography matrix if needed for perspective correction
-            let ref = CGSize(width: 1080, height: 1920)
-            let sx = topSize.width / ref.width
-            let sy = topSize.height / ref.height
-            let uniform = min(sx, sy)
-            topMirrorContent.setScale(uniform)
-        }
+        // Do not scale container; map CV points explicitly using homography → target coords
+        topMirrorContent.setScale(1.0)
         topMirrorContent.position = .zero
         for object in frame.objects {
             let pieceId = pieceIdFromCVName(object.name)
@@ -197,17 +127,38 @@ extension TangramPuzzleScene {
             }
             guard let g = ghost else { continue }
 
-            // Position mapping phys → scene → targetSection → scaled into mirror
-            let pos = CGPoint(
-                x: object.pose.translation.first ?? 0,
-                y: object.pose.translation.dropFirst().first ?? 0
-            )
-            g.position = pos
+            // Map CV pixel coords; use simple mapping unless tuning enables homography
+            let px = CGFloat(object.pose.translation.first ?? 0)
+            let py = CGFloat(object.pose.translation.dropFirst().first ?? 0)
+            let mapped: CGPoint = {
+                if TangramCVTuning.shared.useHomography {
+                    return mapCVToTarget(cvX: px, cvY: py, frame: frame, targetSize: topSize)
+                } else {
+                    let ref = CGSize(width: 1080, height: 1920)
+                    return CGPoint(x: (px / ref.width - 0.5) * topSize.width,
+                                   y: (py / ref.height - 0.5) * topSize.height)
+                }
+            }()
+            let now = CACurrentMediaTime()
+
+            // Smoothing + threshold gating
+            let last = cvSmoothedPose[pieceId]?.pos ?? mapped
+            let lastRot = cvSmoothedPose[pieceId]?.rot ?? 0
+            let rotRad = CGFloat(object.pose.rotationDegrees) * .pi / 180
+            let alpha = cvRenderConfig.smoothingAlpha
+            let blendedPos = CGPoint(x: last.x * (1 - alpha) + mapped.x * alpha,
+                                     y: last.y * (1 - alpha) + mapped.y * alpha)
+            let blendedRot = lastRot * (1 - alpha) + rotRad * alpha
+            let moved = hypot(blendedPos.x - g.position.x, blendedPos.y - g.position.y) > cvRenderConfig.positionThreshold
+            let rotChanged = abs((blendedRot - g.zRotation) * 180 / .pi) > cvRenderConfig.rotationThresholdDeg
+            if moved { g.position = blendedPos }
+            if rotChanged { g.zRotation = blendedRot }
+            cvSmoothedPose[pieceId] = (blendedPos, blendedRot)
+            cvLastSeenAt[pieceId] = now
+            g.isHidden = false
             g.setScale(1.0)
-            // Apply flip parity with the physical piece
-            g.xScale = isFlippedPiece ? -abs(g.xScale) : abs(g.xScale)
-            // Rotation
-            g.zRotation = CGFloat(object.pose.rotationDegrees) * .pi / 180
+            // Flip parity disabled until we detect flip
+            g.xScale = abs(g.xScale)
 
             // Base visual at 10–20% (use 0.2 = 20% for tracked mirror)
             var fillAlpha: CGFloat = 0.2
@@ -246,29 +197,86 @@ extension TangramPuzzleScene {
                 }
             }
             // Enforce canonical shape size for each piece type; do not use distorted vertices
-            if let shapeNode = g as? SKShapeNode {
-                let canonical = TangramGameGeometry.normalizedVertices(for: resolvedType)
-                let scaled = TangramGameGeometry.scaleVertices(canonical, by: TangramGameConstants.visualScale)
-                let centroid = TangramGameGeometry.centerOfVertices(scaled)
-                let path = CGMutablePath()
-                if let first = scaled.first {
-                    path.move(to: CGPoint(x: first.x - centroid.x, y: first.y - centroid.y))
-                    for v in scaled.dropFirst() {
-                        path.addLine(to: CGPoint(x: v.x - centroid.x, y: v.y - centroid.y))
-                    }
-                    path.closeSubpath()
+            let shapeNode = g
+            let canonical = TangramGameGeometry.normalizedVertices(for: resolvedType)
+            let scaled = TangramGameGeometry.scaleVertices(canonical, by: TangramGameConstants.visualScale)
+            let centroid = TangramGameGeometry.centerOfVertices(scaled)
+            let path = CGMutablePath()
+            if let first = scaled.first {
+                path.move(to: CGPoint(x: first.x - centroid.x, y: first.y - centroid.y))
+                for v in scaled.dropFirst() {
+                    path.addLine(to: CGPoint(x: v.x - centroid.x, y: v.y - centroid.y))
                 }
-                shapeNode.path = path
+                path.closeSubpath()
             }
+            shapeNode.path = path
             // Apply color matching the piece type with lower fill
             g.fillColor = TangramColors.Sprite.uiColor(for: resolvedType).withAlphaComponent(fillAlpha)
             g.strokeColor = TangramColors.Sprite.uiColor(for: resolvedType).withAlphaComponent(0.5)
             g.lineWidth = 1.0
+        }
 
-            // No checkmark overlays; fillAlpha is the only orientation feedback here
+        // Hide ghosts that have not been seen recently
+        let now = CACurrentMediaTime()
+        mirror.enumerateChildNodes(withName: "mirror_*") { [weak self] node, _ in
+            guard let strongSelf = self else { return }
+            let id = String(node.name?.dropFirst(7) ?? "")
+            if let last = strongSelf.cvLastSeenAt[id] {
+                node.isHidden = (now - last) > strongSelf.cvRenderConfig.lingerSeconds
+            } else {
+                node.isHidden = true
+            }
         }
 
         // Mini CV display removed; no dedicated per-piece CV rendering below
+    }
+
+    // MARK: - Homography Mapping
+    private func mapCVToTarget(cvX: CGFloat, cvY: CGFloat, frame: CVFrameEvent, targetSize: CGSize) -> CGPoint {
+        // Homography: maps from plane↔camera. We treat input as camera pixels in reference space and apply inverse of H.
+        // Frame.homography is 3x3 in row-major order. We’ll compute inverse and map to plane coordinates, then center/scale into target.
+        let H = frame.homography
+        guard H.count == 3, H[0].count == 3 else {
+            // Fallback to simple reference mapping
+            let ref = CGSize(width: 1080, height: 1920)
+            return CGPoint(x: (cvX / ref.width - 0.5) * targetSize.width,
+                           y: (cvY / ref.height - 0.5) * targetSize.height)
+        }
+        // Build matrix and inverse
+        let h00 = H[0][0], h01 = H[0][1], h02 = H[0][2]
+        let h10 = H[1][0], h11 = H[1][1], h12 = H[1][2]
+        let h20 = H[2][0], h21 = H[2][1], h22 = H[2][2]
+
+        let det = h00*(h11*h22 - h12*h21) - h01*(h10*h22 - h12*h20) + h02*(h10*h21 - h11*h20)
+        if abs(det) < 1e-9 {
+            let ref = CGSize(width: 1080, height: 1920)
+            return CGPoint(x: (cvX / ref.width - 0.5) * targetSize.width,
+                           y: (cvY / ref.height - 0.5) * targetSize.height)
+        }
+        let inv00 =  (h11*h22 - h12*h21) / det
+        let inv01 = -(h01*h22 - h02*h21) / det
+        let inv02 =  (h01*h12 - h02*h11) / det
+        let inv10 = -(h10*h22 - h12*h20) / det
+        let inv11 =  (h00*h22 - h02*h20) / det
+        let inv12 = -(h00*h12 - h02*h10) / det
+        let inv20 =  (h10*h21 - h11*h20) / det
+        let inv21 = -(h00*h21 - h01*h20) / det
+        let inv22 =  (h00*h11 - h01*h10) / det
+
+        // Apply inverse homography to camera point (cvX, cvY, 1)
+        let x = Double(cvX), y = Double(cvY)
+        let X = inv00*x + inv01*y + inv02*1.0
+        let Y = inv10*x + inv11*y + inv12*1.0
+        let W = inv20*x + inv21*y + inv22*1.0
+        let nx = CGFloat(X / W)
+        let ny = CGFloat(Y / W)
+
+        // Normalize plane coords into target section (centered). We assume plane ranges are similar to reference pixels; apply a simple recentring.
+        // This is a pragmatic initial mapping; Phase B calibration will refine this.
+        let ref = CGSize(width: 1080, height: 1920)
+        let tx = (nx / ref.width - 0.5) * targetSize.width
+        let ty = (ny / ref.height - 0.5) * targetSize.height
+        return CGPoint(x: tx, y: ty)
     }
     
     // updateCVPiece removed with mini display
@@ -352,74 +360,7 @@ extension TangramPuzzleScene {
         }
     }
     
-    // MARK: - CV Frame Emission
-    
-    func emitCVFrameUpdate() {
-        // Mini display disabled; still emit frame for engine processing
-        var cvObjects: [CVPieceEvent] = []
-        
-        for piece in availablePieces {
-            guard let pieceId = piece.name,
-                  let state = pieceStates[pieceId] else { continue }
-            
-            // Only emit pieces that have been moved or placed
-            switch state.state {
-            case .moved, .placed, .validating, .validated, .invalid:
-                // Create CV event with required fields
-                let pose = CVPieceEvent.Pose(
-                    rotationDegrees: piece.zRotation * 180 / .pi,
-                    translation: [Double(piece.position.x), Double(piece.position.y)]
-                )
-                
-                let vertices = calculateVertices(for: piece)
-                let classId = classIdFromPieceType(piece.pieceType ?? .square)
-                
-                let cvEvent = CVPieceEvent(
-                    name: "cv_\(pieceId)",
-                    classId: classId,
-                    pose: pose,
-                    vertices: vertices
-                )
-                cvObjects.append(cvEvent)
-            default:
-                break
-            }
-        }
-        
-        // Create frame with objects
-        let frame = CVFrameEvent(objects: cvObjects)
-        
-        eventBus.emitFrame(frame)
-    }
-    
     // MARK: - Helper Methods
-    
-    private func calculateVertices(for piece: PuzzlePieceNode) -> [[Double]] {
-        guard let pieceType = piece.pieceType else { return [] }
-        
-        // Get normalized vertices
-        let vertices = TangramGameGeometry.normalizedVertices(for: pieceType)
-        
-        // Apply piece transform and scale
-        let transformed = vertices.map { vertex in
-            let scaled = CGPoint(x: vertex.x * TangramGameConstants.visualScale, y: vertex.y * TangramGameConstants.visualScale)
-            let rotated = scaled.applying(CGAffineTransform(rotationAngle: piece.zRotation))
-            let translated = CGPoint(x: rotated.x + piece.position.x, y: rotated.y + piece.position.y)
-            return [Double(translated.x), Double(translated.y)]
-        }
-        
-        return transformed
-    }
-    
-    private func classIdFromPieceType(_ type: TangramPieceType) -> Int {
-        switch type {
-        case .smallTriangle1, .smallTriangle2: return 0
-        case .mediumTriangle: return 1
-        case .largeTriangle1, .largeTriangle2: return 2
-        case .square: return 3
-        case .parallelogram: return 4
-        }
-    }
     
     func pieceIdFromCVName(_ cvName: String) -> String {
         // Convert CV piece name to standard piece ID

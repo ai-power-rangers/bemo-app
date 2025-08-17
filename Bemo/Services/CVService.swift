@@ -178,7 +178,11 @@ class CVService: NSObject {
                 
                 // Configure connection for front camera
                 if let connection = videoOutput?.connection(with: .video) {
-                    connection.videoOrientation = .portrait
+                    if #available(iOS 17.0, *) {
+                        connection.videoRotationAngle = 90 // portrait
+                    } else {
+                        connection.videoOrientation = .portrait
+                    }
                     // Mirror front camera for natural selfie view
                     connection.isVideoMirrored = true
                     print("🪞 Front camera mirroring enabled")
@@ -396,61 +400,64 @@ extension CVService: AVCaptureVideoDataOutputSampleBufferDelegate {
         // Get a reasonable view size (we're not displaying, so use a standard size)
         let viewSize = CGSize(width: 1080, height: 1920) // Portrait iPhone size
         
-        do {
-            let result = try pipeline.processFrame(
-                pixelBuffer,
-                viewSize: viewSize,
-                confidenceThreshold: 0.6,
-                options: options
-            )
-            
-            let processingTime = (CACurrentMediaTime() - startTime) * 1000
-            let fps = 1000.0 / processingTime
-            
-            // Convert detections to recognized pieces
-            let recognizedPieces = convertDetectionsToRecognizedPieces(result.detections)
-            
-            // Publish recognized pieces
-            if !recognizedPieces.isEmpty {
-                recognizedPiecesSubject.send(recognizedPieces)
-            }
-            
-            // Create overlay image if available
-            var overlayImage: UIImage?
-            if let combinedOverlay = result.combinedOverlay {
-                let ciImage = CIImage(cvPixelBuffer: combinedOverlay)
-                let context = CIContext()
-                if let cgImage = context.createCGImage(ciImage, from: ciImage.extent) {
-                    overlayImage = UIImage(cgImage: cgImage)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            do {
+                let result = try pipeline.processFrame(
+                    pixelBuffer,
+                    viewSize: viewSize,
+                    confidenceThreshold: 0.6,
+                    options: options
+                )
+                
+                let processingTime = (CACurrentMediaTime() - startTime) * 1000
+                let fps = 1000.0 / processingTime
+                
+                // Convert detections to recognized pieces
+                let recognizedPieces = self.convertDetectionsToRecognizedPieces(result.detections)
+                
+                // Publish recognized pieces
+                if !recognizedPieces.isEmpty {
+                    self.recognizedPiecesSubject.send(recognizedPieces)
                 }
-            }
-            
-            // Publish full detection results
-            let detectionResult = CVDetectionResult(
-                detections: result.detections,
-                tangramResult: result.tangramResult,
-                overlayImage: overlayImage,
-                processingTimeMs: processingTime,
-                fps: fps
-            )
-            
-            detectionResultsSubject.send(detectionResult)
-            
-            // Log results
-            if result.detections.isEmpty {
-                print("📦 No tangrams detected")
-            } else {
-                print("📦 Detected \(result.detections.count) tangram(s):")
-                for detection in result.detections {
-                    let className = detection.className
-                    let confidence = detection.confidence
-                    print("   - \(className): \(String(format: "%.1f%%", confidence * 100))")
+                
+                // Create overlay image if available
+                var overlayImage: UIImage?
+                if let combinedOverlay = result.combinedOverlay {
+                    let ciImage = CIImage(cvPixelBuffer: combinedOverlay)
+                    let context = CIContext()
+                    if let cgImage = context.createCGImage(ciImage, from: ciImage.extent) {
+                        overlayImage = UIImage(cgImage: cgImage)
+                    }
                 }
+                
+                // Publish full detection results
+                let detectionResult = CVDetectionResult(
+                    detections: result.detections,
+                    tangramResult: result.tangramResult,
+                    overlayImage: overlayImage,
+                    processingTimeMs: processingTime,
+                    fps: fps
+                )
+                
+                self.detectionResultsSubject.send(detectionResult)
+                
+                // Log results
+                if result.detections.isEmpty {
+                    print("📦 No tangrams detected")
+                } else {
+                    print("📦 Detected \(result.detections.count) tangram(s):")
+                    for detection in result.detections {
+                        let className = detection.className
+                        let confidence = detection.confidence
+                        print("   - \(className): \(String(format: "%.1f%%", confidence * 100))")
+                    }
+                }
+                
+                print(String(format: "⚡ %.1f FPS", fps))
+            } catch {
+                print("❌ Processing error: \(error)")
             }
-            
-            print(String(format: "⚡ %.1f FPS", fps))
-        } catch {
-            print("❌ Processing error: \(error)")
         }
     }
 }

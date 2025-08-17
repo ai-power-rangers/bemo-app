@@ -64,6 +64,12 @@ struct CVFrameEvent: Codable {
         self.scale = 2.609
         self.objects = objects
     }
+
+    init(homography: [[Double]], scale: Double, objects: [CVPieceEvent]) {
+        self.homography = homography
+        self.scale = scale
+        self.objects = objects
+    }
 }
 
 /// Simplified event for internal use

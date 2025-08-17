@@ -77,6 +77,25 @@ class TangramPuzzleScene: SKScene {
     // Orientation feedback handled by validation engine nudges only; no local overlays
     internal var lastMotionAt: [String: TimeInterval] = [:]  // Per-piece last motion timestamp (position/rotation/flip)
     internal let settleDwell: TimeInterval = 0.4  // Seconds to consider a piece settled after last motion
+
+    // MARK: - CV Rendering Stability
+    struct CVRenderConfig {
+        var smoothingAlpha: CGFloat
+        var positionThreshold: CGFloat    // pixels in target panel space
+        var rotationThresholdDeg: CGFloat // degrees
+        var lingerSeconds: TimeInterval   // keep last pose this long when frame drops a piece
+    }
+    internal var cvRenderConfig: CVRenderConfig = {
+        let t = TangramCVTuning.shared
+        return CVRenderConfig(
+            smoothingAlpha: CGFloat(t.smoothingAlpha),
+            positionThreshold: CGFloat(t.positionThresholdPx),
+            rotationThresholdDeg: CGFloat(t.rotationThresholdDeg),
+            lingerSeconds: t.lingerSeconds
+        )
+    }()
+    internal var cvSmoothedPose: [String: (pos: CGPoint, rot: CGFloat)] = [:]
+    internal var cvLastSeenAt: [String: TimeInterval] = [:]
     
     // MARK: - Touch Tracking
     
@@ -100,13 +119,7 @@ class TangramPuzzleScene: SKScene {
     private var placementTimer: Timer?  // Timer for detecting placement
     internal var firstMovedPieceId: String?  // Track the anchor piece (internal for extensions)
     
-    // MARK: - Rotation Dial
-    
-    private var rotationDial: TangramRotationDialNode?
-    private var isShowingRotationDial: Bool = false
-    private var pendingRotationPiece: PuzzlePieceNode?
-    private var tapStartTime: TimeInterval = 0
-    private var tapStartLocation: CGPoint = .zero
+    // MARK: - Rotation Dial (removed)
     
     // MARK: - Hints
     
@@ -144,8 +157,8 @@ class TangramPuzzleScene: SKScene {
         // Account for safe area and navigation bar - reduced spacing
         let navBarHeight: CGFloat = 60  // Reduced from 100 to bring content higher
         let topPadding: CGFloat = safeAreaTop + navBarHeight
-        let sectionGap: CGFloat = 20  // Gap between sections
-        let availableHeight = size.height - topPadding - 10  // Minimal bottom padding
+        // let sectionGap: CGFloat = 20
+        let availableHeight = size.height - topPadding - 10
         let sectionHeight = availableHeight  // Full-height target area in CV-only mode
         
         // Calculate section center for full-height target area
@@ -176,18 +189,7 @@ class TangramPuzzleScene: SKScene {
     }
     
     private func setupSectionBackgrounds() {
-        // Match the section setup dimensions
-        let navBarHeight: CGFloat = 60  // Match reduced nav bar height
-        let topPadding: CGFloat = safeAreaTop + navBarHeight
-        let sectionGap: CGFloat = 20
-        let availableHeight = size.height - topPadding - 10
-        let sectionHeight = (availableHeight - sectionGap) / 2
-        
         // No background frame; keep silhouettes only centered
-        
-        // Mini CV background and label removed
-        
-        // No bottom assembly area in CV-only mode
     }
     
     // MARK: - Puzzle Loading
@@ -276,307 +278,18 @@ class TangramPuzzleScene: SKScene {
         completedPieces.removeAll()
     }
     
-    // MARK: - Touch Handling
-    
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { return }
-        let location = touch.location(in: self)
-        
-        // Handle rotation dial if showing
-        if isShowingRotationDial {
-            handleRotationDialTouch(at: location)
-            return
-        }
-        
-        // Check for piece in physical world section
-        let physicalLocation = touch.location(in: physicalWorldSection)
-        // Precision picking: sort by zPosition (topmost first) and use polygon-accurate hit testing
-        // Also enforce a small pick radius around the touch to reduce accidental adjacent selections
-        let pickRadius: CGFloat = 12
-        let candidates = physicalWorldSection.children.compactMap { $0 as? PuzzlePieceNode }
-            .filter { node in
-                // Quick reject by distance to centroid
-                let d = hypot(node.position.x - physicalLocation.x, node.position.y - physicalLocation.y)
-                return d <= max(pickRadius, TangramGameConstants.visualScale * 0.9) // lenient radius near centroid
-            }
-            .sorted { a, b in a.zPosition > b.zPosition }
-        
-        if let piece = candidates.first(where: { $0.contains(physicalWorldSection.convert(physicalLocation, to: $0)) })
-                    ?? physicalWorldSection.nodes(at: physicalLocation).compactMap({ $0 as? PuzzlePieceNode }).sorted(by: { $0.zPosition > $1.zPosition }).first {
-            // Store for potential rotation
-            pendingRotationPiece = piece
-            tapStartTime = CACurrentMediaTime()
-            tapStartLocation = physicalLocation
-            
-            selectedPiece = piece
-            piece.isSelected = true
-            piece.zPosition = 1000  // Bring to front
-            
-            // Update piece state to MOVED when picked up
-            if let pieceId = piece.name {
-                if var state = pieceStates[pieceId] {
-                    if case .detected(let baseline, let baseRot, _) = state.state {
-                        state.state = .moved(from: baseline, rotation: baseRot)
-                        state.interactionCount += 1
-                        state.lastMovedTime = Date()
-                        
-                        // Mark first moved piece as anchor
-                        if firstMovedPieceId == nil {
-                            firstMovedPieceId = pieceId
-                            state.isAnchor = true
-                        }
-                        
-                        pieceStates[pieceId] = state
-                        piece.pieceState = state
-                        piece.updateStateIndicator()
-                    }
-                }
-                
-                eventBus.emit(.pieceLifted(id: pieceId))
-            }
-        }
-    }
-    
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { return }
-        
-        // Check if we're rotating with the dial
-        if isShowingRotationDial, let dial = rotationDial, let piece = selectedPiece {
-            let location = touch.location(in: self)
-            
-            // Calculate angle from dial center to touch point
-            let dialPos = dial.position
-            let currentTouchAngle = atan2(location.y - dialPos.y, location.x - dialPos.x)
-            
-            // On first move, calculate the offset
-            if !isRotating {
-                isRotating = true
-                initialTouchLocation = location
-                initialPieceRotation = piece.zRotation
-            }
-            
-            // Calculate rotation delta
-            let angleDelta = currentTouchAngle - atan2(initialTouchLocation.y - dialPos.y, initialTouchLocation.x - dialPos.x)
-            
-            // Apply rotation
-            let newRotation = initialPieceRotation - angleDelta  // Negative because SK is clockwise
-            dial.updateRotation(to: newRotation)
-            
-            // Only emit rotation event if rotation changed significantly
-            if let pieceId = piece.name {
-                let lastRot = lastEmittedRotations[pieceId] ?? 0
-                let rotDiff = abs(newRotation - lastRot)
-                
-                // Emit only if rotated more than threshold (reduces jitter)
-                if rotDiff > 0.05 {  // About 3 degrees
-                    eventBus.emit(.pieceMoved(
-                        id: pieceId,
-                        position: piece.position,
-                        rotation: newRotation
-                    ))
-                    lastEmittedRotations[pieceId] = newRotation
-                    // Record motion for settle gating
-                    userData = userData ?? NSMutableDictionary()
-                    lastMotionAt[pieceId] = CACurrentMediaTime()
-                    
-                    // Also emit CV frame event
-                    emitCVFrameUpdate()
-                }
-            }
-            return
-        }
-        
-        // Normal piece dragging
-        guard let selected = selectedPiece else { return }
-        
-        // Cancel pending rotation if we're dragging
-        if pendingRotationPiece != nil {
-            let physicalLocation = touch.location(in: physicalWorldSection)
-            let dragDistance = hypot(physicalLocation.x - tapStartLocation.x, physicalLocation.y - tapStartLocation.y)
-            if dragDistance > 10 {  // Threshold for drag detection
-                pendingRotationPiece = nil
-            }
-        }
-        
-        // Drag the piece
-        let physicalLocation = touch.location(in: physicalWorldSection)
-        // Apply small deadzone to reduce jitter causing accidental selection shifts
-        let last = selected.position
-        let dx = physicalLocation.x - last.x
-        let dy = physicalLocation.y - last.y
-        if hypot(dx, dy) < 2.0 { return }
-        selected.position = CGPoint(x: last.x + dx, y: last.y + dy)
-        
-        // Update piece state position
-        if let pieceId = selected.name {
-            if var state = pieceStates[pieceId] {
-                state.updatePosition(selected.position, rotation: selected.zRotation)
-                pieceStates[pieceId] = state
-                selected.pieceState = state
-                selected.updateStateIndicator()
-
-                // If this piece was previously validated, moving it should trigger re-check and potential invalidation
-                if case .validated = state.state {
-                    // Immediately re-validate this piece under current mapping; if it fails, invalidate it
-                    // We reuse the same path as placement-time validation
-                    validatePlacedPiece(selected)
-                }
-            }
-            
-            let lastPos = lastEmittedPositions[pieceId] ?? CGPoint.zero
-            let distance = hypot(selected.position.x - lastPos.x, selected.position.y - lastPos.y)
-            
-            // Emit only if moved more than threshold (reduces jitter)
-            if distance > 2.0 {
-                eventBus.emit(.pieceMoved(
-                    id: pieceId,
-                    position: selected.position,
-                    rotation: selected.zRotation
-                ))
-                lastEmittedPositions[pieceId] = selected.position
-                // Record motion for settle gating
-                userData = userData ?? NSMutableDictionary()
-                lastMotionAt[pieceId] = CACurrentMediaTime()
-                
-                // Also emit CV frame event for top-right display
-                emitCVFrameUpdate()
-            }
-        }
-        
-        // Snapping removed
-    }
-    
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { return }
-        let location = touch.location(in: physicalWorldSection)
-        
-        // If rotation dial is showing, handle rotation end
-        if isShowingRotationDial {
-            if isRotating {
-                rotationDial?.finishRotation()
-                isRotating = false
-            }
-            return
-        }
-        
-        // Check if this was a tap (not a drag) to show rotation dial
-        if let pendingPiece = pendingRotationPiece {
-            let dragDistance = hypot(location.x - tapStartLocation.x, location.y - tapStartLocation.y)
-            let tapDuration = CACurrentMediaTime() - tapStartTime
-            
-            // If it was a short tap without much movement, show rotation dial
-            if dragDistance < 10 && tapDuration < 0.3 && !isShowingRotationDial {
-                showRotationDial(for: pendingPiece)
-            }
-            pendingRotationPiece = nil
-        }
-        
-        guard let selected = selectedPiece else { return }
-        
-        selected.isSelected = false
-        
-        // Snapping removed
-        
-        // Mark state to PLACED at touch end (we already use a short placement delay to confirm)
-        if let pieceId = selected.name {
-            if var state = pieceStates[pieceId] {
-                state.markAsPlaced()
-                pieceStates[pieceId] = state
-                selected.pieceState = state
-                selected.updateStateIndicator()
-                
-                // Start timer to validate after placement delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + PieceState.placementDelay) { [weak self] in
-                    self?.validatePlacedPiece(selected)
-                }
-            }
-            
-            print("[PIECE] Placed \(selected.pieceType?.rawValue ?? "unknown") at (\(Int(selected.position.x)), \(Int(selected.position.y))), rotation: \(Int(selected.zRotation * 180 / .pi))°")
-            eventBus.emit(.piecePlaced(id: pieceId))
-            
-            // Emit final position in CV frame
-            lastEmittedPositions[pieceId] = selected.position
-            lastEmittedRotations[pieceId] = selected.zRotation
-            // Record motion end time
-            userData = userData ?? NSMutableDictionary()
-            lastMotionAt[pieceId] = CACurrentMediaTime()
-            emitCVFrameUpdate()
-        }
-        
-        // Clear selection if not showing rotation dial
-        if !isShowingRotationDial {
-            selectedPiece = nil
-        }
-    }
+    // MARK: - Touch Handling (disabled in CV-only mode)
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {}
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {}
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {}
     
     // MARK: - Rotation Dial
     
-    private func showRotationDial(for piece: PuzzlePieceNode) {
-        let dial = TangramRotationDialNode()
-        dial.showForPiece(piece)
-        
-        // Convert piece position to scene space for dial
-        let piecePosScene = physicalWorldSection.convert(piece.position, to: self)
-        dial.position = piecePosScene
-        dial.zPosition = 2000
-        
-        addChild(dial)
-        
-        self.rotationDial = dial
-        self.isShowingRotationDial = true
-        self.selectedPiece = piece
-        
-        // Haptic feedback
-        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-        impactFeedback.impactOccurred()
-    }
+    private func showRotationDial(for piece: PuzzlePieceNode) {}
     
-    private func handleRotationDialTouch(at location: CGPoint) {
-        let nodes = nodes(at: location)
-        
-        // Accept rotation
-        if nodes.contains(where: { $0.name == "saveRotationDial" }) {
-            hideRotationDial(save: true)
-            return
-        }
-        
-        // Cancel rotation
-        if nodes.contains(where: { $0.name == "closeRotationDial" }) {
-            hideRotationDial(save: false)
-            return
-        }
-        
-        // Flip piece
-        if nodes.contains(where: { $0.name == "flipPiece" }) {
-            if let piece = selectedPiece {
-                piece.flip()
-                if let pieceId = piece.name {
-                    eventBus.emit(.pieceFlipped(id: pieceId, isFlipped: piece.isFlipped))
-                    // Record motion for settle gating
-                    lastMotionAt[pieceId] = CACurrentMediaTime()
-                }
-                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                impactFeedback.impactOccurred()
-            }
-            return
-        }
-    }
+    private func handleRotationDialTouch(at location: CGPoint) {}
     
-    private func hideRotationDial(save: Bool) {
-        if !save, let dial = rotationDial {
-            dial.restoreOriginalRotation()
-        }
-        
-        isRotating = false
-        rotationDial?.removeFromParent()
-        rotationDial = nil
-        isShowingRotationDial = false
-        
-        if let selected = selectedPiece {
-            selected.isSelected = false
-            selectedPiece = nil
-        }
-    }
+    private func hideRotationDial(save: Bool) {}
     
     // MARK: - Nudge System
     

@@ -378,7 +378,7 @@ class TangramGameViewModel {
     
     /// Validate that progress data is consistent with available puzzles
     func validateProgressData() -> Bool {
-        guard let childId = currentChildProfileId,
+        guard currentChildProfileId != nil,
               let progress = currentProgress else {
             return true // No data to validate
         }

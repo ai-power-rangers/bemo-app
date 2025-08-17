@@ -55,11 +55,10 @@ class CVEventBus: ObservableObject {
     func emitFrame(_ frame: CVFrameEvent) {
         lastFrame = frame
         
-        // Update current pieces from frame
+        // Update current pieces from frame without collapsing duplicates
         currentPieces.removeAll()
         for object in frame.objects {
-            let id = pieceIdFromCVName(object.name)
-            currentPieces[id] = object
+            currentPieces[object.name] = object
         }
         
         // Notify subscribers

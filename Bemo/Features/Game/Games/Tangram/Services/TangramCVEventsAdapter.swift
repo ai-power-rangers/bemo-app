@@ -20,6 +20,15 @@ final class TangramCVEventsAdapter {
     // Must match the viewSize used by CVService pipeline for consistent coordinates
     private let referenceViewSize = CGSize(width: 1080, height: 1920)
 
+    // Identity tracking per classId
+    private struct Track { var id: String; var last: CGPoint }
+    private var tracksByClassId: [Int: [Track]] = [:]
+    private var nextIndexByClassId: [Int: Int] = [:]
+    struct AdapterConfig { var assignmentThresholdPx: CGFloat }
+    private var config: AdapterConfig = {
+        AdapterConfig(assignmentThresholdPx: CGFloat(TangramCVTuning.shared.assignmentThresholdPx))
+    }()
+
     init(cvService: CVService) {
         self.cvService = cvService
     }
@@ -44,26 +53,37 @@ final class TangramCVEventsAdapter {
 
     private func buildFrame(from result: CVService.CVDetectionResult) -> CVFrameEvent {
         // Prefer the integrated tangram result if available to get real rotation/vertices
-        if let trAny: AnyObject = result.tangramResult {
-            if let frame = buildFrameFromTangramResult(trAny) {
-                return frame
-            }
+        if let trAny: AnyObject = result.tangramResult, let frame = buildFrameFromTangramResult(trAny) {
+            return frame
         }
 
-        // Fallback to bounding-box based approximation
-        var objects: [CVPieceEvent] = []
+        // Fallback to bounding-box based approximation with stable per-class indexing
+        struct Temp { let classId: Int; let rotation: Double; let translation: [Double]; let vertices: [[Double]] }
+        var temps: [Temp] = []
         for det in result.detections {
             let classId = Int(det.classId)
-            let name = cvName(for: classId)
             let centerX = (det.bbox.origin.x + det.bbox.width / 2) * referenceViewSize.width
             let centerY = (det.bbox.origin.y + det.bbox.height / 2) * referenceViewSize.height
-            let pose = CVPieceEvent.Pose(rotationDegrees: 0, translation: [Double(centerX), Double(centerY)])
             let x0 = det.bbox.origin.x * referenceViewSize.width
             let y0 = det.bbox.origin.y * referenceViewSize.height
             let x1 = (det.bbox.origin.x + det.bbox.width) * referenceViewSize.width
             let y1 = (det.bbox.origin.y + det.bbox.height) * referenceViewSize.height
             let vertices: [[Double]] = [[Double(x0), Double(y0)], [Double(x1), Double(y0)], [Double(x1), Double(y1)], [Double(x0), Double(y1)]]
-            objects.append(CVPieceEvent(name: name, classId: classId, pose: pose, vertices: vertices))
+            temps.append(Temp(classId: classId, rotation: 0, translation: [Double(centerX), Double(centerY)], vertices: vertices))
+        }
+        // Group by class and assign deterministic indices by X then Y
+        var objects: [CVPieceEvent] = []
+        let grouped = Dictionary(grouping: temps, by: { $0.classId })
+        for (classId, arr) in grouped {
+            let sorted = arr.sorted { lhs, rhs in
+                if lhs.translation[0] == rhs.translation[0] { return lhs.translation[1] < rhs.translation[1] }
+                return lhs.translation[0] < rhs.translation[0]
+            }
+            for (idx, t) in sorted.enumerated() {
+                let name = "\(cvName(for: classId))_\(idx)"
+                let pose = CVPieceEvent.Pose(rotationDegrees: t.rotation, translation: t.translation)
+                objects.append(CVPieceEvent(name: name, classId: classId, pose: pose, vertices: t.vertices))
+            }
         }
         return CVFrameEvent(objects: objects)
     }
@@ -76,14 +96,13 @@ final class TangramCVEventsAdapter {
         let poses = tr.value(forKey: "poses") as? [NSNumber: AnyObject] ?? [:]
         let polys = tr.value(forKey: "refinedPolygons") as? [NSNumber: [NSNumber]] ?? [:]
 
-        // Build objects per present classId
-        var objects: [CVPieceEvent] = []
+        // Build temp entries per present classId
+        struct Entry { let classId: Int; let rotationDeg: Double; let translation: [Double]; let vertices: [[Double]] }
+        var entries: [Entry] = []
         let classIds = Set(poses.keys.map { $0.intValue } + polys.keys.map { $0.intValue })
         for cid in classIds {
             let classId = cid
-            let name = cvName(for: classId)
 
-            // Pose
             var rotationDeg = 0.0
             var translation: [Double] = [0, 0]
             if let p = poses[NSNumber(value: classId)] {
@@ -94,7 +113,6 @@ final class TangramCVEventsAdapter {
                 translation = [tx, ty]
             }
 
-            // Vertices: refinedPolygons are normalized [x1,y1,x2,y2,...] in model space; scale to referenceViewSize
             var vertices: [[Double]] = []
             if let arr = polys[NSNumber(value: classId)] {
                 var tmp: [[Double]] = []
@@ -108,23 +126,112 @@ final class TangramCVEventsAdapter {
                 vertices = tmp
             }
 
-            let pose = CVPieceEvent.Pose(rotationDegrees: rotationDeg, translation: translation)
-            objects.append(CVPieceEvent(name: name, classId: classId, pose: pose, vertices: vertices))
+            entries.append(Entry(classId: classId, rotationDeg: rotationDeg, translation: translation, vertices: vertices))
         }
 
-        // Homography 3x3 into 2D array
+        // Group by class and index deterministically by X then Y
+        var objects: [CVPieceEvent] = []
+        let grouped = Dictionary(grouping: entries, by: { $0.classId })
+        for (classId, arr) in grouped {
+            let sorted = arr.sorted { lhs, rhs in
+                if lhs.translation[0] == rhs.translation[0] { return lhs.translation[1] < rhs.translation[1] }
+                return lhs.translation[0] < rhs.translation[0]
+            }
+            for (idx, e) in sorted.enumerated() {
+                let name = "\(cvName(for: classId))_\(idx)"
+                let pose = CVPieceEvent.Pose(rotationDegrees: e.rotationDeg, translation: e.translation)
+                objects.append(CVPieceEvent(name: name, classId: classId, pose: pose, vertices: e.vertices))
+            }
+        }
+
         let H = [
             [hom[0].doubleValue, hom[1].doubleValue, hom[2].doubleValue],
             [hom[3].doubleValue, hom[4].doubleValue, hom[5].doubleValue],
             [hom[6].doubleValue, hom[7].doubleValue, hom[8].doubleValue]
         ]
 
-        var frame = CVFrameEvent(objects: objects)
-        // Note: CVFrameEvent currently fixes homography/scale in its init; we’d extend it if needed.
-        // For now we just return objects; homography usage will be integrated in rendering strategy.
-        _ = H
-        _ = scale
+        let frame = CVFrameEvent(homography: H, scale: scale, objects: objects)
         return frame
+    }
+
+    // MARK: - Identity Assignment (Nearest Neighbor per Class)
+    private func assignIdentity(in frame: CVFrameEvent) -> CVFrameEvent {
+        // Simplified: disabled for now
+        return frame
+        
+        /*
+        // Group by class_id
+        var grouped: [Int: [Int]] = [:] // classId -> indices in frame.objects
+        for (idx, obj) in frame.objects.enumerated() {
+            grouped[obj.classId, default: []].append(idx)
+        }
+
+        var newObjects = frame.objects
+        for (classId, indices) in grouped {
+            // Build points for this class
+            let points: [CGPoint] = indices.map { i in
+                let tx = CGFloat(newObjects[i].pose.translation.first ?? 0)
+                let ty = CGFloat(newObjects[i].pose.translation.dropFirst().first ?? 0)
+                return CGPoint(x: tx, y: ty)
+            }
+
+            // Existing tracks
+            var tracks = tracksByClassId[classId] ?? []
+            var unmatchedDetIndices = Array(indices.indices)
+            var unmatchedTrackIndices = Array(tracks.indices)
+
+            // Greedy nearest-neighbor assignment
+            while !unmatchedDetIndices.isEmpty && !unmatchedTrackIndices.isEmpty {
+                var best: (detLocalIdx: Int, trackIdx: Int, dist: CGFloat)? = nil
+                for (dIdxLocal, tIdx) in unmatchedDetIndices.flatMap({ d -> [(Int, Int)] in unmatchedTrackIndices.map { (d, $0) } }) {
+                    let detPoint = points[dIdxLocal]
+                    let trackPoint = tracks[tIdx].last
+                    let dist = hypot(detPoint.x - trackPoint.x, detPoint.y - trackPoint.y)
+                    if best == nil || dist < best!.dist { best = (dIdxLocal, tIdx, dist) }
+                }
+                if let b = best, b.dist <= config.assignmentThresholdPx {
+                    // Assign
+                    let idxInFrame = indices[b.detLocalIdx]
+                    let baseName = cvName(for: classId)
+                    let named = CVPieceEvent(
+                        name: "cv_\(baseName)_\(tracks[b.trackIdx].id)",
+                        classId: newObjects[idxInFrame].classId,
+                        pose: newObjects[idxInFrame].pose,
+                        vertices: newObjects[idxInFrame].vertices
+                    )
+                    newObjects[idxInFrame] = named
+                    tracks[b.trackIdx].last = points[b.detLocalIdx]
+                    // Remove from unmatched
+                    unmatchedDetIndices.removeAll { $0 == b.detLocalIdx }
+                    unmatchedTrackIndices.removeAll { $0 == b.trackIdx }
+                } else {
+                    break
+                }
+            }
+
+            // Create new tracks for remaining detections
+            var nextIdx = nextIndexByClassId[classId] ?? 1
+            for dLocal in unmatchedDetIndices {
+                let idxInFrame = indices[dLocal]
+                let baseName = cvName(for: classId)
+                let trackId = nextIdx
+                nextIdx += 1
+                let idStr = String(trackId)
+                let named = CVPieceEvent(
+                    name: "cv_\(baseName)_\(idStr)",
+                    classId: newObjects[idxInFrame].classId,
+                    pose: newObjects[idxInFrame].pose,
+                    vertices: newObjects[idxInFrame].vertices
+                )
+                newObjects[idxInFrame] = named
+                tracks.append(Track(id: idStr, last: points[dLocal]))
+            }
+            nextIndexByClassId[classId] = nextIdx
+            tracksByClassId[classId] = tracks
+        }
+
+        return CVFrameEvent(objects: newObjects)
+        */
     }
 
     private func cvName(for classId: Int) -> String {
