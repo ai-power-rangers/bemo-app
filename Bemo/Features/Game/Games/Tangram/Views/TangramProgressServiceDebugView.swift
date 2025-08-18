@@ -29,6 +29,9 @@ struct TangramProgressServiceDebugView: View {
     @State private var mapTestResults: String = ""
     @State private var selectedMapDifficulty: UserPreferences.DifficultySetting = .easy
     
+    // Test MapNodeView Component
+    @State private var showingMapNodeDemo: Bool = false
+    
     // DifficultySelectionViewModel testing
     @State private var difficultySelectionViewModel: DifficultySelectionViewModel?
     @State private var viewModelTestStatus: TestStatus = .notRun
@@ -415,6 +418,88 @@ struct TangramProgressServiceDebugView: View {
                         }
                         .padding()
                         .background(Color.purple.opacity(0.1))
+                        .cornerRadius(8)
+                        
+                        // MapNodeView Visual Demo
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("🎯 MapNodeView Component Test")
+                                .font(.headline)
+                                .foregroundColor(.indigo)
+                            
+                            Button(showingMapNodeDemo ? "Hide MapNodeView Demo" : "Show MapNodeView Demo") {
+                                showingMapNodeDemo.toggle()
+                            }
+                            .buttonStyle(.bordered)
+                            .foregroundColor(.indigo)
+                            
+                            if showingMapNodeDemo {
+                                VStack(spacing: 16) {
+                                    Text("All Node States:")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    
+                                    HStack(spacing: 15) {
+                                        MapNodeView(
+                                            puzzle: GamePuzzleData.mockPuzzle(id: "demo1", name: "Locked", difficulty: 2),
+                                            nodeState: .locked,
+                                            onTap: { print("🔒 Locked node tapped (no action)") }
+                                        )
+                                        
+                                        MapNodeView(
+                                            puzzle: GamePuzzleData.mockPuzzle(id: "demo2", name: "Ready", difficulty: 3),
+                                            nodeState: .unlocked,
+                                            onTap: { print("⭐ Unlocked node tapped") }
+                                        )
+                                        
+                                        MapNodeView(
+                                            puzzle: GamePuzzleData.mockPuzzle(id: "demo3", name: "Next", difficulty: 4),
+                                            nodeState: .current,
+                                            onTap: { print("🎯 Current node tapped") }
+                                        )
+                                        
+                                        MapNodeView(
+                                            puzzle: GamePuzzleData.mockPuzzle(id: "demo4", name: "Done", difficulty: 5),
+                                            nodeState: .completed,
+                                            onTap: { print("✅ Completed node tapped") }
+                                        )
+                                    }
+                                    
+                                    VStack(spacing: 4) {
+                                        Text("Connection Lines Demo:")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        
+                                        VStack(spacing: 0) {
+                                            MapNodeView(
+                                                puzzle: GamePuzzleData.mockPuzzle(id: "demo5", name: "Cat", difficulty: 2),
+                                                nodeState: .completed,
+                                                onTap: { print("🐱 Cat completed") }
+                                            )
+                                            MapConnectionLine(isCompleted: true)
+                                            MapNodeView(
+                                                puzzle: GamePuzzleData.mockPuzzle(id: "demo6", name: "Dog", difficulty: 3),
+                                                nodeState: .current,
+                                                onTap: { print("🐕 Dog current") }
+                                            )
+                                            MapConnectionLine(isCompleted: false)
+                                            MapNodeView(
+                                                puzzle: GamePuzzleData.mockPuzzle(id: "demo7", name: "Bird", difficulty: 4),
+                                                nodeState: .locked,
+                                                onTap: { print("🐦 Bird locked") }
+                                            )
+                                        }
+                                    }
+                                    
+                                    Text("💡 Watch the pulse animation on 'Next' puzzle!")
+                                        .font(.caption2)
+                                        .foregroundColor(.indigo)
+                                        .italic()
+                                }
+                                .padding(.vertical, 8)
+                            }
+                        }
+                        .padding()
+                        .background(Color.indigo.opacity(0.1))
                         .cornerRadius(8)
                         
                         // Test Suite Button
