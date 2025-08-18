@@ -140,13 +140,7 @@ struct ProfileDetailsView: View {
                     title: "Age",
                     value: "\(profile.age) years"
                 )
-                
-                StatCard(
-                    icon: "calendar",
-                    iconColor: .green,
-                    title: "Gender",
-                    value: profile.gender
-                )
+
             }
         }
     }

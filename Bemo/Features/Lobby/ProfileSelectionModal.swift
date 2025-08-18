@@ -79,7 +79,7 @@ struct ProfileSelectionModal: View {
                         Text("Add Child Profile")
                             .font(.headline)
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(Color("AppPrimaryTextColor"))
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(Color.blue)
