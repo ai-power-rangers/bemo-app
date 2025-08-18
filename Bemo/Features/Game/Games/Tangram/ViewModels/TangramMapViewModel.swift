@@ -56,13 +56,13 @@ class TangramMapViewModel {
     /// Current completion percentage for this difficulty (0.0 to 1.0)
     var completionPercentage: Double {
         guard !puzzles.isEmpty else { return 0.0 }
-        let completedCount = puzzles.filter { unlockedPuzzleIds.contains($0.id) && isCompleted($0.id) }.count
+        let completedCount = puzzles.filter { isCompleted($0.id) }.count
         return Double(completedCount) / Double(puzzles.count)
     }
     
     /// Number of completed puzzles in this difficulty
     var completedCount: Int {
-        puzzles.filter { unlockedPuzzleIds.contains($0.id) && isCompleted($0.id) }.count
+        puzzles.filter { isCompleted($0.id) }.count
     }
     
     /// Total number of puzzles in this difficulty
