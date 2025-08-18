@@ -178,45 +178,7 @@ struct ParentDashboardView: View {
                                     }
                                 }
                                 
-                                // Recent achievements
-                                if !selectedChild.recentAchievements.isEmpty {
-                                    VStack(alignment: .leading, spacing: BemoTheme.Spacing.medium) {
-                                        Text("Recent Achievements")
-                                            .font(.system(size: 20, weight: .semibold, design: .rounded))
-                                            .foregroundColor(Color("AppPrimaryTextColor"))
-                                            .padding(.horizontal, BemoTheme.Spacing.large)
-                                        
-                                        VStack(spacing: BemoTheme.Spacing.small) {
-                                            ForEach(selectedChild.recentAchievements) { achievement in
-                                                HStack {
-                                                    Image(systemName: achievement.iconName)
-                                                        .font(.system(size: 18))
-                                                        .foregroundColor(Color(hex: "#F97316"))
-                                                    
-                                                    Text(achievement.name)
-                                                        .font(.system(size: 15, weight: .medium, design: .rounded))
-                                                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.85))
-                                                    
-                                                    Spacer()
-                                                    
-                                                    Text(achievement.date, style: .date)
-                                                        .font(.system(size: 13, design: .rounded))
-                                                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
-                                                }
-                                                .padding(BemoTheme.Spacing.medium)
-                                                .background(
-                                                    RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
-                                                        .fill(Color.gray.opacity(0.04))
-                                                        .overlay(
-                                                            RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
-                                                                .stroke(Color.gray.opacity(0.08), lineWidth: 1)
-                                                        )
-                                                )
-                                            }
-                                        }
-                                        .padding(.horizontal, BemoTheme.Spacing.large)
-                                    }
-                                }
+
                                 
                                 // Insights section
                                 if !viewModel.insights.isEmpty {
@@ -246,21 +208,7 @@ struct ParentDashboardView: View {
                                 .padding(.top, BemoTheme.Spacing.xlarge)
                             
                             VStack(spacing: BemoTheme.Spacing.small) {
-                                SettingsRow(
-                                    icon: "timer",
-                                    title: "Screen Time Limits",
-                                    action: {
-                                        // Navigate to screen time settings
-                                    }
-                                )
-                                
-                                SettingsRow(
-                                    icon: "slider.horizontal.3",
-                                    title: "Content Preferences",
-                                    action: {
-                                        // Navigate to content settings
-                                    }
-                                )
+
                                 
                                 SettingsRow(
                                     icon: "person.circle",

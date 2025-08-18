@@ -38,17 +38,11 @@ class ParentDashboardViewModel {
         let level: Int
         let totalXP: Int
         let playTimeToday: TimeInterval
-        let recentAchievements: [RecentAchievement]
+
         let isSelected: Bool
     }
     
-    struct RecentAchievement: Identifiable {
-        let id = UUID()
-        let name: String
-        let iconName: String
-        let date: Date
-    }
-    
+
     struct Insight: Identifiable {
         let id = UUID()
         let title: String
@@ -210,7 +204,7 @@ class ParentDashboardViewModel {
                 level: calculateLevel(from: profile.totalXP),
                 totalXP: profile.totalXP,
                 playTimeToday: generateMockPlayTime(), // Mock data for now
-                recentAchievements: generateMockAchievements(), // Mock data for now
+
                 isSelected: isSelected
             )
         }
@@ -262,17 +256,7 @@ class ParentDashboardViewModel {
         return Double.random(in: 600...3600) // 10 minutes to 1 hour
     }
     
-    private func generateMockAchievements() -> [RecentAchievement] {
-        let allAchievements = [
-            RecentAchievement(name: "Shape Master", iconName: "star.fill", date: Date()),
-            RecentAchievement(name: "5 Day Streak", iconName: "flame.fill", date: Date().addingTimeInterval(-86400)),
-            RecentAchievement(name: "First Victory", iconName: "trophy.fill", date: Date().addingTimeInterval(-172800)),
-            RecentAchievement(name: "Speed Runner", iconName: "bolt.fill", date: Date().addingTimeInterval(-259200))
-        ]
-        
-        return Array(allAchievements.prefix(Int.random(in: 1...3)))
-    }
-    
+
     func selectChild(_ profile: ChildProfile) {
         #if DEBUG
         print("👶 [ParentDashboard] Child selected: \(profile.name) (id: \(profile.id))")
@@ -290,7 +274,7 @@ class ParentDashboardViewModel {
                 level: child.level,
                 totalXP: child.totalXP,
                 playTimeToday: child.playTimeToday,
-                recentAchievements: child.recentAchievements,
+
                 isSelected: child.id == profile.id
             )
         }
