@@ -411,6 +411,9 @@ extension DifficultySelectionView {
     private func testPuzzleFiltering() {
         print("🧪 Testing puzzlesForDifficulty method...")
         
+        // NOTE: This creates a new service instance with separate state from the app
+        // For proper testing, use the BemoTests target with dependency injection
+        // This is temporary debug code for quick validation only
         let puzzleLibrary = PuzzleLibraryService()
         
         // Check if puzzles are available
