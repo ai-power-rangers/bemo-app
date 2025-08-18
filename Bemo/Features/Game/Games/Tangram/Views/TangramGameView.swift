@@ -51,9 +51,8 @@ struct TangramGameView: View {
                             removal: .move(edge: .leading).combined(with: .opacity)
                         ))
                     
-                case .map:
-                    // TODO: Phase 3 - Add map view  
-                    puzzleSelectionView
+                case .map(let difficulty):
+                    mapView(for: difficulty)
                         .transition(.asymmetric(
                             insertion: .move(edge: .trailing).combined(with: .opacity),
                             removal: .move(edge: .leading).combined(with: .opacity)
@@ -134,6 +133,54 @@ struct TangramGameView: View {
             UINavigationBar.appearance().compactAppearance = appearance
         }
         UINavigationBar.appearance().tintColor = UIColor(TangramTheme.Text.primary)
+    }
+    
+    // MARK: - Map View
+    
+    private func mapView(for difficulty: UserPreferences.DifficultySetting) -> some View {
+        Group {
+            if let childId = viewModel.childProfileId {
+                let mapViewModel = viewModel.container.makeTangramMapViewModel(
+                    difficulty: difficulty,
+                    childProfileId: childId,
+                    onPuzzleSelected: { puzzle in
+                        viewModel.selectPuzzleFromMap(puzzle)
+                    },
+                    onBackToDifficultySelection: {
+                        viewModel.returnToDifficultySelection()
+                    }
+                )
+                
+                TangramMapView(viewModel: mapViewModel)
+            } else {
+                // Fallback if no child profile is set
+                VStack(spacing: BemoTheme.Spacing.large) {
+                    Image(systemName: "person.crop.circle.badge.exclamationmark")
+                        .font(.system(size: 48))
+                        .foregroundColor(.orange)
+                    
+                    Text("No Profile Selected")
+                        .font(BemoTheme.font(for: .heading3))
+                        .foregroundColor(BemoTheme.Colors.gray1)
+                    
+                    Text("Please select a child profile to continue")
+                        .font(BemoTheme.font(for: .body))
+                        .foregroundColor(BemoTheme.Colors.gray2)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, BemoTheme.Spacing.large)
+                    
+                    Button("Back to Difficulty Selection") {
+                        viewModel.returnToDifficultySelection()
+                    }
+                    .primaryButtonStyle()
+                }
+                .padding(BemoTheme.Spacing.xlarge)
+            }
+        }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(TangramTheme.Backgrounds.editor, for: .navigationBar)
     }
     
     // MARK: - Difficulty Selection View

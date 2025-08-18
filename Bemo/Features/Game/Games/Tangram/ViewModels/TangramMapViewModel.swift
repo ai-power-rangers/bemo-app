@@ -94,6 +94,9 @@ class TangramMapViewModel {
         
         // Load puzzles on initialization
         loadPuzzlesForDifficulty()
+        
+        // Set up reactive observation of puzzle library changes
+        setupPuzzleLibraryObservation()
     }
     
     // MARK: - Public Methods
@@ -102,6 +105,21 @@ class TangramMapViewModel {
     func loadPuzzlesForDifficulty() {
         isLoading = true
         errorMessage = nil
+        
+        // Check if puzzle library service is still loading
+        if puzzleLibraryService.isLoading {
+            print("[TangramMapViewModel] Puzzle library is still loading, waiting...")
+            // Wait for puzzle library to finish loading
+            waitForPuzzleLibraryLoading()
+            return
+        }
+        
+        // Check if there was an error loading puzzles
+        if let libraryError = puzzleLibraryService.loadError {
+            errorMessage = "Failed to load puzzle library: \(libraryError)"
+            isLoading = false
+            return
+        }
         
         // Get puzzles filtered by difficulty and sorted by ID
         let filteredPuzzles = puzzleLibraryService.puzzlesForDifficulty(difficulty)
@@ -119,6 +137,30 @@ class TangramMapViewModel {
         isLoading = false
         
         print("[TangramMapViewModel] Loaded \(puzzles.count) puzzles for \(difficulty.displayName)")
+    }
+    
+    /// Wait for puzzle library service to finish loading
+    private func waitForPuzzleLibraryLoading() {
+        Task { @MainActor in
+            // Poll until loading is complete
+            while puzzleLibraryService.isLoading {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second
+            }
+            
+            // Once loading is complete, try loading puzzles again
+            loadPuzzlesForDifficulty()
+        }
+    }
+    
+    /// Set up reactive observation of puzzle library changes
+    private func setupPuzzleLibraryObservation() {
+        Task { @MainActor in
+            // Observe changes to puzzle library service
+            for await _ in NotificationCenter.default.notifications(named: .puzzleLibraryDidUpdate) {
+                print("[TangramMapViewModel] Puzzle library updated, reloading puzzles...")
+                loadPuzzlesForDifficulty()
+            }
+        }
     }
     
     /// Check if a specific puzzle can be selected (is unlocked)

@@ -111,4 +111,21 @@ class TangramDependencyContainer {
             onBackToLobby: onBackToLobby
         )
     }
+    
+    /// Creates a configured TangramMapViewModel
+    func makeTangramMapViewModel(
+        difficulty: UserPreferences.DifficultySetting,
+        childProfileId: String,
+        onPuzzleSelected: @escaping (GamePuzzleData) -> Void,
+        onBackToDifficultySelection: @escaping () -> Void
+    ) -> TangramMapViewModel {
+        return TangramMapViewModel(
+            difficulty: difficulty,
+            childProfileId: childProfileId,
+            puzzleLibraryService: puzzleLibraryService,
+            progressService: progressService,
+            onPuzzleSelected: onPuzzleSelected,
+            onBackToDifficulty: onBackToDifficultySelection
+        )
+    }
 }

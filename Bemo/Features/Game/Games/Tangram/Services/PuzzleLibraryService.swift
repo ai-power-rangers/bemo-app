@@ -12,6 +12,12 @@
 import SwiftUI
 import Observation
 
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let puzzleLibraryDidUpdate = Notification.Name("puzzleLibraryDidUpdate")
+}
+
 @Observable
 class PuzzleLibraryService {
     
@@ -59,6 +65,9 @@ class PuzzleLibraryService {
                         self.availablePuzzles = puzzles
                         self.isLoading = false
                         print("[PuzzleLibraryService] Loaded \(puzzles.count) puzzles from cache")
+                        
+                        // Notify observers that puzzle library has been updated
+                        NotificationCenter.default.post(name: .puzzleLibraryDidUpdate, object: nil)
                     }
                 } else {
                     // Fallback to direct database loading
@@ -67,6 +76,9 @@ class PuzzleLibraryService {
                         self.availablePuzzles = puzzles
                         self.isLoading = false
                         print("[PuzzleLibraryService] Loaded \(puzzles.count) puzzles from database")
+                        
+                        // Notify observers that puzzle library has been updated
+                        NotificationCenter.default.post(name: .puzzleLibraryDidUpdate, object: nil)
                     }
                 }
             } catch {
@@ -93,6 +105,9 @@ class PuzzleLibraryService {
         isLoading = false
         loadError = nil
         print("[PuzzleLibraryService] Loaded \(mockPuzzles.count) mock puzzles for testing")
+        
+        // Notify observers that puzzle library has been updated
+        NotificationCenter.default.post(name: .puzzleLibraryDidUpdate, object: nil)
     }
     #endif
     
