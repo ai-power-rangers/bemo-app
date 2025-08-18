@@ -32,6 +32,9 @@ struct TangramProgressServiceDebugView: View {
     // Test MapNodeView Component
     @State private var showingMapNodeDemo: Bool = false
     
+    // Test TangramMapView Interface (NEW)
+    @State private var showMapView: Bool = false
+    
     // DifficultySelectionViewModel testing
     @State private var difficultySelectionViewModel: DifficultySelectionViewModel?
     @State private var viewModelTestStatus: TestStatus = .notRun
@@ -405,6 +408,14 @@ struct TangramProgressServiceDebugView: View {
                                 .disabled(mapViewModel == nil)
                             }
                             
+                            // NEW: TangramMapView Test Button  
+                            Button("🗺️ Test TangramMapView Interface") {
+                                showMapView = true
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(mapViewModel == nil)
+                            .padding(.top, 4)
+                            
                             if !mapTestResults.isEmpty {
                                 ScrollView {
                                     Text(mapTestResults)
@@ -495,6 +506,37 @@ struct TangramProgressServiceDebugView: View {
                         .padding()
                         .background(Color.indigo.opacity(0.1))
                         .cornerRadius(8)
+                        
+                        // NEW: TangramMapView Test Section
+                        if showMapView, let mapViewModel = mapViewModel {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("🗺️ TangramMapView Full Interface Test:")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                
+                                Text("Live TangramMapView with all features:")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                
+                                // Full TangramMapView Integration
+                                TangramMapView(viewModel: mapViewModel)
+                                    .frame(height: 400)
+                                    .background(TangramTheme.Backgrounds.editor)
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.blue.opacity(0.3), lineWidth: 2)
+                                    )
+                                
+                                Text("✅ Test: ScrollView, nodes, progress bar, navigation")
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                                    .italic()
+                            }
+                            .padding()
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(8)
+                        }
                         
                         // Test Suite Button
                         HStack {
