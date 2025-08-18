@@ -13,15 +13,14 @@ import Foundation
 
 /// Represents the visual state of a puzzle node on the map
 enum MapNodeState {
-    case locked      // Cannot be played yet
-    case unlocked    // Available to play
+    case locked      // Cannot be played yet - future puzzles
     case current     // The next puzzle in progression (highlighted)
-    case completed   // Already finished
+    case completed   // Already finished - available for replay
     
     var isInteractive: Bool {
         switch self {
         case .locked: return false
-        case .unlocked, .current, .completed: return true
+        case .current, .completed: return true
         }
     }
 }

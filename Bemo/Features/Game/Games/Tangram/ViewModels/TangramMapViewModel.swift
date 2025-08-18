@@ -206,8 +206,9 @@ extension TangramMapViewModel {
     func getNodeState(for puzzle: GamePuzzleData) -> MapNodeState {
         if isCompleted(puzzle.id) {
             return .completed
-        } else if canSelectPuzzle(puzzle) {
-            return isCurrentPuzzle(puzzle) ? .current : .unlocked
+        } else if isCurrentPuzzle(puzzle) {
+            // In linear progression, only the current/next puzzle is available
+            return .current
         } else {
             return .locked
         }

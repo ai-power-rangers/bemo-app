@@ -434,31 +434,25 @@ struct TangramProgressServiceDebugView: View {
                             
                             if showingMapNodeDemo {
                                 VStack(spacing: 16) {
-                                    Text("All Node States:")
+                                    Text("All Node States (Linear Progression):")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                     
-                                    HStack(spacing: 15) {
+                                    HStack(spacing: 20) {
                                         MapNodeView(
-                                            puzzle: GamePuzzleData.mockPuzzle(id: "demo1", name: "Locked", difficulty: 2),
+                                            puzzle: GamePuzzleData.mockPuzzle(id: "demo1", name: "Future", difficulty: 2),
                                             nodeState: .locked,
                                             onTap: { print("🔒 Locked node tapped (no action)") }
                                         )
                                         
                                         MapNodeView(
-                                            puzzle: GamePuzzleData.mockPuzzle(id: "demo2", name: "Ready", difficulty: 3),
-                                            nodeState: .unlocked,
-                                            onTap: { print("⭐ Unlocked node tapped") }
-                                        )
-                                        
-                                        MapNodeView(
-                                            puzzle: GamePuzzleData.mockPuzzle(id: "demo3", name: "Next", difficulty: 4),
+                                            puzzle: GamePuzzleData.mockPuzzle(id: "demo2", name: "Next", difficulty: 3),
                                             nodeState: .current,
                                             onTap: { print("🎯 Current node tapped") }
                                         )
                                         
                                         MapNodeView(
-                                            puzzle: GamePuzzleData.mockPuzzle(id: "demo4", name: "Done", difficulty: 5),
+                                            puzzle: GamePuzzleData.mockPuzzle(id: "demo3", name: "Done", difficulty: 4),
                                             nodeState: .completed,
                                             onTap: { print("✅ Completed node tapped") }
                                         )
@@ -490,7 +484,7 @@ struct TangramProgressServiceDebugView: View {
                                         }
                                     }
                                     
-                                    Text("💡 Watch the pulse animation on 'Next' puzzle!")
+                                    Text("💡 Linear progression: Complete current → next unlocks!")
                                         .font(.caption2)
                                         .foregroundColor(.indigo)
                                         .italic()

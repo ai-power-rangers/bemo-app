@@ -36,8 +36,6 @@ struct MapNodeView: View {
         switch nodeState {
         case .locked:
             return TangramTheme.UI.disabled
-        case .unlocked:
-            return TangramTheme.UI.info
         case .current:
             return TangramTheme.UI.primaryButton
         case .completed:
@@ -49,8 +47,6 @@ struct MapNodeView: View {
         switch nodeState {
         case .locked:
             return "lock.fill"
-        case .unlocked:
-            return "star.fill"
         case .current:
             return "target"
         case .completed:
@@ -62,7 +58,7 @@ struct MapNodeView: View {
         switch nodeState {
         case .locked:
             return TangramTheme.Text.tertiary
-        case .unlocked, .current, .completed:
+        case .current, .completed:
             return .white
         }
     }
@@ -173,8 +169,6 @@ struct MapNodeView: View {
         switch nodeState {
         case .locked:
             return "Locked puzzle: \(puzzle.name), \(puzzle.difficulty) stars"
-        case .unlocked:
-            return "Available puzzle: \(puzzle.name), \(puzzle.difficulty) stars"
         case .current:
             return "Next puzzle: \(puzzle.name), \(puzzle.difficulty) stars"
         case .completed:
@@ -186,8 +180,6 @@ struct MapNodeView: View {
         switch nodeState {
         case .locked:
             return "Complete previous puzzles to unlock"
-        case .unlocked:
-            return "Double tap to play"
         case .current:
             return "Next puzzle in progression. Double tap to play"
         case .completed:
@@ -231,18 +223,12 @@ struct MapConnectionLine: View {
             
             MapNodeView(
                 puzzle: GamePuzzleData.mockPuzzle(id: "2", name: "House", difficulty: 3),
-                nodeState: .unlocked,
-                onTap: { print("Unlocked tapped") }
-            )
-            
-            MapNodeView(
-                puzzle: GamePuzzleData.mockPuzzle(id: "3", name: "Boat", difficulty: 4),
                 nodeState: .current,
                 onTap: { print("Current tapped") }
             )
             
             MapNodeView(
-                puzzle: GamePuzzleData.mockPuzzle(id: "4", name: "Bird", difficulty: 5),
+                puzzle: GamePuzzleData.mockPuzzle(id: "3", name: "Bird", difficulty: 4),
                 nodeState: .completed,
                 onTap: { print("Completed tapped") }
             )
