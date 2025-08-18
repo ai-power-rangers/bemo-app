@@ -576,7 +576,7 @@ class TangramPuzzleScene: SKScene {
     }
 
     /// Adjust the puzzle outline container scale so silhouette size matches CV polygon size
-    private func adjustPuzzleContainerScaleToCV() {
+    func adjustPuzzleContainerScaleToCV() {
         guard let t = cvPanelTransform else { return }
         // Get puzzleContainer in targetSection
         guard let container = targetSection.childNode(withName: "puzzleContainer") else { return }
