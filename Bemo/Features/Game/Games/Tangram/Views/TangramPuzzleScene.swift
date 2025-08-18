@@ -103,6 +103,43 @@ class TangramPuzzleScene: SKScene {
     internal var currentHint: (pieceType: TangramPieceType, targetId: String)?  // Internal for extensions
     internal var hintNode: SKNode?  // Internal for extensions
     
+    // MARK: - Model Polygon Visualization (from Tangram pipeline)
+    
+    // Storage for latest model polygons (in plane coordinates) and colors
+    private var modelPlanePolygons: [[CGPoint]] = []
+    private var modelFillColors: [SKColor] = []
+    private var modelPolygonLayer: SKNode?
+    
+    // Colors from tangram_shapes_2d.json by class id (fallback to pipeline-provided RGB)
+    private static let jsonColorsByClassId: [Int: SKColor] = {
+        var mapping: [Int: SKColor] = [:]
+        guard let path = Bundle.main.path(forResource: "tangram_shapes_2d", ofType: "json"),
+              let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let root = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] else {
+            return mapping
+        }
+        let idToName: [Int: String] = [
+            0: "tangram_parallelogram",
+            1: "tangram_square",
+            2: "tangram_triangle_lrg",
+            3: "tangram_triangle_lrg2",
+            4: "tangram_triangle_med",
+            5: "tangram_triangle_sml",
+            6: "tangram_triangle_sml2"
+        ]
+        for (cid, name) in idToName {
+            if let obj = root[name] as? [String: Any],
+               let arr = obj["color"] as? [Any], arr.count >= 3,
+               let rN = arr[0] as? NSNumber, let gN = arr[1] as? NSNumber, let bN = arr[2] as? NSNumber {
+                let r = CGFloat(truncating: rN) / 255.0
+                let g = CGFloat(truncating: gN) / 255.0
+                let b = CGFloat(truncating: bN) / 255.0
+                mapping[cid] = SKColor(red: r, green: g, blue: b, alpha: 0.35)
+            }
+        }
+        return mapping
+    }()
+    
     // MARK: - Scene Lifecycle
     
     override func didMove(to view: SKView) {
@@ -334,62 +371,153 @@ class TangramPuzzleScene: SKScene {
     
     // MARK: - CV Update
     
-    /// Update scene visuals based on CV-detected pieces
+    /// Update scene visuals to match TangramExample visualization: render model polygons from pipeline
+    /// Call this after CV results update, or when the view refreshes
     func updateFromCVPieces(_ placedPieces: [PlacedPiece]) {
-        guard let mirror = topMirrorContent else { return }
+        // For visualization parity, ignore piece-by-piece ghosts and render the model polygons only
+        renderModelPolygons()
+    }
+
+    /// Public entry to set model polygons and colors from the CV pipeline
+    func updateModelPolygons(planeModelPolygons: [NSNumber: [NSNumber]], modelColorsRGB: [NSNumber: [NSNumber]]? = nil) {
+        // Reset storage
+        modelPlanePolygons.removeAll()
+        modelFillColors.removeAll()
         
-        print("🎯 [Scene] Updating from \(placedPieces.count) CV pieces")
-        
-        // Clear existing mirror pieces
-        mirror.enumerateChildNodes(withName: "mirror_*") { node, _ in 
-            node.removeFromParent() 
-        }
-        
-        // Set up scaling for the mirror content - scale up by 4x for better visibility
-        let physSize = physicalBounds.size
-        let topSize = CGSize(width: targetBounds.width, height: targetBounds.height)
-        guard physSize.width > 0, physSize.height > 0, topSize.width > 0, topSize.height > 0 else { return }
-        let sx = topSize.width / canvasSize.width  // Scale from CV canvas to display
-        let sy = topSize.height / canvasSize.height
-        let uniform = min(sx, sy) * 4.0  // Scale up by 4x
-        topMirrorContent.setScale(uniform)
-        topMirrorContent.position = .zero
-        
-        // Create mirror pieces for each CV-detected piece
-        for piece in placedPieces {
-            let nodeName = "mirror_\(piece.id)"
-            
-            // Convert from CV canvas coordinates (1080x1920) to scene coordinates
-            // CV coordinates have origin at top-left, scene has origin at center
-            // Don't flip Y axis - keep same orientation as CV
-            let sceneX = piece.position.x - canvasSize.width/2
-            let sceneY = piece.position.y - canvasSize.height/2  // Don't flip Y
-            
-            // Create ghost piece at converted position
-            let ghost = createGhostPiece(
-                pieceType: piece.pieceType,
-                at: CGPoint(x: sceneX, y: sceneY),
-                rotation: CGFloat(piece.rotation * .pi / 180) // Convert degrees to radians
-            )
-            ghost.name = nodeName
-            ghost.xScale = piece.isFlipped ? -abs(ghost.xScale) : abs(ghost.xScale)
-            
-            // Set appearance based on validation state
-            let baseColor = TangramColors.Sprite.uiColor(for: piece.pieceType)
-            if piece.validationState == .correct {
-                ghost.fillColor = baseColor.withAlphaComponent(0.6)
-                ghost.strokeColor = baseColor
-                ghost.lineWidth = 2.0
-            } else {
-                ghost.fillColor = baseColor.withAlphaComponent(0.2)
-                ghost.strokeColor = baseColor.withAlphaComponent(0.5)
-                ghost.lineWidth = 1.0
+        // Deterministic order by class id
+        for (key, arr) in planeModelPolygons.sorted(by: { $0.key.intValue < $1.key.intValue }) {
+            var pts: [CGPoint] = []
+            var j = 0
+            while j + 1 < arr.count {
+                let x = CGFloat(truncating: arr[j])
+                let y = CGFloat(truncating: arr[j+1])
+                pts.append(CGPoint(x: x, y: y))
+                j += 2
             }
-            
-            mirror.addChild(ghost)
-            
-            print("  🔷 \(piece.pieceType) at canvas(\(Int(piece.position.x)), \(Int(piece.position.y))) → scene(\(Int(sceneX)), \(Int(sceneY))), rot=\(Int(piece.rotation))°")
+            if pts.count >= 3 {
+                modelPlanePolygons.append(pts)
+                if let col = TangramPuzzleScene.jsonColorsByClassId[key.intValue] {
+                    modelFillColors.append(col)
+                } else if let rgb = modelColorsRGB?[key], rgb.count >= 3 {
+                    let r = CGFloat(truncating: rgb[0]) / 255.0
+                    let g = CGFloat(truncating: rgb[1]) / 255.0
+                    let b = CGFloat(truncating: rgb[2]) / 255.0
+                    modelFillColors.append(SKColor(red: r, green: g, blue: b, alpha: 0.35))
+                } else {
+                    modelFillColors.append(SKColor.white.withAlphaComponent(0.35))
+                }
+            }
         }
+        
+        renderModelPolygons()
+    }
+
+    /// Render model polygons into the target section, scaled and centered exactly like PolygonPlotView
+    private func renderModelPolygons() {
+        guard !modelPlanePolygons.isEmpty else { return }
+        guard targetSection != nil else { return }
+        
+        // Remove any pre-existing mirrored piece nodes to avoid conflicts with model rendering
+        topMirrorContent?.enumerateChildNodes(withName: "mirror_*") { node, _ in
+            node.removeFromParent()
+        }
+        
+        // Ensure layer
+        if modelPolygonLayer == nil {
+            let layer = SKNode()
+            layer.name = "modelPolygonLayer"
+            layer.zPosition = 3 // Above silhouettes and mirror
+            targetSection.addChild(layer)
+            modelPolygonLayer = layer
+        }
+        
+        // Clear previous shapes
+        modelPolygonLayer?.removeAllChildren()
+        
+        // Compute fit within the top panel area (match sample: full width of the panel)
+        let panelWidth = max(1, targetBounds.width)
+        let panelHeight = max(1, targetBounds.height)
+        
+        // Compute bounds of all model polygons in plane coordinates
+        var minX = CGFloat.greatestFiniteMagnitude, minY = CGFloat.greatestFiniteMagnitude
+        var maxX = -CGFloat.greatestFiniteMagnitude, maxY = -CGFloat.greatestFiniteMagnitude
+        for poly in modelPlanePolygons {
+            for p in poly {
+                minX = min(minX, p.x); maxX = max(maxX, p.x)
+                minY = min(minY, p.y); maxY = max(maxY, p.y)
+            }
+        }
+        let pad: CGFloat = 8
+        let srcW = max(1, maxX - minX)
+        let srcH = max(1, maxY - minY)
+        let scale = min((panelWidth - 2*pad)/srcW, (panelHeight - 2*pad)/srcH)
+        let offsetX = (panelWidth - scale*srcW)/2 - scale*minX
+        let offsetY = (panelHeight - scale*srcH)/2 - scale*minY
+        
+        // Helper to convert plane → SpriteKit local (targetSection-centered)
+        func toLocal(_ p: CGPoint) -> CGPoint {
+            // UIKit-like draw coords
+            let ux = p.x * scale + offsetX
+            let uy = p.y * scale + offsetY
+            // Convert from top-left origin to center-origin with Y-up (SpriteKit)
+            let lx = ux - panelWidth/2
+            let ly = (panelHeight/2) - uy
+            return CGPoint(x: lx, y: ly)
+        }
+        
+        // Draw model polygons
+        for (idx, poly) in modelPlanePolygons.enumerated() {
+            guard poly.count >= 3 else { continue }
+            let path = CGMutablePath()
+            let p0 = toLocal(poly[0])
+            path.move(to: p0)
+            for k in 1..<poly.count {
+                path.addLine(to: toLocal(poly[k]))
+            }
+            path.closeSubpath()
+            
+            let shape = SKShapeNode(path: path)
+            let fill = (idx < modelFillColors.count) ? modelFillColors[idx] : SKColor.white.withAlphaComponent(0.35)
+            shape.fillColor = fill
+            shape.strokeColor = SKColor.white
+            shape.lineWidth = 1.5
+            modelPolygonLayer?.addChild(shape)
+        }
+        
+        // Draw plane axes (red X, green Y)
+        func addArrow(from: CGPoint, to: CGPoint, color: SKColor, width: CGFloat) {
+            let linePath = CGMutablePath()
+            linePath.move(to: from)
+            linePath.addLine(to: to)
+            let line = SKShapeNode(path: linePath)
+            line.strokeColor = color
+            line.lineWidth = width
+            modelPolygonLayer?.addChild(line)
+            
+            let angle = atan2(to.y - from.y, to.x - from.x)
+            let headLen: CGFloat = 8
+            let headAng: CGFloat = .pi / 7
+            let p1 = CGPoint(x: to.x - headLen * cos(angle - headAng), y: to.y - headLen * sin(angle - headAng))
+            let p2 = CGPoint(x: to.x - headLen * cos(angle + headAng), y: to.y - headLen * sin(angle + headAng))
+            let headPath = CGMutablePath()
+            headPath.move(to: to)
+            headPath.addLine(to: p1)
+            headPath.move(to: to)
+            headPath.addLine(to: p2)
+            let head = SKShapeNode(path: headPath)
+            head.strokeColor = color
+            head.lineWidth = width
+            modelPolygonLayer?.addChild(head)
+        }
+        
+        let axisLenPlane = 0.15 * min(srcW, srcH)
+        let originPlane = CGPoint(x: minX + 0.1*srcW, y: maxY - 0.1*srcH)
+        let originLocal = toLocal(originPlane)
+        let xEndLocal = toLocal(CGPoint(x: originPlane.x + axisLenPlane, y: originPlane.y))
+        // Match PolygonPlotView: draw positive Y axis upward on screen
+        let yEndLocal = toLocal(CGPoint(x: originPlane.x, y: originPlane.y - axisLenPlane))
+        addArrow(from: originLocal, to: xEndLocal, color: .systemRed, width: 2)
+        addArrow(from: originLocal, to: yEndLocal, color: .systemGreen, width: 2)
     }
     
     // MARK: - Nudge System

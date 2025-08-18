@@ -41,6 +41,8 @@ class CVService: NSObject {
     private var lastProcessingTime: TimeInterval = 0
     private var lastRecognizedPieces: [RecognizedPiece] = []
     private var lastFrameTimestamp: TimeInterval = 0
+    private var currentViewSize: CGSize = UIScreen.main.bounds.size
+    private var cameraPermissionGranted: Bool = false
     
     // Public publishers
     var recognizedPiecesPublisher: AnyPublisher<[RecognizedPiece], Never> {
@@ -88,16 +90,23 @@ class CVService: NSObject {
         
         // Initialize the integrated pipeline
         do {
+            // Pass models folder to C++ when available (parity with sample app)
+            let assetsDirPath = Bundle.main.path(forResource: "models", ofType: nil) ?? ""
             pipelineWrapper.pipeline = try TPIntegratedPipeline(
                 modelPath: yoloPath,
                 tangramModelsJSON: modelPath,
-                assetsDir: nil
+                assetsDir: assetsDirPath
             )
             print("✅ CVService: Pipeline initialized successfully")
         } catch {
             print("❌ CVService: Failed to initialize pipeline: \(error.localizedDescription)")
         }
     }
+    // Update the view size used by the pipeline for overlay composition
+    func updateViewSize(_ size: CGSize) {
+        currentViewSize = size
+    }
+
     
     func initialize() {
         // Perform any necessary initialization
@@ -112,15 +121,13 @@ class CVService: NSObject {
         isSessionActive = true
         print("CV session started")
         
-        // Request camera permission first
+        // Request camera permission but do not start the feed yet
         AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-            if granted {
-                DispatchQueue.main.async {
-                    self?.setupCamera()
-                    self?.startCamera()
+            DispatchQueue.main.async {
+                self?.cameraPermissionGranted = granted
+                if !granted {
+                    print("❌ Camera permission denied")
                 }
-            } else {
-                print("❌ Camera permission denied")
             }
         }
     }
@@ -133,6 +140,37 @@ class CVService: NSObject {
         
         // Clean up resources
         cancellables.removeAll()
+    }
+
+    /// Start the camera feed right before CV processing, only when needed
+    func startVideoFeedIfNeeded() {
+        guard isSessionActive else { return }
+        // If capture session exists and is running, do nothing
+        if captureSession?.isRunning ?? false { return }
+        
+        let startFeed: () -> Void = { [weak self] in
+            guard let self = self else { return }
+            if self.captureSession == nil {
+                self.setupCamera()
+            }
+            self.startCamera()
+        }
+        
+        if cameraPermissionGranted {
+            startFeed()
+        } else {
+            // Request permission and start upon grant
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                DispatchQueue.main.async {
+                    self?.cameraPermissionGranted = granted
+                    if granted {
+                        startFeed()
+                    } else {
+                        print("❌ Camera permission denied")
+                    }
+                }
+            }
+        }
     }
     
     // MARK: - Camera Setup
@@ -392,20 +430,9 @@ class CVService: NSObject {
 
             let confidence = detections.first { Int($0.classId) == classId }?.confidence ?? 1.0
 
-            // --- Velocity and isMoving calculation ---
-            var velocity: CGVector = .zero
-            var isMoving = false
-            if let lastPiece = self.lastRecognizedPieces.first(where: { $0.id == pieceType.rawValue }), dt > 0 {
-                // Positions are normalized, so velocity will be in normalized units per second.
-                let dx = (normalizedX - lastPiece.position.x) / CGFloat(dt)
-                let dy = (normalizedY - lastPiece.position.y) / CGFloat(dt)
-                velocity = CGVector(dx: dx, dy: dy)
-                // Threshold for movement in normalized space (e.g., 5% of screen width per second)
-                if hypot(dx, dy) > 0.05 {
-                    isMoving = true
-                }
-            }
-            // --- End Velocity calculation ---
+            // Temporarily disable velocity and isMoving to avoid affecting render positioning
+            let velocity: CGVector = .zero
+            let isMoving = false
 
             let piece = RecognizedPiece(
                 id: pieceType.rawValue, // Use pieceType as a stable ID
@@ -443,8 +470,8 @@ extension CVService: AVCaptureVideoDataOutputSampleBufferDelegate {
         options.renderOverlays = true
         options.lockingEnabled = true
         
-        // Get a reasonable view size (we're not displaying, so use a standard size)
-        let viewSize = CGSize(width: 1080, height: 1920) // Portrait iPhone size
+        // Use the current UI view size for accurate overlay composition (parity with sample app)
+        let viewSize = currentViewSize
         
         do {
             let result = try pipeline.processFrame(
@@ -457,13 +484,10 @@ extension CVService: AVCaptureVideoDataOutputSampleBufferDelegate {
             let processingTime = (CACurrentMediaTime() - startTime) * 1000
             let fps = 1000.0 / processingTime
             
-            // Convert detections to recognized pieces
+            // Publish recognized pieces as-is only if caller needs them
+            // Keep publishing for game logic; do not apply additional homography transforms here
             let recognizedPieces = convertDetectionsToRecognizedPieces(result, viewSize: viewSize)
-            
-            // Publish recognized pieces
-            if !recognizedPieces.isEmpty {
-                recognizedPiecesSubject.send(recognizedPieces)
-            }
+            recognizedPiecesSubject.send(recognizedPieces)
             
             // Create overlay image if available
             var overlayImage: UIImage?
@@ -475,7 +499,7 @@ extension CVService: AVCaptureVideoDataOutputSampleBufferDelegate {
                 }
             }
             
-            // Publish full detection results
+            // Publish full detection results (includes tangramResult for model polygons)
             let detectionResult = CVDetectionResult(
                 detections: result.detections,
                 tangramResult: result.tangramResult,
