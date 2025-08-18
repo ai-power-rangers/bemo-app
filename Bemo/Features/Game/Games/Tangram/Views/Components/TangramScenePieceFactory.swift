@@ -119,6 +119,8 @@ extension TangramPuzzleScene {
             silhouette.userData = (silhouette.userData ?? NSMutableDictionary())
             silhouette.userData?["pieceType"] = target.pieceType.rawValue
         }
+        // After silhouettes are laid out, align their scale to match CV polygon visualization
+        adjustPuzzleContainerScaleToCV()
     }
     
     private func createTargetSilhouette(_ target: GamePuzzleData.TargetPiece, boundsCenterSK: CGPoint, displayScale: CGFloat) -> SKShapeNode {

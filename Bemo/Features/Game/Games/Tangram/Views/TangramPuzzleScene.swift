@@ -109,6 +109,15 @@ class TangramPuzzleScene: SKScene {
     private var modelPlanePolygons: [[CGPoint]] = []
     private var modelFillColors: [SKColor] = []
     private var modelPolygonLayer: SKNode?
+    // Persisted transform mapping model plane → panel (targetSection) coordinates
+    private struct PanelTransform {
+        let scale: CGFloat
+        let offsetX: CGFloat
+        let offsetY: CGFloat
+        let panelWidth: CGFloat
+        let panelHeight: CGFloat
+    }
+    private var cvPanelTransform: PanelTransform?
     
     // Colors from tangram_shapes_2d.json by class id (fallback to pipeline-provided RGB)
     private static let jsonColorsByClassId: [Int: SKColor] = {
@@ -419,7 +428,7 @@ class TangramPuzzleScene: SKScene {
         
         // Remove any pre-existing mirrored piece nodes to avoid conflicts with model rendering
         topMirrorContent?.enumerateChildNodes(withName: "mirror_*") { node, _ in
-            node.removeFromParent()
+            node.removeFromParent() 
         }
         
         // Ensure layer
@@ -453,17 +462,17 @@ class TangramPuzzleScene: SKScene {
         let scale = min((panelWidth - 2*pad)/srcW, (panelHeight - 2*pad)/srcH)
         let offsetX = (panelWidth - scale*srcW)/2 - scale*minX
         let offsetY = (panelHeight - scale*srcH)/2 - scale*minY
+        // Store transform for unification
+        cvPanelTransform = PanelTransform(
+            scale: scale,
+            offsetX: offsetX,
+            offsetY: offsetY,
+            panelWidth: panelWidth,
+            panelHeight: panelHeight
+        )
         
         // Helper to convert plane → SpriteKit local (targetSection-centered)
-        func toLocal(_ p: CGPoint) -> CGPoint {
-            // UIKit-like draw coords
-            let ux = p.x * scale + offsetX
-            let uy = p.y * scale + offsetY
-            // Convert from top-left origin to center-origin with Y-up (SpriteKit)
-            let lx = ux - panelWidth/2
-            let ly = (panelHeight/2) - uy
-            return CGPoint(x: lx, y: ly)
-        }
+        func toLocal(_ p: CGPoint) -> CGPoint { planeToPanel(p) }
         
         // Draw model polygons
         for (idx, poly) in modelPlanePolygons.enumerated() {
@@ -512,17 +521,95 @@ class TangramPuzzleScene: SKScene {
         
         let axisLenPlane = 0.15 * min(srcW, srcH)
         let originPlane = CGPoint(x: minX + 0.1*srcW, y: maxY - 0.1*srcH)
-        let originLocal = toLocal(originPlane)
-        let xEndLocal = toLocal(CGPoint(x: originPlane.x + axisLenPlane, y: originPlane.y))
+        let originLocal = planeToPanel(originPlane)
+        let xEndLocal = planeToPanel(CGPoint(x: originPlane.x + axisLenPlane, y: originPlane.y))
         // Match PolygonPlotView: draw positive Y axis upward on screen
-        let yEndLocal = toLocal(CGPoint(x: originPlane.x, y: originPlane.y - axisLenPlane))
+        let yEndLocal = planeToPanel(CGPoint(x: originPlane.x, y: originPlane.y - axisLenPlane))
         addArrow(from: originLocal, to: xEndLocal, color: .systemRed, width: 2)
         addArrow(from: originLocal, to: yEndLocal, color: .systemGreen, width: 2)
     }
-    
+
+    // MARK: - Panel-space Conversion Helpers
+
+    /// Convert a point in model plane coordinates to panel (targetSection) coordinates
+    internal func planeToPanel(_ p: CGPoint) -> CGPoint {
+        guard let t = cvPanelTransform else { return .zero }
+        // UIKit-like draw coords
+        let ux = p.x * t.scale + t.offsetX
+        let uy = p.y * t.scale + t.offsetY
+        // Convert from top-left origin to center-origin with Y-up (SpriteKit)
+        let lx = ux - t.panelWidth/2
+        let ly = (t.panelHeight/2) - uy
+        return CGPoint(x: lx, y: ly)
+    }
+
+    /// Convert a point from a child node (e.g., puzzleContainer or silhouette) into panel (targetSection) coordinates
+    internal func nodeToPanel(_ point: CGPoint, from node: SKNode) -> CGPoint {
+        return node.convert(point, to: targetSection)
+    }
+
+    // MARK: - Polygon Collection in Unified Panel Space
+
+    /// Collect current CV model polygons in panel coordinates
+    internal func collectCVPanelPolygons() -> [[CGPoint]] {
+        guard !modelPlanePolygons.isEmpty, cvPanelTransform != nil else { return [] }
+        var polys: [[CGPoint]] = []
+        for poly in modelPlanePolygons {
+            let mapped = poly.map { planeToPanel($0) }
+            if mapped.count >= 3 { polys.append(mapped) }
+        }
+        return polys
+    }
+
+    /// Collect target silhouette polygons in panel coordinates (by reading SKShapeNode paths)
+    internal func collectTargetPanelPolygons() -> [String: [CGPoint]] {
+        var result: [String: [CGPoint]] = [:]
+        for (targetId, node) in targetSilhouettes {
+            guard let path = node.path else { continue }
+            let pts = path.extractPolygonPoints()
+            if pts.count >= 3 {
+                let mapped = pts.map { nodeToPanel($0, from: node) }
+                result[targetId] = mapped
+            }
+        }
+        return result
+    }
+
+    /// Adjust the puzzle outline container scale so silhouette size matches CV polygon size
+    private func adjustPuzzleContainerScaleToCV() {
+        guard let t = cvPanelTransform else { return }
+        // Get puzzleContainer in targetSection
+        guard let container = targetSection.childNode(withName: "puzzleContainer") else { return }
+        // Current silhouette envelope in targetSection coordinates
+        let silhouetteRect = container.calculateAccumulatedFrame()
+        guard silhouetteRect.width > 0, silhouetteRect.height > 0 else { return }
+        // CV polygon envelope in panel (targetSection) coordinates using last mapped points
+        let cvPolys = collectCVPanelPolygons()
+        guard !cvPolys.isEmpty else { return }
+        var minX = CGFloat.greatestFiniteMagnitude
+        var minY = CGFloat.greatestFiniteMagnitude
+        var maxX = -CGFloat.greatestFiniteMagnitude
+        var maxY = -CGFloat.greatestFiniteMagnitude
+        for poly in cvPolys {
+            for p in poly {
+                minX = min(minX, p.x); maxX = max(maxX, p.x)
+                minY = min(minY, p.y); maxY = max(maxY, p.y)
+            }
+        }
+        let cvWidth = max(1, maxX - minX)
+        let cvHeight = max(1, maxY - minY)
+        // Compute uniform scale factor to make silhouettes match CV polygon size
+        let scaleX = cvWidth / silhouetteRect.width
+        let scaleY = cvHeight / silhouetteRect.height
+        let uniform = min(scaleX, scaleY)
+        // Apply uniform scale to puzzleContainer (relative to its current scale)
+        container.setScale(uniform)
+    }
+
+    // MARK: - CGPath helpers (defined below class)
     // MARK: - Nudge System
     
-    internal func showSmartNudgeInTarget(targetNode: SKShapeNode, content: NudgeContent, pieceType: TangramPieceType) {
+    func showSmartNudgeInTarget(targetNode: SKShapeNode, content: NudgeContent, pieceType: TangramPieceType) {
         // Enforce only ONE nudge visible at a time in the silhouette area
         targetSection.enumerateChildNodes(withName: "nudge_*") { node, _ in node.removeFromParent() }
         if let container = targetSection.childNode(withName: "puzzleContainer") {
@@ -712,7 +799,7 @@ class TangramPuzzleScene: SKScene {
     /// A piece is considered settled if it hasn't moved/rotated/flipped for at
     /// least `settleDwell` seconds. Movement events record timestamps in
     /// `lastMotionAt`.
-    internal func isPieceSettled(_ pieceId: String, now: TimeInterval = CACurrentMediaTime()) -> Bool {
+    func isPieceSettled(_ pieceId: String, now: TimeInterval = CACurrentMediaTime()) -> Bool {
         if let last = lastMotionAt[pieceId] {
             return (now - last) >= settleDwell
         }
@@ -722,7 +809,7 @@ class TangramPuzzleScene: SKScene {
     // MARK: - Top Mirror Feedback/Nudges
 
     /// Shows a nudge bubble anchored near the mirrored piece in the top panel
-    internal func showTopNudgeNearMirror(pieceId: String, content: NudgeContent) {
+    func showTopNudgeNearMirror(pieceId: String, content: NudgeContent) {
         guard let mirrorNode = topMirrorContent?.childNode(withName: "mirror_\(pieceId)") else { return }
 
         // Remove any existing nudge for this piece
@@ -829,7 +916,7 @@ class TangramPuzzleScene: SKScene {
     }
 
     /// Shows a brief checkmark near the mirrored piece when orientation (rotation/flip) is correct
-    internal func showMirrorCheckmark(for pieceId: String) {
+    func showMirrorCheckmark(for pieceId: String) {
         guard let mirrorNode = topMirrorContent?.childNode(withName: "mirror_\(pieceId)") else { return }
         let checkName = "mirror_check_\(pieceId)"
         topMirrorContent?.childNode(withName: checkName)?.removeFromParent()
