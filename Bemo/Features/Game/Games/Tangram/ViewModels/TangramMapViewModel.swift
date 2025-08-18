@@ -22,6 +22,9 @@ class TangramMapViewModel {
     private let onPuzzleSelected: (GamePuzzleData) -> Void
     private let onBackToDifficulty: () -> Void
     
+    /// Task for observing puzzle library changes - stored to enable cancellation
+    private var observationTask: Task<Void, Never>?
+    
     // MARK: - Observable Properties
     
     /// Current difficulty being displayed
@@ -99,6 +102,13 @@ class TangramMapViewModel {
         setupPuzzleLibraryObservation()
     }
     
+    // MARK: - Deinitialization
+    
+    deinit {
+        // Cancel the observation task to prevent memory leaks
+        observationTask?.cancel()
+    }
+    
     // MARK: - Public Methods
     
     /// Load puzzles for the current difficulty
@@ -154,7 +164,7 @@ class TangramMapViewModel {
     
     /// Set up reactive observation of puzzle library changes
     private func setupPuzzleLibraryObservation() {
-        Task { @MainActor in
+        observationTask = Task { @MainActor in
             // Observe changes to puzzle library service
             for await _ in NotificationCenter.default.notifications(named: .puzzleLibraryDidUpdate) {
                 print("[TangramMapViewModel] Puzzle library updated, reloading puzzles...")
