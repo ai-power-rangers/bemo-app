@@ -14,6 +14,9 @@ import SwiftUI
 struct FinalCompletionView: View {
     private let viewModel: FinalCompletionViewModel
     
+    // State for triggering animations when view appears
+    @State private var isAnimating = false
+    
     init(viewModel: FinalCompletionViewModel) {
         self.viewModel = viewModel
     }
@@ -49,8 +52,8 @@ struct FinalCompletionView: View {
                                 )
                             )
                             .shadow(color: .orange.opacity(0.5), radius: 20)
-                            .scaleEffect(1.0)
-                            .animation(.spring(response: 0.8, dampingFraction: 0.6).repeatCount(2, autoreverses: true), value: viewModel.achievementUnlocked)
+                            .scaleEffect(isAnimating ? 1.2 : 1.0)
+                            .animation(.spring(response: 0.8, dampingFraction: 0.6).repeatCount(2, autoreverses: true), value: isAnimating)
                         
                         // Title
                         Text(viewModel.masterTitle)
@@ -129,7 +132,9 @@ struct FinalCompletionView: View {
                         VStack(spacing: 12) {
                             ForEach(Array(viewModel.achievements.enumerated()), id: \.offset) { index, achievement in
                                 AchievementBadge(achievement: achievement)
-                                    .animation(.spring(response: 0.5, dampingFraction: 0.7).delay(Double(index) * 0.2), value: viewModel.achievementUnlocked)
+                                    .scaleEffect(isAnimating ? 1.0 : 0.8)
+                                    .opacity(isAnimating ? 1.0 : 0.0)
+                                    .animation(.spring(response: 0.5, dampingFraction: 0.7).delay(Double(index) * 0.2), value: isAnimating)
                             }
                         }
                     }
@@ -198,6 +203,12 @@ struct FinalCompletionView: View {
                     Spacer(minLength: 20)
                 }
                 .padding(.top, 20)
+            }
+        }
+        .onAppear {
+            // Trigger animations when the view appears
+            withAnimation(.easeInOut(duration: 0.3)) {
+                isAnimating = true
             }
         }
     }

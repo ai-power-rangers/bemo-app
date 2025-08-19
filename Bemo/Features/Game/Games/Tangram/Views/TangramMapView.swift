@@ -148,7 +148,7 @@ struct TangramMapView: View {
             .frame(height: 8)
             
             // Completion Status
-            if viewModel.isAllCompleted {
+            if viewModel.isDifficultyCompleted {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(TangramTheme.UI.success)
@@ -262,7 +262,7 @@ struct TangramMapView: View {
                             .stroke(TangramTheme.UI.primaryButton.opacity(0.3), lineWidth: 1)
                     )
                 }
-                .disabled(viewModel.isAllCompleted)
+                .disabled(viewModel.isDifficultyCompleted)
                 
                 Spacer()
             }

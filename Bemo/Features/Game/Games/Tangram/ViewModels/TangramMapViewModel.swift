@@ -74,35 +74,9 @@ class TangramMapViewModel {
         puzzles.count
     }
     
-    /// Whether all puzzles in this difficulty are completed
-    var isAllCompleted: Bool {
-        !puzzles.isEmpty && completedCount == totalCount
-    }
-    
-    // MARK: - Phase 4: Difficulty Completion Detection
-    
     /// Whether this difficulty is completed and ready for promotion
     var isDifficultyCompleted: Bool {
-        return completedPuzzleCount >= totalPuzzleCount
-    }
-    
-    /// Completion percentage as a double (0.0 to 1.0)
-    var completionPercentageDouble: Double {
-        guard totalPuzzleCount > 0 else { return 0.0 }
-        return Double(completedPuzzleCount) / Double(totalPuzzleCount)
-    }
-    
-    /// Total number of puzzles in this difficulty
-    private var totalPuzzleCount: Int {
-        puzzles.count
-    }
-    
-    /// Number of completed puzzles in this difficulty
-    private var completedPuzzleCount: Int {
-        puzzles.filter { puzzle in
-            progressService.getProgress(for: childProfileId)
-                .isPuzzleCompleted(puzzleId: puzzle.id, difficulty: difficulty)
-        }.count
+        !puzzles.isEmpty && completedCount == totalCount
     }
     
     /// Check if difficulty should trigger promotion

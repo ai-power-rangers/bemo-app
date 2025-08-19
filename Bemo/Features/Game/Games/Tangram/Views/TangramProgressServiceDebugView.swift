@@ -1164,7 +1164,7 @@ struct TangramProgressServiceDebugView: View {
         mapTestResults += "   • Unlocked puzzles: \(viewModel.unlockedPuzzleIds.count)\n"
         mapTestResults += "   • Completed puzzles: \(viewModel.completedCount)\n"
         mapTestResults += "   • Completion %: \(Int(viewModel.completionPercentage * 100))%\n"
-        mapTestResults += "   • All completed: \(viewModel.isAllCompleted ? "Yes" : "No")\n\n"
+        mapTestResults += "   • All completed: \(viewModel.isDifficultyCompleted ? "Yes" : "No")\n\n"
         
         // Test puzzle node states
         mapTestResults += "🗺️ Puzzle Node States:\n"

@@ -14,6 +14,9 @@ import SwiftUI
 struct PromotionInterstitialView: View {
     private let viewModel: PromotionInterstitialViewModel
     
+    // State for triggering animations when view appears
+    @State private var isAnimating = false
+    
     init(viewModel: PromotionInterstitialViewModel) {
         self.viewModel = viewModel
     }
@@ -38,8 +41,8 @@ struct PromotionInterstitialView: View {
                     .font(.system(size: 100))
                     .foregroundColor(viewModel.promotionColor)
                     .shadow(color: viewModel.promotionColor.opacity(0.3), radius: 20)
-                    .scaleEffect(1.0)
-                    .animation(.spring(response: 0.6, dampingFraction: 0.6).repeatCount(3, autoreverses: true), value: viewModel.promotionTitle)
+                    .scaleEffect(isAnimating ? 1.2 : 1.0)
+                    .animation(.spring(response: 0.6, dampingFraction: 0.6).repeatCount(3, autoreverses: true), value: isAnimating)
                 
                 // Congratulations Message
                 VStack(spacing: 16) {
@@ -157,6 +160,12 @@ struct PromotionInterstitialView: View {
             }
             .padding(.vertical, 40)
             .padding(.horizontal, 20)
+        }
+        .onAppear {
+            // Trigger animations when the view appears
+            withAnimation(.easeInOut(duration: 0.3)) {
+                isAnimating = true
+            }
         }
     }
     
