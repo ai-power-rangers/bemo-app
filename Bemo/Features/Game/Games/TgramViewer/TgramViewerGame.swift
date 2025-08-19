@@ -2,10 +2,10 @@
 //  TgramViewerGame.swift
 //  Bemo
 //
-//  Game implementation for viewing CV-detected tangram pieces
+//  Game implementation for frustration detection testing
 //
 
-// WHAT: Implements the Game protocol for TgramViewer, a tool to visualize CV output coordinates
+// WHAT: Implements the Game protocol for TgramViewer, a tool to test frustration detection
 // ARCHITECTURE: Game protocol implementation in MVVM-S pattern
 // USAGE: Instantiated by GameLobbyViewModel, creates game view via makeGameView
 
@@ -16,10 +16,10 @@ class TgramViewerGame: Game {
     // MARK: - Game Protocol Properties
     
     let id = "tgram_viewer"
-    let title = "Tangram Viewer"
-    let description = "View tangram pieces from CV output coordinates"
+    let title = "Frustration Detector"
+    let description = "Test facial expression-based frustration detection"
     let recommendedAge = 5...99  // Tool for all ages
-    let thumbnailImageName = "eye.circle.fill"
+    let thumbnailImageName = "face.smiling.inverse"
     
     // MARK: - Game UI Configuration
     
@@ -44,7 +44,7 @@ class TgramViewerGame: Game {
     // MARK: - Game Protocol Methods
     
     func makeGameView(delegate: GameDelegate) -> AnyView {
-        let vm = TgramViewerViewModel(delegate: delegate, cvService: cvService)
+        let vm = TgramViewerViewModel(delegate: delegate)
         self.viewModel = vm
         return AnyView(
             TgramViewerView(viewModel: vm)
