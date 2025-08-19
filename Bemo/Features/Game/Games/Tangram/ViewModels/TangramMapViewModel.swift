@@ -258,6 +258,57 @@ class TangramMapViewModel {
         return puzzle.id == nextPuzzle.id
     }
     
+    // MARK: - Development Testing Methods
+    
+    #if DEBUG
+    /// Complete the current/next puzzle for testing purposes
+    func completeCurrentPuzzleForTesting() {
+        guard let currentPuzzle = nextPuzzle else {
+            print("[TangramMapViewModel] No current puzzle to complete")
+            return
+        }
+        
+        print("[TangramMapViewModel] TEST: Completing puzzle \(currentPuzzle.id)")
+        progressService.markPuzzleCompleted(
+            childId: childProfileId,
+            puzzleId: currentPuzzle.id,
+            difficulty: difficulty
+        )
+        
+        // Refresh the map state
+        refresh()
+        
+        print("[TangramMapViewModel] TEST: Puzzle completed. New progress: \(completedCount)/\(totalCount)")
+    }
+    
+    /// Complete all remaining puzzles in current difficulty to trigger promotion
+    func completeAllPuzzlesForTesting() {
+        let incompletePuzzles = puzzles.filter { !isCompleted($0.id) }
+        
+        print("[TangramMapViewModel] TEST: Completing \(incompletePuzzles.count) remaining puzzles for \(difficulty.displayName)")
+        
+        for puzzle in incompletePuzzles {
+            progressService.markPuzzleCompleted(
+                childId: childProfileId,
+                puzzleId: puzzle.id,
+                difficulty: difficulty
+            )
+        }
+        
+        // Refresh the map state
+        refresh()
+        
+        print("[TangramMapViewModel] TEST: All puzzles completed! Progress: \(completedCount)/\(totalCount)")
+        print("[TangramMapViewModel] TEST: Difficulty completed: \(isDifficultyCompleted)")
+        
+        if let nextDifficulty = checkForDifficultyPromotion() {
+            print("[TangramMapViewModel] TEST: Ready for promotion to \(nextDifficulty.displayName)")
+        } else {
+            print("[TangramMapViewModel] TEST: No promotion available (completed all difficulties)")
+        }
+    }
+    #endif
+    
     // MARK: - Private Methods
     
     /// Update which puzzles are unlocked based on progress
