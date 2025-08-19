@@ -486,19 +486,19 @@ extension CVService: AVCaptureVideoDataOutputSampleBufferDelegate {
             
             detectionResultsSubject.send(detectionResult)
             
-            // Log results - TEMPORARILY DISABLED
-            // if result.detections.isEmpty {
-            //     print("📦 No tangrams detected")
-            // } else {
-            //     print("📦 Detected \(result.detections.count) tangram(s):")
-            //     for detection in result.detections {
-            //         let className = detection.className
-            //         let confidence = detection.confidence
-            //         print("   - \(className): \(String(format: "%.1f%%", confidence * 100))")
-            //     }
-            // }
+            // Log detection results
+            if result.detections.isEmpty {
+                print("📦 No tangrams detected")
+            } else {
+                print("📦 Detected \(result.detections.count) tangram(s):")
+                for detection in result.detections {
+                    let className = detection.className
+                    let confidence = detection.confidence
+                    print("   - \(className): \(String(format: "%.1f%%", confidence * 100))")
+                }
+            }
             
-            // print(String(format: "⚡ %.1f FPS", fps))
+            print(String(format: "⚡ %.1f FPS", fps))
         } catch {
             print("❌ Processing error: \(error)")
         }
