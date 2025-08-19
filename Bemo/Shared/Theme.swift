@@ -30,18 +30,18 @@ enum BemoTheme {
         static let gray2 = Color(hex: "#4F4F4F")        // Medium gray
         static let background = Color(hex: "#F8F9FA")   // Light background
         
-        // Game Card Colors (using hex initializer) - Updated for modern look
-        static let card1Background = Color(hex: "#E3F2FD")  // Light blue
-        static let card1Foreground = Color(hex: "#2196F3")  // Bright blue
+        // Game Card Colors - Vibrant like website
+        static let card1Background = Color(hex: "#FF6B6B")  // Coral red
+        static let card1Foreground = Color(hex: "#FF4757")  // Deep coral
         
-        static let card2Background = Color(hex: "#E8F5E9")  // Light green
-        static let card2Foreground = Color(hex: "#4CAF50")  // Bright green
+        static let card2Background = Color(hex: "#4ECDC4")  // Turquoise
+        static let card2Foreground = Color(hex: "#00B894")  // Deep turquoise
         
-        static let card3Background = Color(hex: "#FFF3E0")  // Light orange
-        static let card3Foreground = Color(hex: "#FF9800")  // Bright orange
+        static let card3Background = Color(hex: "#FFD93D")  // Sunny yellow
+        static let card3Foreground = Color(hex: "#FFA502")  // Deep orange
         
-        static let card4Background = Color(hex: "#FCE4EC")  // Light pink
-        static let card4Foreground = Color(hex: "#E91E63")  // Bright pink
+        static let card4Background = Color(hex: "#A29BFE")  // Soft purple
+        static let card4Foreground = Color(hex: "#6C5CE7")  // Deep purple
     }
     
     // MARK: - Typography

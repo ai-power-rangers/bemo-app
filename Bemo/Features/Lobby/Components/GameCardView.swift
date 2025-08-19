@@ -32,33 +32,45 @@ struct GameCardView: View {
     
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 20) {
-                // Game Icon with colored background
-                ZStack {
-                    Circle()
-                        .fill(cardColors.foreground.opacity(0.15))
-                        .frame(width: 80, height: 80)
-                    
-                    Image(systemName: game.iconName)
-                        .font(.system(size: 40, weight: .medium))
-                        .foregroundColor(cardColors.foreground)
-                }
+            ZStack {
+                // Organic rounded shape matching website style
+                RoundedRectangle(cornerRadius: 30)
+                    .fill(LinearGradient(
+                        gradient: Gradient(colors: [
+                            cardColors.background,
+                            cardColors.background.opacity(0.8)
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 30)
+                            .stroke(cardColors.foreground.opacity(0.3), lineWidth: 2)
+                    )
+                    .shadow(color: cardColors.foreground.opacity(0.2), radius: 12, x: 0, y: 6)
                 
-                // Game Title and Subtitle
-                VStack(spacing: 4) {
+                VStack(spacing: 20) {
+                    // Game Icon
+                    Image(systemName: game.iconName)
+                        .font(.system(size: 48, weight: .medium))
+                        .foregroundColor(.white)
+                        .frame(width: 80, height: 80)
+                        .background(
+                            Circle()
+                                .fill(cardColors.foreground.opacity(0.9))
+                        )
+                        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                    
+                    // Game Title
                     Text(game.title)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(Color(hex: "#333333"))
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.8)                    
+                        .minimumScaleFactor(0.8)
                 }
-                .padding(.horizontal, 8)
+                .padding(24)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.vertical, 24)
-            .background(Color.white)
-            .cornerRadius(20)
-            .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
         }
         .buttonStyle(ScaleButtonStyle())
     }
