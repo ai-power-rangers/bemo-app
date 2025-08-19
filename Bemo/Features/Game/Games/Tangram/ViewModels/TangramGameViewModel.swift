@@ -115,7 +115,7 @@ class TangramGameViewModel {
     // MARK: - Dependencies
     
     private weak var delegate: GameDelegate?
-    private let container: TangramDependencyContainer
+    let container: TangramDependencyContainer
     private let supabaseService: SupabaseService?
     private var learningService: LearningService?
     private let progressService: TangramProgressService

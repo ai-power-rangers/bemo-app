@@ -120,6 +120,18 @@ struct GamePuzzleData: Codable, Equatable, Identifiable {
         self.targetPieces = targetPieces
     }
     
+    #if DEBUG
+    /// Create mock puzzle data for testing and previews
+    static func mockPuzzle(id: String, name: String, difficulty: Int, category: String = "Test") -> GamePuzzleData {
+        return GamePuzzleData(
+            id: id,
+            name: name,
+            category: category,
+            difficulty: difficulty,
+            targetPieces: [] // Empty pieces for preview/testing purposes
+        )
+    }
+    #endif
 }
 
 // MARK: - Codable Support for CGAffineTransform
