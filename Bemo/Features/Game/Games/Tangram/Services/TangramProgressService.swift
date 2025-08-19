@@ -229,6 +229,42 @@ class TangramProgressService {
         return (completed: completed, total: total, percentage: percentage)
     }
     
+    // MARK: - Phase 4: Difficulty Completion & Promotion Detection
+    
+    /// Check if a difficulty is fully completed for a child
+    /// - Parameters:
+    ///   - childId: Child profile identifier
+    ///   - difficulty: Difficulty level to check
+    ///   - allPuzzles: All available puzzles to check completion against
+    /// - Returns: True if all puzzles in the difficulty are completed
+    func isDifficultyCompleted(
+        for childId: String, 
+        difficulty: UserPreferences.DifficultySetting,
+        from allPuzzles: [GamePuzzleData]
+    ) -> Bool {
+        let difficultyPuzzles = allPuzzles.filter { puzzle in
+            difficulty.containsPuzzleLevel(puzzle.difficulty)
+        }
+        
+        let progress = getProgress(for: childId)
+        let completedIds = progress.completedPuzzlesByDifficulty[difficulty.rawValue] ?? Set()
+        
+        return completedIds.count >= difficultyPuzzles.count && difficultyPuzzles.count > 0
+    }
+
+    /// Get the next difficulty level for promotion
+    /// - Parameter currentDifficulty: Current difficulty level
+    /// - Returns: Next difficulty for promotion, or nil if already at maximum
+    func getNextDifficultyForPromotion(
+        from currentDifficulty: UserPreferences.DifficultySetting
+    ) -> UserPreferences.DifficultySetting? {
+        switch currentDifficulty {
+        case .easy: return .normal
+        case .normal: return .hard
+        case .hard: return nil
+        }
+    }
+    
     // MARK: - Local Persistence
     
     /// Load progress data from UserDefaults
