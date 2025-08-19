@@ -21,6 +21,7 @@ class TangramMapViewModel {
     private let progressService: TangramProgressService
     private let onPuzzleSelected: (GamePuzzleData) -> Void
     private let onBackToDifficulty: () -> Void
+    private let onPromotionTriggered: (() -> Void)?
     
     /// Task for observing puzzle library changes - stored to enable cancellation
     private var observationTask: Task<Void, Never>?
@@ -124,7 +125,8 @@ class TangramMapViewModel {
         puzzleLibraryService: PuzzleLibraryService,
         progressService: TangramProgressService,
         onPuzzleSelected: @escaping (GamePuzzleData) -> Void,
-        onBackToDifficulty: @escaping () -> Void
+        onBackToDifficulty: @escaping () -> Void,
+        onPromotionTriggered: (() -> Void)? = nil
     ) {
         self.difficulty = difficulty
         self.childProfileId = childProfileId
@@ -132,6 +134,7 @@ class TangramMapViewModel {
         self.progressService = progressService
         self.onPuzzleSelected = onPuzzleSelected
         self.onBackToDifficulty = onBackToDifficulty
+        self.onPromotionTriggered = onPromotionTriggered
         
         // Load puzzles on initialization
         loadPuzzlesForDifficulty()
@@ -232,8 +235,9 @@ class TangramMapViewModel {
     
     /// Navigate back to difficulty selection
     func goBackToDifficulty() {
-        print("[TangramMapViewModel] Navigating back to difficulty selection")
+        print("🔙 [TangramMapViewModel] Back button pressed - navigating back to difficulty selection")
         onBackToDifficulty()
+        print("🔙 [TangramMapViewModel] onBackToDifficulty() callback completed")
     }
     
     /// Refresh the map state (call after completing a puzzle)
@@ -279,6 +283,21 @@ class TangramMapViewModel {
         refresh()
         
         print("[TangramMapViewModel] TEST: Puzzle completed. New progress: \(completedCount)/\(totalCount)")
+        
+        // Check for promotion after completing individual puzzle
+        if isDifficultyCompleted {
+            print("[TangramMapViewModel] TEST: Difficulty completed after individual puzzle!")
+            
+            if let nextDifficulty = checkForDifficultyPromotion() {
+                print("[TangramMapViewModel] TEST: Ready for promotion to \(nextDifficulty.displayName)")
+                print("[TangramMapViewModel] TEST: Triggering promotion check in parent ViewModel")
+                
+                // Trigger promotion check through callback to parent TangramGameViewModel
+                onPromotionTriggered?()
+            } else {
+                print("[TangramMapViewModel] TEST: No promotion available (completed all difficulties)")
+            }
+        }
     }
     
     /// Complete all remaining puzzles in current difficulty to trigger promotion
@@ -303,6 +322,10 @@ class TangramMapViewModel {
         
         if let nextDifficulty = checkForDifficultyPromotion() {
             print("[TangramMapViewModel] TEST: Ready for promotion to \(nextDifficulty.displayName)")
+            print("[TangramMapViewModel] TEST: Triggering promotion check in parent ViewModel")
+            
+            // Trigger promotion check through callback to parent TangramGameViewModel
+            onPromotionTriggered?()
         } else {
             print("[TangramMapViewModel] TEST: No promotion available (completed all difficulties)")
         }

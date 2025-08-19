@@ -179,6 +179,9 @@ struct TangramGameView: View {
                     },
                     onBackToDifficulty: {
                         viewModel.returnToDifficultySelection()
+                    },
+                    onPromotionTriggered: { [weak viewModel] in
+                        viewModel?.checkForPromotionAndTransition()
                     }
                 )
                 

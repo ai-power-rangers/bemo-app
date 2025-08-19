@@ -117,7 +117,8 @@ class TangramDependencyContainer {
         difficulty: UserPreferences.DifficultySetting,
         childProfileId: String,
         onPuzzleSelected: @escaping (GamePuzzleData) -> Void,
-        onBackToDifficulty: @escaping () -> Void
+        onBackToDifficulty: @escaping () -> Void,
+        onPromotionTriggered: (() -> Void)? = nil
     ) -> TangramMapViewModel {
         return TangramMapViewModel(
             difficulty: difficulty,
@@ -125,7 +126,8 @@ class TangramDependencyContainer {
             puzzleLibraryService: puzzleLibraryService,
             progressService: progressService,
             onPuzzleSelected: onPuzzleSelected,
-            onBackToDifficulty: onBackToDifficulty
+            onBackToDifficulty: onBackToDifficulty,
+            onPromotionTriggered: onPromotionTriggered
         )
     }
 }
