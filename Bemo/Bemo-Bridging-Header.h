@@ -8,6 +8,10 @@
 #ifndef Bemo_Bridging_Header_h
 #define Bemo_Bridging_Header_h
 
+// Only import TangramPipeline for iOS device builds (not simulator)
+// This is a temporary workaround until TangramPipeline.xcframework includes simulator architectures
+#if TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR
 #import "ObjCBridge/TPTangramPipelineWrapper.h"
+#endif
 
 #endif /* Bemo_Bridging_Header_h */
