@@ -235,9 +235,8 @@ class TangramMapViewModel {
     
     /// Navigate back to difficulty selection
     func goBackToDifficulty() {
-        print("🔙 [TangramMapViewModel] Back button pressed - navigating back to difficulty selection")
+        print("[TangramMapViewModel] Navigating back to difficulty selection")
         onBackToDifficulty()
-        print("🔙 [TangramMapViewModel] onBackToDifficulty() callback completed")
     }
     
     /// Refresh the map state (call after completing a puzzle)
@@ -286,16 +285,11 @@ class TangramMapViewModel {
         
         // Check for promotion after completing individual puzzle
         if isDifficultyCompleted {
-            print("[TangramMapViewModel] TEST: Difficulty completed after individual puzzle!")
-            
             if let nextDifficulty = checkForDifficultyPromotion() {
                 print("[TangramMapViewModel] TEST: Ready for promotion to \(nextDifficulty.displayName)")
-                print("[TangramMapViewModel] TEST: Triggering promotion check in parent ViewModel")
                 
                 // Trigger promotion check through callback to parent TangramGameViewModel
                 onPromotionTriggered?()
-            } else {
-                print("[TangramMapViewModel] TEST: No promotion available (completed all difficulties)")
             }
         }
     }
@@ -322,12 +316,9 @@ class TangramMapViewModel {
         
         if let nextDifficulty = checkForDifficultyPromotion() {
             print("[TangramMapViewModel] TEST: Ready for promotion to \(nextDifficulty.displayName)")
-            print("[TangramMapViewModel] TEST: Triggering promotion check in parent ViewModel")
             
             // Trigger promotion check through callback to parent TangramGameViewModel
             onPromotionTriggered?()
-        } else {
-            print("[TangramMapViewModel] TEST: No promotion available (completed all difficulties)")
         }
     }
     #endif

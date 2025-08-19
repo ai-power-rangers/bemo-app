@@ -69,7 +69,6 @@ struct TangramMapView: View {
             HStack {
                 // Back Button
                 Button(action: {
-                    print("🔙 [TangramMapView] Back button TAPPED!")
                     viewModel.goBackToDifficulty()
                 }) {
                     HStack(spacing: BemoTheme.Spacing.xsmall) {

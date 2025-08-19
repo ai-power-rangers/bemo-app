@@ -254,14 +254,8 @@ class TangramGameViewModel {
             #endif
             return // Don't override these special phases
         case .selectingDifficulty:
-            #if DEBUG
-            print("🔙 [TangramGameViewModel] Already in selectingDifficulty phase, no need to change")
-            #endif
             return // Don't override if already in difficulty selection
         default:
-            #if DEBUG
-            print("🔄 [TangramGameViewModel] Proceeding with normal phase determination from: \(currentPhase)")
-            #endif
             break // Continue with normal phase determination
         }
         
@@ -385,18 +379,9 @@ class TangramGameViewModel {
     
     /// Return to difficulty selection from map view
     func returnToDifficultySelection() {
-        #if DEBUG
-        print("🔙 [TangramGameViewModel] returnToDifficultySelection() called")
-        print("🔙 [TangramGameViewModel] Current phase before: \(currentPhase)")
-        #endif
-        
         selectedDifficulty = nil
         difficultySelectionViewModel = nil
         currentPhase = .selectingDifficulty
-        
-        #if DEBUG
-        print("🔙 [TangramGameViewModel] Current phase after: \(currentPhase)")
-        #endif
     }
     
     /// Exit completely to lobby
@@ -806,9 +791,6 @@ class TangramGameViewModel {
     }
     
     func handlePuzzleCompletion() {
-        #if DEBUG
-        print("🎯 [TangramGameViewModel] handlePuzzleCompletion() called")
-        #endif
         
         // Puzzle completed via SpriteKit
         stopTimer()
@@ -825,24 +807,13 @@ class TangramGameViewModel {
         // Show celebration character animation
         delegate?.showCelebrationAnimation(at: .center)
         
-        #if DEBUG
-        print("🎯 [TangramGameViewModel] Starting 3-second delay before promotion check")
-        #endif
+
         
         // Delay showing the completion modal to allow celebration animation
         Task { @MainActor [weak self] in
             // Wait for celebration animation (3 seconds)
             try? await Task.sleep(nanoseconds: 3_000_000_000)
-            guard !Task.isCancelled else { 
-                #if DEBUG
-                print("🚨 [TangramGameViewModel] Promotion check task was cancelled")
-                #endif
-                return 
-            }
-            
-            #if DEBUG
-            print("🎯 [TangramGameViewModel] 3-second delay complete, checking for promotion")
-            #endif
+            guard !Task.isCancelled else { return }
             
             // Check for promotion before transitioning
             self?.checkForPromotionAndTransition()
@@ -1087,16 +1058,9 @@ class TangramGameViewModel {
     func checkForPromotionAndTransition() {
         guard let childId = currentChildProfileId,
               let difficulty = selectedDifficulty else {
-            #if DEBUG
-            print("🚨 [TangramGameViewModel] Promotion check failed - missing childId or difficulty")
-            #endif
             currentPhase = .puzzleComplete
             return
         }
-        
-        #if DEBUG
-        print("🔍 [TangramGameViewModel] Checking promotion for \(difficulty.rawValue) difficulty")
-        #endif
         
         // Check if current difficulty is completed
         let isDifficultyCompleted = progressService.isDifficultyCompleted(
@@ -1105,10 +1069,7 @@ class TangramGameViewModel {
             from: availablePuzzles
         )
         
-        #if DEBUG
-        print("🔍 [TangramGameViewModel] Difficulty completed check: \(isDifficultyCompleted)")
-        print("🔍 [TangramGameViewModel] Available puzzles count: \(availablePuzzles.count)")
-        #endif
+
         
         if isDifficultyCompleted {
             // Get next difficulty for promotion
@@ -1117,8 +1078,7 @@ class TangramGameViewModel {
                 let completedCount = getCompletedPuzzleCount(for: difficulty)
                 
                 #if DEBUG
-                print("🎉 [TangramGameViewModel] PROMOTING from \(difficulty.rawValue) to \(nextDifficulty.rawValue)")
-                print("🎉 [TangramGameViewModel] Completed count: \(completedCount)")
+                print("🎉 [TangramGameViewModel] Promoting from \(difficulty.rawValue) to \(nextDifficulty.rawValue)")
                 #endif
                 
                 // Auto-promote to next difficulty
@@ -1129,7 +1089,7 @@ class TangramGameViewModel {
                 )
             } else {
                 #if DEBUG
-                print("🏆 [TangramGameViewModel] ALL DIFFICULTIES COMPLETED!")
+                print("🏆 [TangramGameViewModel] All difficulties completed!")
                 #endif
                 
                 // No next difficulty - all difficulties completed!
@@ -1142,10 +1102,6 @@ class TangramGameViewModel {
                 )
             }
         } else {
-            #if DEBUG
-            print("➡️ [TangramGameViewModel] Normal completion - returning to map")
-            #endif
-            
             // Normal completion - back to map
             currentPhase = .puzzleComplete
         }
