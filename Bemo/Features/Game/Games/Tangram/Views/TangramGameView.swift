@@ -146,7 +146,7 @@ struct TangramGameView: View {
                     onPuzzleSelected: { puzzle in
                         viewModel.selectPuzzleFromMap(puzzle)
                     },
-                    onBackToDifficultySelection: {
+                    onBackToDifficulty: {
                         viewModel.returnToDifficultySelection()
                     }
                 )
