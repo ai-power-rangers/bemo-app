@@ -186,11 +186,12 @@ class TangramProgressService {
     /// - Returns: True if all puzzles in the difficulty are completed
     func shouldPromoteToNextDifficulty(childId: String, currentDifficulty: UserPreferences.DifficultySetting, from allPuzzles: [GamePuzzleData]) -> Bool {
         let progress = getProgress(for: childId)
-        let totalPuzzlesInDifficulty = allPuzzles
-            .filter { currentDifficulty.containsPuzzleLevel($0.difficulty) }
-            .count
+        let difficultyPuzzles = allPuzzles.filter { puzzle in
+            currentDifficulty.containsPuzzleLevel(puzzle.difficulty)
+        }
+        let completedIds = progress.getCompletedPuzzles(for: currentDifficulty)
         
-        return progress.isDifficultyCompleted(difficulty: currentDifficulty, totalPuzzles: totalPuzzlesInDifficulty)
+        return completedIds.count >= difficultyPuzzles.count && difficultyPuzzles.count > 0
     }
     
     /// Set the last selected difficulty for a child
