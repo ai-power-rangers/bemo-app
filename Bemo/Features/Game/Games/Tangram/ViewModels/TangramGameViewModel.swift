@@ -23,7 +23,8 @@ class TangramGameViewModel {
         case map(UserPreferences.DifficultySetting)   // NEW: Show map for selected difficulty
         case playingPuzzle          // EXISTING: Playing a puzzle
         case puzzleComplete         // EXISTING: Puzzle completed
-        case promotion(from: UserPreferences.DifficultySetting, to: UserPreferences.DifficultySetting)  // NEW: Auto-promotion flow
+        case promotion(from: UserPreferences.DifficultySetting, to: UserPreferences.DifficultySetting, completedCount: Int)  // NEW: Auto-promotion flow
+        case finalCompletion(totalCompleted: Int, totalTime: TimeInterval?)  // NEW: Final completion celebration
     }
     
     enum UserType {
@@ -1045,20 +1046,103 @@ class TangramGameViewModel {
             return
         }
         
-        // Check if promotion is needed
-        let shouldPromote = progressService.shouldPromoteToNextDifficulty(
-            childId: childId,
-            currentDifficulty: difficulty,
+        // Check if current difficulty is completed
+        let isDifficultyCompleted = progressService.isDifficultyCompleted(
+            for: childId,
+            difficulty: difficulty,
             from: availablePuzzles
         )
         
-        if shouldPromote, let nextDifficulty = currentProgress?.getNextDifficulty() {
-            // Auto-promote to next difficulty
-            currentPhase = .promotion(from: difficulty, to: nextDifficulty)
+        if isDifficultyCompleted {
+            // Get next difficulty for promotion
+            if let nextDifficulty = progressService.getNextDifficultyForPromotion(from: difficulty) {
+                // Get completed count for this difficulty
+                let completedCount = getCompletedPuzzleCount(for: difficulty)
+                
+                // Auto-promote to next difficulty
+                currentPhase = .promotion(
+                    from: difficulty,
+                    to: nextDifficulty,
+                    completedCount: completedCount
+                )
+            } else {
+                // No next difficulty - all difficulties completed!
+                let totalCompleted = getTotalCompletedPuzzles()
+                let totalTime = getTotalPlayTime()
+                
+                currentPhase = .finalCompletion(
+                    totalCompleted: totalCompleted,
+                    totalTime: totalTime
+                )
+            }
         } else {
             // Normal completion - back to map
             currentPhase = .puzzleComplete
         }
+    }
+    
+    /// Get completed puzzle count for a specific difficulty
+    private func getCompletedPuzzleCount(for difficulty: UserPreferences.DifficultySetting) -> Int {
+        guard let childId = currentChildProfileId else { return 0 }
+        let progress = progressService.getProgress(for: childId)
+        return progress.getCompletedCount(for: difficulty)
+    }
+    
+    /// Get total completed puzzles across all difficulties
+    private func getTotalCompletedPuzzles() -> Int {
+        guard let childId = currentChildProfileId else { return 0 }
+        let progress = progressService.getProgress(for: childId)
+        return UserPreferences.DifficultySetting.allCases.reduce(0) { total, difficulty in
+            total + progress.getCompletedCount(for: difficulty)
+        }
+    }
+    
+    /// Get total play time across all sessions (placeholder - would need session tracking)
+    func getTotalPlayTime() -> TimeInterval? {
+        // For now, return current session time if available
+        // In a full implementation, this would aggregate all historical play time
+        return gameProgress?.startTime.distance(to: Date())
+    }
+    
+    /// Handle progression to next difficulty from promotion screen
+    func proceedToNextDifficulty(from: UserPreferences.DifficultySetting, to: UserPreferences.DifficultySetting) {
+        // Record the promotion with analytics
+        if let childId = currentChildProfileId {
+            let completedCount = getCompletedPuzzleCount(for: from)
+            let timeSpent = getTotalPlayTime() ?? 0
+            
+            // Record promotion in progress service
+            progressService.recordPromotion(
+                for: childId,
+                from: from,
+                to: to,
+                completedPuzzleCount: completedCount,
+                totalTimeSpent: timeSpent
+            )
+            
+            // Update selected difficulty and progress
+            progressService.setLastSelectedDifficulty(childId: childId, difficulty: to)
+            currentProgress = progressService.getProgress(for: childId)
+        }
+        
+        // Update view model state
+        selectedDifficulty = to
+        
+        // Transition to map for new difficulty
+        currentPhase = .map(to)
+    }
+    
+    /// Skip promotion and return to current difficulty map
+    func skipPromotionToMap(difficulty: UserPreferences.DifficultySetting) {
+        currentPhase = .map(difficulty)
+    }
+    
+    /// Return to game lobby from completion screens
+    func returnToGameLobby() {
+        stopTimer()
+        clearHint()
+        endGameSession(completed: true)
+        delegate?.gameDidRequestQuit()
     }
     
     private func calculateXP() -> Int {
