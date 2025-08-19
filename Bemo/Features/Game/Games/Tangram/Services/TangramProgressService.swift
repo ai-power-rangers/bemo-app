@@ -174,12 +174,16 @@ class TangramProgressService {
         return progress.getNextUnlockedPuzzle(for: difficulty, from: allPuzzles)
     }
     
-    /// Check if a child should be promoted to the next difficulty
+    /// Check if a difficulty level is completed and ready for promotion
+    /// 
+    /// This method determines whether all puzzles in a given difficulty have been completed,
+    /// indicating that the child is ready to be promoted to the next difficulty level.
+    /// 
     /// - Parameters:
     ///   - childId: Child profile identifier
-    ///   - currentDifficulty: Current difficulty level
+    ///   - currentDifficulty: Difficulty level to check for completion
     ///   - allPuzzles: All available puzzles to check completion against
-    /// - Returns: True if all puzzles in current difficulty are completed
+    /// - Returns: True if all puzzles in the difficulty are completed
     func shouldPromoteToNextDifficulty(childId: String, currentDifficulty: UserPreferences.DifficultySetting, from allPuzzles: [GamePuzzleData]) -> Bool {
         let progress = getProgress(for: childId)
         let totalPuzzlesInDifficulty = allPuzzles
@@ -230,27 +234,6 @@ class TangramProgressService {
     }
     
     // MARK: - Phase 4: Difficulty Completion & Promotion Detection
-    
-    /// Check if a difficulty is fully completed for a child
-    /// - Parameters:
-    ///   - childId: Child profile identifier
-    ///   - difficulty: Difficulty level to check
-    ///   - allPuzzles: All available puzzles to check completion against
-    /// - Returns: True if all puzzles in the difficulty are completed
-    func isDifficultyCompleted(
-        for childId: String, 
-        difficulty: UserPreferences.DifficultySetting,
-        from allPuzzles: [GamePuzzleData]
-    ) -> Bool {
-        let difficultyPuzzles = allPuzzles.filter { puzzle in
-            difficulty.containsPuzzleLevel(puzzle.difficulty)
-        }
-        
-        let progress = getProgress(for: childId)
-        let completedIds = progress.completedPuzzlesByDifficulty[difficulty.rawValue] ?? Set()
-        
-        return completedIds.count >= difficultyPuzzles.count && difficultyPuzzles.count > 0
-    }
 
     /// Get the next difficulty level for promotion
     /// - Parameter currentDifficulty: Current difficulty level

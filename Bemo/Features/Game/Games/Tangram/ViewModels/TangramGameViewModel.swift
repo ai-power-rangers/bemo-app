@@ -1062,10 +1062,10 @@ class TangramGameViewModel {
             return
         }
         
-        // Check if current difficulty is completed
-        let isDifficultyCompleted = progressService.isDifficultyCompleted(
-            for: childId,
-            difficulty: difficulty,
+        // Check if current difficulty is completed and ready for promotion
+        let isDifficultyCompleted = progressService.shouldPromoteToNextDifficulty(
+            childId: childId,
+            currentDifficulty: difficulty,
             from: availablePuzzles
         )
         

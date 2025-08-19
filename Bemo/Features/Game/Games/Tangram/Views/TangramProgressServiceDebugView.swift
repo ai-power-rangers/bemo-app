@@ -876,9 +876,9 @@ struct TangramProgressServiceDebugView: View {
                                 .fontWeight(.semibold)
                             
                             ForEach([UserPreferences.DifficultySetting.easy, .normal, .hard], id: \.self) { difficulty in
-                                let isCompleted = progressService.isDifficultyCompleted(
-                                    for: selectedChildId, 
-                                    difficulty: difficulty, 
+                                let isCompleted = progressService.shouldPromoteToNextDifficulty(
+                                    childId: selectedChildId, 
+                                    currentDifficulty: difficulty, 
                                     from: samplePuzzles
                                 )
                                 let nextDifficulty = progressService.getNextDifficultyForPromotion(from: difficulty)
@@ -1581,9 +1581,9 @@ struct TangramProgressServiceDebugView: View {
         }
         
         // Check if promotion should be triggered
-        let isCompleted = progressService.isDifficultyCompleted(
-            for: selectedChildId, 
-            difficulty: difficulty, 
+        let isCompleted = progressService.shouldPromoteToNextDifficulty(
+            childId: selectedChildId, 
+            currentDifficulty: difficulty, 
             from: samplePuzzles
         )
         
@@ -1810,9 +1810,9 @@ struct TangramProgressServiceDebugView: View {
             
             // Initially, no difficulty should be completed
             for difficulty in [UserPreferences.DifficultySetting.easy, .normal, .hard] {
-                let isCompleted = progressService.isDifficultyCompleted(
-                    for: testChildId, 
-                    difficulty: difficulty, 
+                let isCompleted = progressService.shouldPromoteToNextDifficulty(
+                    childId: testChildId, 
+                    currentDifficulty: difficulty, 
                     from: samplePuzzles
                 )
                 if isCompleted {
@@ -1830,7 +1830,7 @@ struct TangramProgressServiceDebugView: View {
             }
             
             // Easy should not be completed yet
-            let easyPartiallyCompleted = progressService.isDifficultyCompleted(for: testChildId, difficulty: .easy, from: samplePuzzles)
+            let easyPartiallyCompleted = progressService.shouldPromoteToNextDifficulty(childId: testChildId, currentDifficulty: .easy, from: samplePuzzles)
             if easyPartiallyCompleted {
                 phase4TestResults += "❌ Easy incorrectly marked as completed when partially done\n"
                 allTestsPassed = false
@@ -1844,7 +1844,7 @@ struct TangramProgressServiceDebugView: View {
             }
             
             // Now Easy should be completed
-            let easyFullyCompleted = progressService.isDifficultyCompleted(for: testChildId, difficulty: .easy, from: samplePuzzles)
+            let easyFullyCompleted = progressService.shouldPromoteToNextDifficulty(childId: testChildId, currentDifficulty: .easy, from: samplePuzzles)
             if !easyFullyCompleted {
                 phase4TestResults += "❌ Easy not marked as completed when all puzzles done\n"
                 allTestsPassed = false
