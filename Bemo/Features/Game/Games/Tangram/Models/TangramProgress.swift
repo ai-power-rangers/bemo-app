@@ -10,6 +10,7 @@
 // USAGE: Stores completed puzzles, current levels, and difficulty progression per child
 
 import Foundation
+import SwiftUI
 
 // MARK: - TangramProgress Model
 
@@ -289,6 +290,18 @@ extension UserPreferences.DifficultySetting {
             return "blue"
         case .hard:
             return "red"
+        }
+    }
+    
+    /// SwiftUI Color for UI display
+    var uiColor: Color {
+        switch self {
+        case .easy:
+            return .green
+        case .normal:
+            return .blue
+        case .hard:
+            return .red
         }
     }
     

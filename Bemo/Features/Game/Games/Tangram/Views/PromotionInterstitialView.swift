@@ -85,7 +85,7 @@ struct PromotionInterstitialView: View {
                             icon: "chart.line.uptrend.xyaxis",
                             title: "Difficulty Level", 
                             value: viewModel.fromDifficulty.displayName,
-                            color: getDifficultyColor(viewModel.fromDifficulty)
+                            color: viewModel.fromDifficulty.uiColor
                         )
                     }
                 }
@@ -204,14 +204,5 @@ struct PromotionInterstitialView: View {
         return String(format: "%d:%02d", minutes, seconds)
     }
     
-    private func getDifficultyColor(_ difficulty: UserPreferences.DifficultySetting) -> Color {
-        switch difficulty {
-        case .easy:
-            return .green
-        case .normal:
-            return .blue
-        case .hard:
-            return .red
-        }
-    }
+
 }
