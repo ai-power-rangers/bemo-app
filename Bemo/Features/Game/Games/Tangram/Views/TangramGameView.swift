@@ -33,7 +33,7 @@ struct TangramGameView: View {
     
     private var isSelectionPhase: Bool {
         switch viewModel.currentPhase {
-        case .selectingDifficulty, .map, .promotion:
+        case .selectingDifficulty, .map, .promotion, .finalCompletion:
             return true
         case .playingPuzzle, .puzzleComplete:
             return false
@@ -58,13 +58,44 @@ struct TangramGameView: View {
                             removal: .move(edge: .leading).combined(with: .opacity)
                         ))
                     
-                case .promotion:
-                    // TODO: Phase 4 - Add promotion view
-                    puzzleSelectionView
-                        .transition(.asymmetric(
-                            insertion: .scale.combined(with: .opacity),
-                            removal: .scale.combined(with: .opacity)
-                        ))
+                case .promotion(let from, let to, let completedCount):
+                    PromotionInterstitialView(
+                        viewModel: PromotionInterstitialViewModel(
+                            fromDifficulty: from,
+                            toDifficulty: to,
+                            completedPuzzleCount: completedCount,
+                            totalTimeSpent: viewModel.getTotalPlayTime(),
+                            onContinue: { [weak viewModel] in
+                                viewModel?.proceedToNextDifficulty(from: from, to: to)
+                            },
+                            onSkip: { [weak viewModel] in
+                                viewModel?.skipPromotionToMap(difficulty: from)
+                            }
+                        )
+                    )
+                    .transition(.asymmetric(
+                        insertion: .scale.combined(with: .opacity),
+                        removal: .scale.combined(with: .opacity)
+                    ))
+                
+                case .finalCompletion(let totalCompleted, let totalTime):
+                    FinalCompletionView(
+                        viewModel: FinalCompletionViewModel(
+                            totalPuzzlesCompleted: totalCompleted,
+                            totalTimeSpent: totalTime,
+                            onReturnToLobby: { [weak viewModel] in
+                                viewModel?.returnToGameLobby()
+                            },
+                            onReplayDifficulty: { [weak viewModel] difficulty in
+                                viewModel?.selectedDifficulty = difficulty
+                                viewModel?.currentPhase = .map(difficulty)
+                            }
+                        )
+                    )
+                    .transition(.asymmetric(
+                        insertion: .scale.combined(with: .opacity),
+                        removal: .scale.combined(with: .opacity)
+                    ))
                     
                 case .playingPuzzle:
                     gamePlayView
@@ -101,7 +132,7 @@ struct TangramGameView: View {
         
         // Set background color based on current phase
         let backgroundColor = switch viewModel.currentPhase {
-        case .selectingDifficulty, .map, .promotion:
+        case .selectingDifficulty, .map, .promotion, .finalCompletion:
             UIColor(TangramTheme.Backgrounds.editor)  // Beige for library
         case .playingPuzzle, .puzzleComplete:
             UIColor(TangramTheme.Backgrounds.gameScene)  // White for game
@@ -148,6 +179,9 @@ struct TangramGameView: View {
                     },
                     onBackToDifficulty: {
                         viewModel.returnToDifficultySelection()
+                    },
+                    onPromotionTriggered: { [weak viewModel] in
+                        viewModel?.checkForPromotionAndTransition()
                     }
                 )
                 

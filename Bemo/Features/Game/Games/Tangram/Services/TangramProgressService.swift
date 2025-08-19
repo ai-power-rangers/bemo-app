@@ -174,19 +174,24 @@ class TangramProgressService {
         return progress.getNextUnlockedPuzzle(for: difficulty, from: allPuzzles)
     }
     
-    /// Check if a child should be promoted to the next difficulty
+    /// Check if a difficulty level is completed and ready for promotion
+    /// 
+    /// This method determines whether all puzzles in a given difficulty have been completed,
+    /// indicating that the child is ready to be promoted to the next difficulty level.
+    /// 
     /// - Parameters:
     ///   - childId: Child profile identifier
-    ///   - currentDifficulty: Current difficulty level
+    ///   - currentDifficulty: Difficulty level to check for completion
     ///   - allPuzzles: All available puzzles to check completion against
-    /// - Returns: True if all puzzles in current difficulty are completed
+    /// - Returns: True if all puzzles in the difficulty are completed
     func shouldPromoteToNextDifficulty(childId: String, currentDifficulty: UserPreferences.DifficultySetting, from allPuzzles: [GamePuzzleData]) -> Bool {
         let progress = getProgress(for: childId)
-        let totalPuzzlesInDifficulty = allPuzzles
-            .filter { currentDifficulty.containsPuzzleLevel($0.difficulty) }
-            .count
+        let difficultyPuzzles = allPuzzles.filter { puzzle in
+            currentDifficulty.containsPuzzleLevel(puzzle.difficulty)
+        }
+        let completedIds = progress.getCompletedPuzzles(for: currentDifficulty)
         
-        return progress.isDifficultyCompleted(difficulty: currentDifficulty, totalPuzzles: totalPuzzlesInDifficulty)
+        return completedIds.count >= difficultyPuzzles.count && difficultyPuzzles.count > 0
     }
     
     /// Set the last selected difficulty for a child
@@ -227,6 +232,104 @@ class TangramProgressService {
         let percentage = total > 0 ? Double(completed) / Double(total) : 0.0
         
         return (completed: completed, total: total, percentage: percentage)
+    }
+    
+    // MARK: - Phase 4: Difficulty Completion & Promotion Detection
+
+    /// Get the next difficulty level for promotion
+    /// - Parameter currentDifficulty: Current difficulty level
+    /// - Returns: Next difficulty for promotion, or nil if already at maximum
+    func getNextDifficultyForPromotion(
+        from currentDifficulty: UserPreferences.DifficultySetting
+    ) -> UserPreferences.DifficultySetting? {
+        switch currentDifficulty {
+        case .easy: return .normal
+        case .normal: return .hard
+        case .hard: return nil
+        }
+    }
+    
+    // MARK: - Promotion Recording Methods
+    
+    /// Record a promotion from one difficulty to another
+    /// - Parameters:
+    ///   - childId: Child profile ID
+    ///   - from: The difficulty level completed
+    ///   - to: The new difficulty level promoted to
+    ///   - completedPuzzleCount: Number of puzzles completed in the from difficulty
+    ///   - totalTimeSpent: Time spent completing the difficulty
+    func recordPromotion(
+        for childId: String,
+        from: UserPreferences.DifficultySetting,
+        to: UserPreferences.DifficultySetting,
+        completedPuzzleCount: Int,
+        totalTimeSpent: TimeInterval
+    ) {
+        var progress = getProgress(for: childId)
+        progress.recordPromotion(
+            from: from,
+            to: to,
+            completedCount: completedPuzzleCount,
+            timeSpent: totalTimeSpent
+        )
+        
+        // Unlock achievements based on promotion
+        if to == .normal {
+            progress.unlockAchievement("Easy Master")
+        } else if to == .hard {
+            progress.unlockAchievement("Medium Master")
+        }
+        
+        // Check for final completion achievement
+        if progress.hasCompletedAllDifficulties {
+            progress.unlockAchievement("Tangram Master")
+        }
+        
+        updateProgress(progress)
+    }
+    
+    /// Get total completed puzzles across all difficulties
+    /// - Parameter childId: Child profile ID
+    /// - Returns: Total number of completed puzzles
+    func getTotalCompletedPuzzles(for childId: String) -> Int {
+        let progress = getProgress(for: childId)
+        return UserPreferences.DifficultySetting.allCases.reduce(0) { total, difficulty in
+            total + progress.getCompletedCount(for: difficulty)
+        }
+    }
+    
+    /// Get total play time for a child
+    /// - Parameter childId: Child profile ID
+    /// - Returns: Total recorded play time in seconds
+    func getTotalPlayTime(for childId: String) -> TimeInterval {
+        let progress = getProgress(for: childId)
+        return progress.totalPlayTimeSeconds
+    }
+    
+    /// Check if a child has specific achievement
+    /// - Parameters:
+    ///   - childId: Child profile ID
+    ///   - achievement: Achievement identifier to check
+    /// - Returns: True if the child has unlocked the achievement
+    func hasAchievement(for childId: String, achievement: String) -> Bool {
+        let progress = getProgress(for: childId)
+        return progress.achievementsUnlocked.contains(achievement)
+    }
+    
+    /// Get all achievements for a child
+    /// - Parameter childId: Child profile ID
+    /// - Returns: Set of achievement identifiers
+    func getAchievements(for childId: String) -> Set<String> {
+        let progress = getProgress(for: childId)
+        return progress.achievementsUnlocked
+    }
+    
+    /// Get promotion history for a child
+    /// - Parameter childId: Child profile ID
+    /// - Returns: Array of promotion records, sorted by date (newest first)
+    func getPromotionHistory(for childId: String) -> [TangramProgress.PromotionRecord] {
+        let progress = getProgress(for: childId)
+        return progress.promotionHistory.sorted { $0.promotionDate > $1.promotionDate }
     }
     
     // MARK: - Local Persistence

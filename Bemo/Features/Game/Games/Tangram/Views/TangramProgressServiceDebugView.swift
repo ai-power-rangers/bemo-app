@@ -40,6 +40,9 @@ struct TangramProgressServiceDebugView: View {
     @State private var viewModelTestStatus: TestStatus = .notRun
     @State private var selectedDifficultyFromViewModel: UserPreferences.DifficultySetting?
     
+    // Phase 4 Auto-Promotion testing
+    @State private var phase4TestResults: String = ""
+    
     enum TestStatus {
         case notRun, running, passed, failed
         
@@ -784,6 +787,157 @@ struct TangramProgressServiceDebugView: View {
                     .padding()
                     .background(Color.blue.opacity(0.1))
                     .cornerRadius(8)
+                    
+                    // PHASE 4: Difficulty Completion & Auto-Promotion Testing
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("🚀 Phase 4: Auto-Promotion Testing")
+                            .font(.headline)
+                            .foregroundColor(.orange)
+                        
+                        Text("Test difficulty completion detection and promotion logic")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        // Completion simulation buttons
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Difficulty Completion Simulation:")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                            
+                            HStack(spacing: 12) {
+                                Button("🟢 Simulate Easy Complete") {
+                                    simulateDifficultyCompletion(.easy)
+                                }
+                                .buttonStyle(.bordered)
+                                
+                                Button("🔵 Simulate Medium Complete") {
+                                    simulateDifficultyCompletion(.normal)
+                                }
+                                .buttonStyle(.bordered)
+                                
+                                Button("🔴 Simulate Hard Complete") {
+                                    simulateDifficultyCompletion(.hard)
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                            
+                            HStack(spacing: 12) {
+                                Button("🎉 Test Promotion Interstitial") {
+                                    testPromotionInterstitial()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                
+                                Button("🏆 Test Final Completion") {
+                                    testFinalCompletion()
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                            
+                            // Additional testing capabilities
+                            VStack(spacing: 8) {
+                                HStack(spacing: 12) {
+                                    Button("📊 View Promotion History") {
+                                        viewPromotionHistory()
+                                    }
+                                    .buttonStyle(.bordered)
+                                    
+                                    Button("🎖️ View Achievements") {
+                                        viewAchievements()
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                                
+                                HStack(spacing: 12) {
+                                    Button("🔄 Reset All Progress") {
+                                        resetAllProgress()
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(.red)
+                                    
+                                    Button("⏱️ Test Timer Integration") {
+                                        testTimerIntegration()
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                            }
+                            
+                            // Comprehensive Task 1 test
+                            Button("🧪 Run Comprehensive Task 1 Tests") {
+                                testPhase4Task1Implementation()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                        }
+                        
+                        // Promotion status display
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Current Promotion Status:")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                            
+                            ForEach([UserPreferences.DifficultySetting.easy, .normal, .hard], id: \.self) { difficulty in
+                                let isCompleted = progressService.shouldPromoteToNextDifficulty(
+                                    childId: selectedChildId, 
+                                    currentDifficulty: difficulty, 
+                                    from: samplePuzzles
+                                )
+                                let nextDifficulty = progressService.getNextDifficultyForPromotion(from: difficulty)
+                                
+                                HStack {
+                                    Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(isCompleted ? .green : .gray)
+                                    
+                                    Text("\(difficulty.displayName)")
+                                        .font(.body)
+                                    
+                                    Spacer()
+                                    
+                                    if isCompleted {
+                                        if let next = nextDifficulty {
+                                            Text("→ \(next.displayName)")
+                                                .font(.caption)
+                                                .foregroundColor(.blue)
+                                        } else {
+                                            Text("🎉 ALL COMPLETE!")
+                                                .font(.caption)
+                                                .foregroundColor(.purple)
+                                        }
+                                    } else {
+                                        let stats = progressService.getCompletionStats(
+                                            for: selectedChildId, 
+                                            difficulty: difficulty, 
+                                            from: samplePuzzles
+                                        )
+                                        Text("\(stats.completed)/\(stats.total)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                                .padding(.horizontal, 12)
+                                .background(isCompleted ? Color.green.opacity(0.1) : Color.clear)
+                                .cornerRadius(6)
+                            }
+                        }
+                        
+                        // Phase 4 test results
+                        if !phase4TestResults.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Phase 4 Test Results:")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                
+                                Text(phase4TestResults)
+                                    .font(.caption)
+                                    .padding(8)
+                                    .background(Color.orange.opacity(0.1))
+                                    .cornerRadius(6)
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(8)
                 }
                 .padding()
             }
@@ -1010,7 +1164,7 @@ struct TangramProgressServiceDebugView: View {
         mapTestResults += "   • Unlocked puzzles: \(viewModel.unlockedPuzzleIds.count)\n"
         mapTestResults += "   • Completed puzzles: \(viewModel.completedCount)\n"
         mapTestResults += "   • Completion %: \(Int(viewModel.completionPercentage * 100))%\n"
-        mapTestResults += "   • All completed: \(viewModel.isAllCompleted ? "Yes" : "No")\n\n"
+        mapTestResults += "   • All completed: \(viewModel.isDifficultyCompleted ? "Yes" : "No")\n\n"
         
         // Test puzzle node states
         mapTestResults += "🗺️ Puzzle Node States:\n"
@@ -1401,6 +1555,351 @@ struct TangramProgressServiceDebugView: View {
         }
     }
     
+    // MARK: - Phase 4 Debug Functions
+    
+    /// Simulate completion of all puzzles in a difficulty
+    private func simulateDifficultyCompletion(_ difficulty: UserPreferences.DifficultySetting) {
+        phase4TestResults = "🔄 Simulating \(difficulty.displayName) difficulty completion...\n"
+        
+        // Get all puzzles for this difficulty from sample data
+        let difficultyPuzzles = samplePuzzles.filter { puzzle in
+            difficulty.containsPuzzleLevel(puzzle.difficulty)
+        }
+        
+        if difficultyPuzzles.isEmpty {
+            phase4TestResults += "⚠️ No puzzles found for \(difficulty.displayName) difficulty\n"
+            return
+        }
+        
+        // Mark all puzzles as completed for this difficulty
+        for puzzle in difficultyPuzzles {
+            progressService.markPuzzleCompleted(
+                childId: selectedChildId, 
+                puzzleId: puzzle.id, 
+                difficulty: difficulty
+            )
+        }
+        
+        // Check if promotion should be triggered
+        let isCompleted = progressService.shouldPromoteToNextDifficulty(
+            childId: selectedChildId, 
+            currentDifficulty: difficulty, 
+            from: samplePuzzles
+        )
+        
+        let nextDifficulty = progressService.getNextDifficultyForPromotion(from: difficulty)
+        
+        phase4TestResults += "✅ Completed \(difficultyPuzzles.count) puzzles in \(difficulty.displayName)\n"
+        phase4TestResults += "🎯 Difficulty completed: \(isCompleted ? "YES" : "NO")\n"
+        
+        if let next = nextDifficulty {
+            phase4TestResults += "🚀 Ready for promotion to: \(next.displayName)\n"
+        } else {
+            phase4TestResults += "🏆 ALL DIFFICULTIES COMPLETED!\n"
+        }
+        
+        // Update the last selected difficulty
+        progressService.setLastSelectedDifficulty(childId: selectedChildId, difficulty: difficulty)
+        
+        print("Phase 4 Debug: Simulated \(difficulty.displayName) completion")
+    }
+    
+    /// Test promotion interstitial with mock data
+    private func testPromotionInterstitial() {
+        phase4TestResults = "🎉 Testing Promotion Interstitial...\n"
+        
+        // Create a TangramGameViewModel for testing
+        let mockContainer = TangramDependencyContainer()
+        let mockDelegate = MockGameDelegate()
+        let testViewModel = TangramGameViewModel(delegate: mockDelegate, container: mockContainer, learningService: nil)
+        
+        // Set up test scenario: completed Easy, promoting to Medium
+        testViewModel.setChildProfileId(selectedChildId)
+        testViewModel.selectedDifficulty = .easy
+        
+        // Simulate Easy completion
+        simulateDifficultyCompletion(.easy)
+        
+        // Create promotion interstitial view model
+        let promotionViewModel = PromotionInterstitialViewModel(
+            fromDifficulty: .easy,
+            toDifficulty: .normal,
+            completedPuzzleCount: 3, // Mock data shows 3 easy puzzles
+            totalTimeSpent: 180.0, // 3 minutes mock time
+            onContinue: {
+                phase4TestResults += "✅ Continue button callback triggered\n"
+            },
+            onSkip: {
+                phase4TestResults += "✅ Skip button callback triggered\n"
+            }
+        )
+        
+        phase4TestResults += "✅ PromotionInterstitialViewModel created successfully\n"
+        phase4TestResults += "📊 Test Data:\n"
+        phase4TestResults += "  • From: \(promotionViewModel.fromDifficulty.displayName)\n"
+        phase4TestResults += "  • To: \(promotionViewModel.toDifficulty.displayName)\n"
+        phase4TestResults += "  • Completed: \(promotionViewModel.completedPuzzleCount) puzzles\n"
+        phase4TestResults += "  • Time: \(promotionViewModel.totalTimeSpent ?? 0) seconds\n"
+        phase4TestResults += "  • Auto-advance: \(promotionViewModel.isAutoAdvancing ? "ON" : "OFF")\n"
+        phase4TestResults += "✅ Promotion Interstitial View ready for display\n"
+        
+        print("Phase 4 Debug: Tested promotion interstitial with real ViewModels")
+    }
+    
+    /// Test final completion celebration with mock data
+    private func testFinalCompletion() {
+        phase4TestResults = "🏆 Testing Final Completion Celebration...\n"
+        
+        // Simulate completing all difficulties for testing
+        simulateDifficultyCompletion(.easy)
+        simulateDifficultyCompletion(.normal)
+        simulateDifficultyCompletion(.hard)
+        
+        // Record promotions to build history
+        progressService.recordPromotion(
+            for: selectedChildId,
+            from: .easy,
+            to: .normal,
+            completedPuzzleCount: 3,
+            totalTimeSpent: 180.0
+        )
+        
+        progressService.recordPromotion(
+            for: selectedChildId,
+            from: .normal,
+            to: .hard,
+            completedPuzzleCount: 2,
+            totalTimeSpent: 240.0
+        )
+        
+        // Get final statistics
+        let totalCompleted = progressService.getTotalCompletedPuzzles(for: selectedChildId)
+        let totalTime = progressService.getTotalPlayTime(for: selectedChildId)
+        let achievements = progressService.getAchievements(for: selectedChildId)
+        
+        // Create final completion view model
+        let finalViewModel = FinalCompletionViewModel(
+            totalPuzzlesCompleted: totalCompleted,
+            totalTimeSpent: totalTime,
+            onReturnToLobby: {
+                phase4TestResults += "✅ Return to lobby callback triggered\n"
+            },
+            onReplayDifficulty: { difficulty in
+                phase4TestResults += "✅ Replay \(difficulty.displayName) callback triggered\n"
+            }
+        )
+        
+        phase4TestResults += "✅ FinalCompletionViewModel created successfully\n"
+        phase4TestResults += "📊 Final Statistics:\n"
+        phase4TestResults += "  • Total Puzzles: \(totalCompleted)\n"
+        phase4TestResults += "  • Total Time: \(finalViewModel.formattedTotalTime ?? "Unknown")\n"
+        phase4TestResults += "  • Achievements: \(achievements.count) unlocked\n"
+        phase4TestResults += "  • Master Title: \(finalViewModel.masterTitle)\n"
+        phase4TestResults += "✅ Final Completion View ready for display\n"
+        
+        print("Phase 4 Debug: Tested final completion celebration with real ViewModels")
+    }
+    
+    /// View promotion history for current child
+    private func viewPromotionHistory() {
+        let history = progressService.getPromotionHistory(for: selectedChildId)
+        
+        phase4TestResults = "📊 Promotion History for \(selectedChildId):\n\n"
+        
+        if history.isEmpty {
+            phase4TestResults += "No promotions recorded yet.\n"
+            phase4TestResults += "💡 Complete some difficulties first to see promotion history.\n"
+        } else {
+            for (index, record) in history.enumerated() {
+                let date = DateFormatter.localizedString(from: record.promotionDate, dateStyle: .short, timeStyle: .short)
+                phase4TestResults += "\(index + 1). \(record.fromDifficulty.capitalized) → \(record.toDifficulty.capitalized)\n"
+                phase4TestResults += "   📅 Date: \(date)\n"
+                phase4TestResults += "   🧩 Puzzles: \(record.completedPuzzleCount)\n"
+                phase4TestResults += "   ⏱️ Time: \(Int(record.totalTimeSpent / 60))m \(Int(record.totalTimeSpent.truncatingRemainder(dividingBy: 60)))s\n\n"
+            }
+        }
+        
+        print("Phase 4 Debug: Viewed promotion history")
+    }
+    
+    /// View achievements for current child
+    private func viewAchievements() {
+        let achievements = progressService.getAchievements(for: selectedChildId)
+        
+        phase4TestResults = "🎖️ Achievements for \(selectedChildId):\n\n"
+        
+        if achievements.isEmpty {
+            phase4TestResults += "No achievements unlocked yet.\n"
+            phase4TestResults += "💡 Complete difficulties to unlock achievements.\n"
+        } else {
+            let allPossibleAchievements = ["Easy Master", "Medium Master", "Tangram Master"]
+            
+            for achievement in allPossibleAchievements {
+                let isUnlocked = achievements.contains(achievement)
+                let icon = isUnlocked ? "✅" : "⬜"
+                phase4TestResults += "\(icon) \(achievement)\n"
+                
+                if isUnlocked {
+                    phase4TestResults += "   🎉 Unlocked!\n"
+                } else {
+                    phase4TestResults += "   🔒 Locked\n"
+                }
+                phase4TestResults += "\n"
+            }
+            
+            phase4TestResults += "Total achievements: \(achievements.count)/\(allPossibleAchievements.count)\n"
+        }
+        
+        print("Phase 4 Debug: Viewed achievements")
+    }
+    
+    /// Reset all progress for testing
+    private func resetAllProgress() {
+        progressService.resetAllProgress()
+        phase4TestResults = "🔄 All progress data has been reset.\n"
+        phase4TestResults += "Ready for fresh testing!\n"
+        
+        print("Phase 4 Debug: Reset all progress")
+    }
+    
+    /// Test timer integration with promotion
+    private func testTimerIntegration() {
+        phase4TestResults = "⏱️ Testing Timer Integration...\n"
+        
+        // Create mock game progress with timer data
+        let mockStartTime = Date().addingTimeInterval(-180) // 3 minutes ago
+        let mockTotalTime = Date().timeIntervalSince(mockStartTime)
+        
+        phase4TestResults += "📊 Mock Timer Data:\n"
+        phase4TestResults += "  • Start Time: 3 minutes ago\n"
+        phase4TestResults += "  • Total Time: \(Int(mockTotalTime)) seconds\n"
+        phase4TestResults += "  • Formatted: \(formatTimerTime(mockTotalTime))\n"
+        
+        // Test promotion with timer data
+        progressService.recordPromotion(
+            for: selectedChildId,
+            from: .easy,
+            to: .normal,
+            completedPuzzleCount: 3,
+            totalTimeSpent: mockTotalTime
+        )
+        
+        let totalPlayTime = progressService.getTotalPlayTime(for: selectedChildId)
+        phase4TestResults += "✅ Promotion recorded with timer data\n"
+        phase4TestResults += "📈 Total play time now: \(formatTimerTime(totalPlayTime))\n"
+        
+        print("Phase 4 Debug: Tested timer integration")
+    }
+    
+    private func formatTimerTime(_ timeInterval: TimeInterval) -> String {
+        let minutes = Int(timeInterval) / 60
+        let seconds = Int(timeInterval) % 60
+        return String(format: "%dm %ds", minutes, seconds)
+    }
+    
+    /// Test Phase 4 Task 1 implementation thoroughly
+    private func testPhase4Task1Implementation() {
+        phase4TestResults = "🧪 Testing Phase 4 Task 1 Implementation...\n\n"
+        var allTestsPassed = true
+        
+        // Test 1: Test difficulty completion detection
+        do {
+            phase4TestResults += "Test 1: Difficulty Completion Detection\n"
+            
+            let testChildId = "phase4-test-child"
+            
+            // Initially, no difficulty should be completed
+            for difficulty in [UserPreferences.DifficultySetting.easy, .normal, .hard] {
+                let isCompleted = progressService.shouldPromoteToNextDifficulty(
+                    childId: testChildId, 
+                    currentDifficulty: difficulty, 
+                    from: samplePuzzles
+                )
+                if isCompleted {
+                    phase4TestResults += "❌ \(difficulty.displayName) incorrectly marked as completed initially\n"
+                    allTestsPassed = false
+                } else {
+                    phase4TestResults += "✅ \(difficulty.displayName) correctly not completed initially\n"
+                }
+            }
+            
+            // Complete some puzzles in Easy difficulty
+            let easyPuzzles = samplePuzzles.filter { UserPreferences.DifficultySetting.easy.containsPuzzleLevel($0.difficulty) }
+            for puzzle in easyPuzzles.prefix(easyPuzzles.count - 1) { // Complete all but one
+                progressService.markPuzzleCompleted(childId: testChildId, puzzleId: puzzle.id, difficulty: .easy)
+            }
+            
+            // Easy should not be completed yet
+            let easyPartiallyCompleted = progressService.shouldPromoteToNextDifficulty(childId: testChildId, currentDifficulty: .easy, from: samplePuzzles)
+            if easyPartiallyCompleted {
+                phase4TestResults += "❌ Easy incorrectly marked as completed when partially done\n"
+                allTestsPassed = false
+            } else {
+                phase4TestResults += "✅ Easy correctly not completed when partially done\n"
+            }
+            
+            // Complete the last Easy puzzle
+            if let lastEasyPuzzle = easyPuzzles.last {
+                progressService.markPuzzleCompleted(childId: testChildId, puzzleId: lastEasyPuzzle.id, difficulty: .easy)
+            }
+            
+            // Now Easy should be completed
+            let easyFullyCompleted = progressService.shouldPromoteToNextDifficulty(childId: testChildId, currentDifficulty: .easy, from: samplePuzzles)
+            if !easyFullyCompleted {
+                phase4TestResults += "❌ Easy not marked as completed when all puzzles done\n"
+                allTestsPassed = false
+            } else {
+                phase4TestResults += "✅ Easy correctly marked as completed\n"
+            }
+            
+        } catch {
+            phase4TestResults += "❌ Test 1 failed with error: \(error)\n"
+            allTestsPassed = false
+        }
+        
+        // Test 2: Test promotion logic
+        do {
+            phase4TestResults += "\nTest 2: Promotion Logic\n"
+            
+            // Test promotion from Easy
+            let easyPromotion = progressService.getNextDifficultyForPromotion(from: .easy)
+            if easyPromotion == .normal {
+                phase4TestResults += "✅ Easy → Medium promotion correct\n"
+            } else {
+                phase4TestResults += "❌ Easy promotion logic incorrect\n"
+                allTestsPassed = false
+            }
+            
+            // Test promotion from Medium
+            let mediumPromotion = progressService.getNextDifficultyForPromotion(from: .normal)
+            if mediumPromotion == .hard {
+                phase4TestResults += "✅ Medium → Hard promotion correct\n"
+            } else {
+                phase4TestResults += "❌ Medium promotion logic incorrect\n"
+                allTestsPassed = false
+            }
+            
+            // Test no promotion from Hard
+            let hardPromotion = progressService.getNextDifficultyForPromotion(from: .hard)
+            if hardPromotion == nil {
+                phase4TestResults += "✅ Hard has no further promotion (correct)\n"
+            } else {
+                phase4TestResults += "❌ Hard promotion should be nil\n"
+                allTestsPassed = false
+            }
+            
+        } catch {
+            phase4TestResults += "❌ Test 2 failed with error: \(error)\n"
+            allTestsPassed = false
+        }
+        
+        // Final result
+        phase4TestResults += "\n" + (allTestsPassed ? "🎉 ALL PHASE 4 TASK 1 TESTS PASSED!" : "❌ SOME TESTS FAILED")
+        phase4TestResults += "\n\nPhase 4 Task 1 implementation ready for integration testing."
+        
+        print("Phase 4 Debug: Task 1 testing completed - \(allTestsPassed ? "PASSED" : "FAILED")")
+    }
+    
     private enum TestError: Error {
         case failed
     }
@@ -1505,6 +2004,42 @@ struct ServicePuzzleRowView: View {
         } else {
             return "Locked"
         }
+    }
+}
+
+// MARK: - Mock Game Delegate for Testing
+
+private class MockGameDelegate: GameDelegate {
+    func gameDidCompleteLevel(xpAwarded: Int) {
+        print("Mock: Level completed with \(xpAwarded) XP")
+    }
+    
+    func gameDidRequestQuit() {
+        print("Mock: Game requested quit")
+    }
+    
+    func gameDidUpdateProgress(_ progress: Float) {
+        print("Mock: Progress updated to \(progress)")
+    }
+    
+    func gameDidRequestHint() {
+        print("Mock: Hint requested")
+    }
+    
+    func showCelebrationAnimation(at position: CGPoint) {
+        print("Mock: Celebration animation at \(position)")
+    }
+    
+    func getChildDifficultySetting() -> UserPreferences.DifficultySetting {
+        return .normal
+    }
+    
+    func gameDidEncounterError(_ error: Error) {
+        print("Mock: Game encountered error: \(error)")
+    }
+    
+    func gameDidDetectFrustration(level: Float) {
+        print("Mock: Frustration detected at level \(level)")
     }
 }
 

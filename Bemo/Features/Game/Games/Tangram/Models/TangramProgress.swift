@@ -10,6 +10,7 @@
 // USAGE: Stores completed puzzles, current levels, and difficulty progression per child
 
 import Foundation
+import SwiftUI
 
 // MARK: - TangramProgress Model
 
@@ -31,6 +32,25 @@ struct TangramProgress: Codable, Equatable {
     
     /// Timestamp of last progress update
     var lastPlayedDate: Date
+    
+    /// NEW: Promotion tracking history
+    var promotionHistory: [PromotionRecord] = []
+    
+    /// NEW: Unlocked achievements
+    var achievementsUnlocked: Set<String> = []
+    
+    /// NEW: Total play time across all sessions
+    var totalPlayTimeSeconds: TimeInterval = 0
+    
+    // MARK: - Promotion Record Model
+    
+    struct PromotionRecord: Codable, Equatable {
+        let fromDifficulty: String // DifficultySetting.rawValue
+        let toDifficulty: String   // DifficultySetting.rawValue
+        let completedPuzzleCount: Int
+        let promotionDate: Date
+        let totalTimeSpent: TimeInterval
+    }
     
     // MARK: - Initialization
     
@@ -149,6 +169,70 @@ struct TangramProgress: Codable, Equatable {
         return Double(totalCompleted) / Double(totalPuzzles)
     }
     
+    // MARK: - Promotion Tracking Methods
+    
+    /// Record a promotion from one difficulty to another
+    /// - Parameters:
+    ///   - from: The difficulty level completed
+    ///   - to: The new difficulty level promoted to
+    ///   - completedCount: Number of puzzles completed in the from difficulty
+    ///   - timeSpent: Time spent completing the difficulty
+    mutating func recordPromotion(
+        from: UserPreferences.DifficultySetting,
+        to: UserPreferences.DifficultySetting,
+        completedCount: Int,
+        timeSpent: TimeInterval
+    ) {
+        let record = PromotionRecord(
+            fromDifficulty: from.rawValue,
+            toDifficulty: to.rawValue,
+            completedPuzzleCount: completedCount,
+            promotionDate: Date(),
+            totalTimeSpent: timeSpent
+        )
+        promotionHistory.append(record)
+        totalPlayTimeSeconds += timeSpent
+        lastPlayedDate = Date()
+    }
+    
+    /// Unlock an achievement
+    /// - Parameter achievement: The achievement identifier to unlock
+    mutating func unlockAchievement(_ achievement: String) {
+        achievementsUnlocked.insert(achievement)
+        lastPlayedDate = Date()
+    }
+    
+    /// Check if user has completed all difficulties
+    /// - Returns: True if all difficulty levels have been completed
+    var hasCompletedAllDifficulties: Bool {
+        let completedDifficulties = Set(promotionHistory.map { $0.fromDifficulty })
+        return completedDifficulties.contains("easy") && 
+               completedDifficulties.contains("normal") && 
+               (completedPuzzlesByDifficulty["hard"]?.count ?? 0) > 0
+    }
+    
+    /// Get the most recent promotion record
+    /// - Returns: The most recent promotion, or nil if no promotions
+    var mostRecentPromotion: PromotionRecord? {
+        return promotionHistory.max(by: { $0.promotionDate < $1.promotionDate })
+    }
+    
+    /// Get total time spent in formatted string
+    /// - Returns: Formatted time string (e.g., "2h 15m 30s")
+    var formattedTotalPlayTime: String {
+        let hours = Int(totalPlayTimeSeconds) / 3600
+        let minutes = Int(totalPlayTimeSeconds) % 3600 / 60
+        let seconds = Int(totalPlayTimeSeconds) % 60
+        
+        if hours > 0 {
+            return String(format: "%dh %dm %ds", hours, minutes, seconds)
+        } else if minutes > 0 {
+            return String(format: "%dm %ds", minutes, seconds)
+        } else {
+            return String(format: "%ds", seconds)
+        }
+    }
+    
     // MARK: - Equatable
     
     static func == (lhs: TangramProgress, rhs: TangramProgress) -> Bool {
@@ -206,6 +290,18 @@ extension UserPreferences.DifficultySetting {
             return "blue"
         case .hard:
             return "red"
+        }
+    }
+    
+    /// SwiftUI Color for UI display
+    var uiColor: Color {
+        switch self {
+        case .easy:
+            return .green
+        case .normal:
+            return .blue
+        case .hard:
+            return .red
         }
     }
     

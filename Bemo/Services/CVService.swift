@@ -486,7 +486,7 @@ extension CVService: AVCaptureVideoDataOutputSampleBufferDelegate {
             
             detectionResultsSubject.send(detectionResult)
             
-            // Log results
+            // Log detection results
             if result.detections.isEmpty {
                 print("📦 No tangrams detected")
             } else {
