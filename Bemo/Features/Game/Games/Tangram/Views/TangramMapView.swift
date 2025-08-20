@@ -33,8 +33,8 @@ struct TangramMapView: View {
                     .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Header with navigation and progress
-                    headerView
+                    // Header with just back button
+                    backButtonView
                         .padding(.horizontal, BemoTheme.Spacing.large)
                         .padding(.top, BemoTheme.Spacing.medium)
                     
@@ -61,111 +61,30 @@ struct TangramMapView: View {
         }
     }
     
-    // MARK: - Header View
+    // MARK: - Back Button View
     
-    private var headerView: some View {
-        VStack(spacing: BemoTheme.Spacing.medium) {
-            // Navigation and Title Row
-            HStack {
-                // Back Button
-                Button(action: {
-                    viewModel.goBackToDifficulty()
-                }) {
-                    HStack(spacing: BemoTheme.Spacing.xsmall) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .semibold))
-                        Text("Back")
-                            .font(.system(size: 16, weight: .medium))
-                    }
-                    .foregroundColor(TangramTheme.UI.primaryButton)
+    private var backButtonView: some View {
+        HStack {
+            // Back Button
+            Button(action: {
+                viewModel.exitToLobby()
+            }) {
+                HStack(spacing: BemoTheme.Spacing.xsmall) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                    Text("Back")
+                        .font(.system(size: 16, weight: .medium))
                 }
-                .padding(.vertical, BemoTheme.Spacing.small)
-                
-                Spacer()
-                
-                // Title
-                Text("\(viewModel.difficulty.displayName) Puzzles")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(TangramTheme.Text.primary)
-                
-                Spacer()
-                
-                // Placeholder for symmetry
-                Color.clear
-                    .frame(width: 70, height: 20)
+                .foregroundColor(TangramTheme.UI.primaryButton)
             }
+            .padding(.vertical, BemoTheme.Spacing.small)
             
-            // Progress Section
-            progressSectionView
+            Spacer()
         }
-        .tangramPanel()
-        .padding(.bottom, BemoTheme.Spacing.large)
+        .padding(.bottom, BemoTheme.Spacing.medium)
     }
     
-    // MARK: - Progress Section
-    
-    private var progressSectionView: some View {
-        VStack(spacing: BemoTheme.Spacing.small) {
-            // Progress Bar
-            HStack {
-                Text("Progress")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(TangramTheme.Text.secondary)
-                
-                Spacer()
-                
-                Text("\(viewModel.completedCount) / \(viewModel.totalCount)")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(TangramTheme.Text.primary)
-            }
-            
-            // Progress Bar Visual
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    // Background
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(TangramTheme.UI.separator.opacity(0.3))
-                        .frame(height: 8)
-                    
-                    // Progress Fill
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(
-                            LinearGradient(
-                                colors: [TangramTheme.UI.success, TangramTheme.UI.success.opacity(0.8)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: geometry.size.width * viewModel.completionPercentage, height: 8)
-                        .animation(.easeInOut(duration: 0.5), value: viewModel.completionPercentage)
-                }
-            }
-            .frame(height: 8)
-            
-            // Completion Status
-            if viewModel.isDifficultyCompleted {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(TangramTheme.UI.success)
-                    Text("All puzzles completed! Great work!")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(TangramTheme.UI.success)
-                }
-                .padding(.top, BemoTheme.Spacing.xsmall)
-            } else if let nextPuzzle = viewModel.nextPuzzle {
-                HStack {
-                    Image(systemName: "target")
-                        .foregroundColor(TangramTheme.UI.primaryButton)
-                    Text("Next: \(nextPuzzle.name)")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(TangramTheme.Text.secondary)
-                }
-                .padding(.top, BemoTheme.Spacing.xsmall)
-            }
-        }
-        .padding(.horizontal, BemoTheme.Spacing.large)
-        .padding(.vertical, BemoTheme.Spacing.medium)
-    }
+
     
     // MARK: - Map Content
     
