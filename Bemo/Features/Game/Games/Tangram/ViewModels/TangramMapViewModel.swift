@@ -149,6 +149,10 @@ class TangramMapViewModel {
         // Get puzzles filtered by difficulty and sorted by ID
         let filteredPuzzles = puzzleLibraryService.puzzlesForDifficulty(difficulty)
         
+        #if DEBUG
+        print("[TangramMapViewModel] PuzzleLibraryService returned \(filteredPuzzles.count) puzzles for \(difficulty.displayName)")
+        #endif
+        
         if filteredPuzzles.isEmpty {
             errorMessage = "No puzzles found for \(difficulty.displayName) difficulty"
             isLoading = false
@@ -161,7 +165,7 @@ class TangramMapViewModel {
         
         isLoading = false
         
-        print("[TangramMapViewModel] Loaded \(puzzles.count) puzzles for \(difficulty.displayName)")
+        print("[TangramMapViewModel] Loaded \(puzzles.count) puzzles for \(difficulty.displayName), unlocked: \(unlockedPuzzleIds.count)")
     }
     
     /// Wait for puzzle library service to finish loading
@@ -198,12 +202,16 @@ class TangramMapViewModel {
     /// Select a puzzle for play
     /// - Parameter puzzle: The puzzle to select
     func selectPuzzle(_ puzzle: GamePuzzleData) {
+        #if DEBUG
+        print("[TangramMapViewModel] selectPuzzle called for: \(puzzle.id), canSelect: \(canSelectPuzzle(puzzle))")
+        #endif
+        
         guard canSelectPuzzle(puzzle) else {
             print("[TangramMapViewModel] Cannot select locked puzzle: \(puzzle.id)")
             return
         }
         
-        print("[TangramMapViewModel] Selected puzzle: \(puzzle.id)")
+        print("[TangramMapViewModel] Selected puzzle: \(puzzle.id), calling onPuzzleSelected")
         onPuzzleSelected(puzzle)
     }
     
