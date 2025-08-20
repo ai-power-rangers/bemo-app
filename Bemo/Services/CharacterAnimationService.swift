@@ -101,9 +101,12 @@ class CharacterAnimationService {
         let rotation: Double
         let interactive: Bool
         let onTap: (() -> Void)?
+        let loop: Bool  // Whether to loop the animation indefinitely
         
         var isExpired: Bool {
-            Date().timeIntervalSince(startTime) > duration
+            // If looping, never expire
+            if loop { return false }
+            return Date().timeIntervalSince(startTime) > duration
         }
     }
     
@@ -141,7 +144,8 @@ class CharacterAnimationService {
         scale: CGFloat = 1.0,
         rotation: Double = 0,
         interactive: Bool = false,
-        onTap: (() -> Void)? = nil
+        onTap: (() -> Void)? = nil,
+        loop: Bool = false
     ) {
         // If there's already an animation, ignore this call
         if !activeAnimations.isEmpty {
@@ -163,7 +167,8 @@ class CharacterAnimationService {
             scale: scale,
             rotation: rotation,
             interactive: interactive,
-            onTap: onTap
+            onTap: onTap,
+            loop: loop
         )
         
         activeAnimations.append(animation)
@@ -212,6 +217,10 @@ class CharacterAnimationService {
     private func cleanupExpiredAnimations() {
         let now = Date()
         activeAnimations.removeAll { animation in
+            // Don't remove looping animations
+            if animation.loop {
+                return false
+            }
             let elapsed = now.timeIntervalSince(animation.startTime)
             return elapsed > (animation.duration + animation.fadeOutDuration)
         }
