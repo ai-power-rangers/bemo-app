@@ -255,7 +255,15 @@ class TangramGameViewModel {
             return // Don't override these special phases
         case .selectingDifficulty:
             return // Don't override if already in difficulty selection
+        case .playingPuzzle:
+            #if DEBUG
+            print("🚨 [TangramGameViewModel] Preserving playingPuzzle phase - puzzle already selected")
+            #endif
+            return // Don't override if already playing a puzzle
         default:
+            #if DEBUG
+            print("📍 [TangramGameViewModel] Current phase \(currentPhase) will be overridden")
+            #endif
             break // Continue with normal phase determination
         }
         
@@ -434,6 +442,9 @@ class TangramGameViewModel {
     func selectPuzzleFromMap(_ puzzle: GamePuzzleData) {
         guard let childId = currentChildProfileId,
               let difficulty = selectedDifficulty else {
+            #if DEBUG
+            print("❌ [TangramGameViewModel] selectPuzzleFromMap failed - childId: \(currentChildProfileId ?? "nil"), difficulty: \(selectedDifficulty?.displayName ?? "nil")")
+            #endif
             return
         }
         
@@ -446,9 +457,24 @@ class TangramGameViewModel {
         )
         
         if isUnlocked {
+            #if DEBUG
+            print("✅ [TangramGameViewModel] Puzzle is unlocked, proceeding to load")
+            print("   - Setting selectedPuzzle to: \(puzzle.id)")
+            print("   - Changing phase from \(currentPhase) to .playingPuzzle")
+            #endif
+            
             selectedPuzzle = puzzle
             currentPhase = .playingPuzzle
             startGameSession(puzzleId: puzzle.id, puzzleName: puzzle.name, difficulty: puzzle.difficulty)
+            
+            #if DEBUG
+            print("   - Phase is now: \(currentPhase)")
+            print("   - selectedPuzzle is: \(selectedPuzzle?.id ?? "nil")")
+            #endif
+        } else {
+            #if DEBUG
+            print("🔒 [TangramGameViewModel] Puzzle is locked: \(puzzle.id)")
+            #endif
         }
     }
     

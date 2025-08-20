@@ -488,7 +488,6 @@ extension CVService: AVCaptureVideoDataOutputSampleBufferDelegate {
             
             // Log detection results
             if result.detections.isEmpty {
-                print("📦 No tangrams detected")
             } else {
                 print("📦 Detected \(result.detections.count) tangram(s):")
                 for detection in result.detections {
@@ -498,7 +497,7 @@ extension CVService: AVCaptureVideoDataOutputSampleBufferDelegate {
                 }
             }
             
-            print(String(format: "⚡ %.1f FPS", fps))
+            //print(String(format: "⚡ %.1f FPS", fps))
         } catch {
             print("❌ Processing error: \(error)")
         }

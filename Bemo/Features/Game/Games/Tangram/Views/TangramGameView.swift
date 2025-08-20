@@ -119,7 +119,10 @@ struct TangramGameView: View {
         .onAppear {
             updateNavigationBarAppearance()
         }
-        .onChange(of: viewModel.currentPhase) { _, _ in
+        .onChange(of: viewModel.currentPhase) { oldPhase, newPhase in
+            #if DEBUG
+            print("🔄 [TangramGameView] Phase changed from \(oldPhase) to \(newPhase)")
+            #endif
             updateNavigationBarAppearance()
         }
     }
@@ -175,6 +178,9 @@ struct TangramGameView: View {
                     difficulty: difficulty,
                     childProfileId: childId,
                     onPuzzleSelected: { puzzle in
+                        #if DEBUG
+                        print("🗺️ [TangramGameView] onPuzzleSelected callback triggered for puzzle: \(puzzle.id)")
+                        #endif
                         viewModel.selectPuzzleFromMap(puzzle)
                     },
                     onBackToDifficulty: {
