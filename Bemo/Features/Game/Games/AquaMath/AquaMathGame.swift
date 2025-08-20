@@ -16,7 +16,7 @@ class AquaMathGame: Game {
     // MARK: - Game Protocol Properties
     
     let id = "aquamath"
-    let title = "AquaMath Touch"
+    let title = "Math Aquarium"
     let description = "Solve math problems to fill your aquarium!"
     let recommendedAge = 5...10
     let thumbnailImageName = "drop.circle.fill"

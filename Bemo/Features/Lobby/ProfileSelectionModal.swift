@@ -79,7 +79,7 @@ struct ProfileSelectionModal: View {
                         Text("Add Child Profile")
                             .font(.headline)
                     }
-                    .foregroundColor(Color("AppPrimaryTextColor"))
+                    .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(Color.blue)
@@ -97,6 +97,7 @@ struct ProfileSelectionModal: View {
                     Button("Cancel") {
                         onDismiss()
                     }
+                    .foregroundColor(Color("AppPrimaryTextColor"))
                 }
             }
             .onAppear {
