@@ -67,12 +67,12 @@ struct TangramMapView: View {
         HStack {
             // Back Button
             Button(action: {
-                viewModel.exitToLobby()
+                viewModel.goBackToDifficulty()
             }) {
                 HStack(spacing: BemoTheme.Spacing.xsmall) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .semibold))
-                    Text("Back")
+                    Text("Back to Lobby")
                         .font(.system(size: 16, weight: .medium))
                 }
                 .foregroundColor(TangramTheme.UI.primaryButton)
