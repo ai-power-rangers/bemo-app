@@ -88,11 +88,6 @@ struct DifficultySelectionView: View {
             VStack(spacing: BemoTheme.Spacing.xlarge) {
                 headerView
                 difficultyCardsView
-                
-                // Development Test Buttons (DEBUG only)
-                #if DEBUG
-                testButtonsView
-                #endif
             }
             .padding(.horizontal, BemoTheme.Spacing.large)
             .padding(.vertical, BemoTheme.Spacing.xlarge)
@@ -118,11 +113,6 @@ struct DifficultySelectionView: View {
                     .multilineTextAlignment(.center)
             }
         }
-        #if DEBUG
-        .onTapGesture(count: 3) {
-            testPuzzleFiltering()
-        }
-        #endif
     }
     
     private var difficultyCardsView: some View {
@@ -145,87 +135,7 @@ struct DifficultySelectionView: View {
         }
     }
     
-    // MARK: - Development Test UI
-    
-    #if DEBUG
-    private var testButtonsView: some View {
-        VStack(spacing: BemoTheme.Spacing.medium) {
-            // Section Title
-            HStack {
-                Text("🧪 Testing Controls")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(BemoTheme.Colors.gray2)
-                Spacer()
-            }
-            
-            // Reset Button
-            Button(action: {
-                // Show confirmation alert before resetting
-                resetAllProgress()
-            }) {
-                HStack(spacing: BemoTheme.Spacing.small) {
-                    Image(systemName: "trash.fill")
-                        .font(.system(size: 16))
-                    Text("Reset All Progress")
-                        .font(.system(size: 14, weight: .semibold))
-                }
-                .padding(.horizontal, BemoTheme.Spacing.large)
-                .padding(.vertical, BemoTheme.Spacing.medium)
-                .background(Color.red.opacity(0.1))
-                .foregroundColor(.red)
-                .cornerRadius(BemoTheme.CornerRadius.medium)
-                .overlay(
-                    RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.medium)
-                        .stroke(Color.red.opacity(0.3), lineWidth: 1)
-                )
-            }
-            .disabled(!viewModel.hasProgressToReset)
-            
-            // Status Info
-            if viewModel.isNewUser {
-                HStack(spacing: BemoTheme.Spacing.xsmall) {
-                    Image(systemName: "info.circle.fill")
-                        .foregroundColor(BemoTheme.Colors.gray2)
-                        .font(.system(size: 12))
-                    
-                    Text("No progress to reset - this is a new user")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(BemoTheme.Colors.gray2)
-                    
-                    Spacer()
-                }
-            } else {
-                HStack(spacing: BemoTheme.Spacing.xsmall) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                        .font(.system(size: 12))
-                    
-                    Text("This will clear all puzzle progress permanently")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.orange)
-                    
-                    Spacer()
-                }
-            }
-        }
-        .padding(BemoTheme.Spacing.large)
-        .background(Color.gray.opacity(0.05))
-        .cornerRadius(BemoTheme.CornerRadius.large)
-        .overlay(
-            RoundedRectangle(cornerRadius: BemoTheme.CornerRadius.large)
-                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-        )
-    }
-    
-    private func resetAllProgress() {
-        // Haptic feedback
-        let impactFeedback = UIImpactFeedbackGenerator(style: .heavy)
-        impactFeedback.impactOccurred()
-        
-        // Reset progress
-        viewModel.resetAllProgressForTesting()
-    }
-    #endif
+
     
     // MARK: - Actions
     

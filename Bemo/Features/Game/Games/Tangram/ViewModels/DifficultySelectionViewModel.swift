@@ -247,29 +247,7 @@ class DifficultySelectionViewModel {
             Double(completedPuzzles) / Double(totalPuzzles) * TangramGameConstants.DifficultyProgression.percentageMultiplier : 0.0
     }
     
-    // MARK: - Development Testing Methods
-    
-    #if DEBUG
-    /// Reset all progress for testing purposes
-    func resetAllProgressForTesting() {
-        print("[DifficultySelectionViewModel] TEST: Resetting all progress for child \(childProfileId)")
-        
-        // Reset all progress data
-        progressService.resetAllProgress()
-        
-        // Reload difficulty data to reflect changes
-        Task {
-            await loadDifficultyData()
-        }
-        
-        print("[DifficultySelectionViewModel] TEST: All progress reset successfully")
-    }
-    
-    /// Check if user has any progress to reset
-    var hasProgressToReset: Bool {
-        return !isNewUser
-    }
-    #endif
+
 }
 
 
