@@ -17,7 +17,11 @@ class WorkspaceEngine {
     // MARK: - Constants
     
     private let snapThreshold: CGFloat = 30.0
-    private let tileSize: CGSize = CGSize(width: 60, height: 60)
+    private var tileSize: CGSize {
+        let isLargeScreen = UIScreen.main.bounds.width > 600
+        let size: CGFloat = isLargeScreen ? 80 : 60
+        return CGSize(width: size, height: size)
+    }
     
     // MARK: - Snap Detection
     

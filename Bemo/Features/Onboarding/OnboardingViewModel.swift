@@ -117,11 +117,14 @@ class OnboardingViewModel {
     
     func signInWithApple() {
         isLoading = true
+        // Clear the looping animation when user starts sign in
+        characterAnimationService?.clearAllAnimations()
         authenticationService.signInWithApple()
     }
     
     func showSignInCharacter() {
-        // Show a cheerful waving character on the sign-in screen
+        // Show a cheerful waving character on the sign-in screen that loops indefinitely
+        print("CharacterAnimationService: Showing sign-in character with loop=true")
         characterAnimationService?.showCharacter(
             .waving,
             at: .topCenter,
@@ -130,15 +133,18 @@ class OnboardingViewModel {
             interactive: true,
             onTap: { [weak self] in
                 // Wave again when tapped with a fun bounce effect
+                print("CharacterAnimationService: Character tapped, showing bounce effect")
                 self?.characterAnimationService?.showCharacter(
                     .waving,
                     at: .topCenter,
                     size: CGSize(width: 170, height: 170),
                     duration: 2.5,
                     scale: 1.2,
-                    rotation: -10
+                    rotation: -10,
+                    loop: true  // Keep looping on tap as well
                 )
-            }
+            },
+            loop: true  // Loop the animation indefinitely
         )
     }
     

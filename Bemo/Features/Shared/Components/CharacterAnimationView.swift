@@ -19,6 +19,7 @@ struct CharacterAnimationView: View {
     
     @State private var opacity: Double = 0
     @State private var hasAppeared = false
+    @State private var pulseScale: CGFloat = 1.0
     
     var body: some View {
         Group {
@@ -36,7 +37,7 @@ struct CharacterAnimationView: View {
                     .frame(width: animation.size.width, height: animation.size.height)
             }
         }
-        .scaleEffect(animation.scale)
+        .scaleEffect(animation.scale * pulseScale)
         .rotationEffect(.degrees(animation.rotation))
         .opacity(opacity)
         .onTapGesture {
@@ -46,6 +47,12 @@ struct CharacterAnimationView: View {
         }
         .onAppear {
             startAnimation()
+        }
+        .onDisappear {
+            // If animation is looping and we're disappearing, it means it was cleared
+            if animation.loop {
+                print("CharacterAnimationService: Looping animation '\(animation.character.resourceName)' is being removed")
+            }
         }
     }
     
@@ -58,15 +65,26 @@ struct CharacterAnimationView: View {
             opacity = 1
         }
         
-        // Schedule fade out
-        DispatchQueue.main.asyncAfter(deadline: .now() + animation.duration) {
-            withAnimation(.easeOut(duration: animation.fadeOutDuration)) {
-                opacity = 0
+        // Only schedule fade out if not looping
+        if !animation.loop {
+            // Schedule fade out
+            DispatchQueue.main.asyncAfter(deadline: .now() + animation.duration) {
+                withAnimation(.easeOut(duration: animation.fadeOutDuration)) {
+                    opacity = 0
+                }
+                
+                // Remove after fade out completes
+                DispatchQueue.main.asyncAfter(deadline: .now() + animation.fadeOutDuration) {
+                    onRemove()
+                }
             }
-            
-            // Remove after fade out completes
-            DispatchQueue.main.asyncAfter(deadline: .now() + animation.fadeOutDuration) {
-                onRemove()
+        } else {
+            // If looping, add a subtle pulse effect to show it's active
+            withAnimation(
+                Animation.easeInOut(duration: 1.5)
+                    .repeatForever(autoreverses: true)
+            ) {
+                pulseScale = 1.05
             }
         }
     }

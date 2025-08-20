@@ -23,7 +23,9 @@ struct GIFImageView: UIViewRepresentable {
         // Load GIF
         if let gifImage = loadGIF(named: gifName) {
             imageView.image = gifImage
+            imageView.animationRepeatCount = 0  // 0 means infinite loop
             imageView.startAnimating()
+            print("CharacterAnimationService: Started animating GIF '\(gifName)' with duration: \(gifImage.duration), repeat count: \(imageView.animationRepeatCount)")
         }
         
         return imageView

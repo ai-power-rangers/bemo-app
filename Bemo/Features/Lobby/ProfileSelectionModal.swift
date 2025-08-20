@@ -90,8 +90,6 @@ struct ProfileSelectionModal: View {
                     Spacer()
                 }
             }
-            .navigationTitle("Select Profile")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Cancel") {
