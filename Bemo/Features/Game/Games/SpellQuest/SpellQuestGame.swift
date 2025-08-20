@@ -22,7 +22,7 @@ class SpellQuestGame: Game {
     var gameUIConfig: GameUIConfig {
         GameUIConfig(
             respectsSafeAreas: false,
-            showHintButton: true,
+            showHintButton: false,
             showProgressBar: true,
             showQuitButton: true
         )

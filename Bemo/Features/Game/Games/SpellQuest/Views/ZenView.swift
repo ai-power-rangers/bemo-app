@@ -19,9 +19,10 @@ struct ZenView: View {
             // Header
             ZenHeaderView(viewModel: viewModel)
             
-            // Board
+            // Board - takes up remaining space
             if let playerVM = viewModel.playerViewModel {
                 BoardView(viewModel: playerVM, isZenJunior: false)
+                    .frame(maxHeight: .infinity)
             }
             
             // Next button (shown after completion)
@@ -42,7 +43,7 @@ struct ZenView: View {
                             .fill(Color.green)
                     )
                 }
-                .padding()
+                .padding(.vertical, 20)
                 .transition(.scale.combined(with: .opacity))
             }
         }
@@ -89,20 +90,6 @@ private struct ZenHeaderView: View {
             }
             
             Spacer()
-            
-            // Hint button
-            Button(action: {
-                viewModel.onHintRequested()
-            }) {
-                VStack {
-                    Image(systemName: "lightbulb.fill")
-                        .font(.title2)
-                        .foregroundColor(.orange)
-                    Text("Hint")
-                        .font(.caption)
-                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.6))
-                }
-            }
         }
         .padding()
         .background(

@@ -15,18 +15,15 @@ struct ZenJuniorView: View {
     let viewModel: SpellQuestGameViewModel
     
     var body: some View {
-        VStack {
+        VStack(spacing: 0) {
             // Header (simplified for young players)
             ZenJuniorHeaderView(viewModel: viewModel)
             
-            Spacer()
-            
-            // Board with larger elements
+            // Board with larger elements - takes up remaining space
             if let playerVM = viewModel.playerViewModel {
                 BoardView(viewModel: playerVM, isZenJunior: true)
+                    .frame(maxHeight: .infinity)
             }
-            
-            Spacer()
             
             // Big friendly next button
             if viewModel.playerViewModel?.boardState.isComplete == true {
@@ -126,28 +123,6 @@ private struct ZenJuniorHeaderView: View {
             }
             
             Spacer()
-            
-            // Big hint button with animation
-            Button(action: {
-                viewModel.onHintRequested()
-            }) {
-                ZStack {
-                    Circle()
-                        .fill(Color.yellow)
-                        .frame(width: 60, height: 60)
-                    
-                    Image(systemName: "lightbulb.fill")
-                        .font(.title)
-                        .foregroundColor(.white)
-                }
-            }
-            .padding()
-            .scaleEffect(1.0)
-            .animation(
-                Animation.easeInOut(duration: 1.5)
-                    .repeatForever(autoreverses: true),
-                value: viewModel.playerViewModel?.boardState.hintsUsedThisPuzzle
-            )
         }
         .background(
             Color.white

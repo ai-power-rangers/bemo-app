@@ -44,9 +44,13 @@ struct AquaMathGameView: View {
                     .padding(.bottom, 10)
                 
                 // Tile tray at bottom
-                TileTrayView(viewModel: viewModel)
-                    .frame(height: 100)
-                    .background(Color(red: 0.85, green: 0.92, blue: 0.98))
+                GeometryReader { geometry in
+                    let isLargeScreen = geometry.size.width > 600
+                    TileTrayView(viewModel: viewModel)
+                        .frame(height: isLargeScreen ? 140 : 100)
+                        .background(Color(red: 0.85, green: 0.92, blue: 0.98))
+                }
+                .frame(height: UIScreen.main.bounds.width > 600 ? 140 : 100)
             }
         }
         .onAppear {
@@ -164,14 +168,44 @@ struct TileTrayView: View {
     let viewModel: AquaMathGameViewModel
     
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 15) {
-                ForEach(viewModel.availableTiles, id: \.self) { tileKind in
-                    TileView(kind: tileKind, viewModel: viewModel)
+        GeometryReader { geometry in
+            let isLargeScreen = geometry.size.width > 600
+            let tileCount = viewModel.availableTiles.count
+            let tileSize = calculateTileSize(for: geometry.size.width, isLargeScreen: isLargeScreen)
+            let spacing = isLargeScreen ? 20.0 : 15.0
+            let totalWidth = CGFloat(tileCount) * tileSize + CGFloat(tileCount - 1) * spacing
+            let needsScroll = totalWidth > geometry.size.width - 40
+            
+            if needsScroll {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: spacing) {
+                        ForEach(viewModel.availableTiles, id: \.self) { tileKind in
+                            TileView(kind: tileKind, viewModel: viewModel, tileSize: tileSize, isLargeScreen: isLargeScreen)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, isLargeScreen ? 15 : 10)
                 }
+            } else {
+                // Center tiles when they fit
+                HStack(spacing: spacing) {
+                    ForEach(viewModel.availableTiles, id: \.self) { tileKind in
+                        TileView(kind: tileKind, viewModel: viewModel, tileSize: tileSize, isLargeScreen: isLargeScreen)
+                    }
+                }
+                .padding(.vertical, isLargeScreen ? 15 : 10)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 10)
+        }
+    }
+    
+    private func calculateTileSize(for screenWidth: CGFloat, isLargeScreen: Bool) -> CGFloat {
+        if isLargeScreen {
+            // iPad/large screens
+            return min(110, screenWidth / 12)
+        } else {
+            // iPhone/small screens
+            return 70
         }
     }
 }
@@ -181,6 +215,8 @@ struct TileTrayView: View {
 struct TileView: View {
     let kind: TileKind
     let viewModel: AquaMathGameViewModel
+    let tileSize: CGFloat
+    let isLargeScreen: Bool
     
     @State private var isPressed: Bool = false
     
@@ -190,18 +226,18 @@ struct TileView: View {
         }) {
             ZStack {
                 // White background tile
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: isLargeScreen ? 16 : 12)
                     .fill(Color.white)
-                    .frame(width: 70, height: 70)
+                    .frame(width: tileSize, height: tileSize)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: isLargeScreen ? 16 : 12)
+                            .stroke(Color.gray.opacity(0.3), lineWidth: isLargeScreen ? 1.5 : 1)
                     )
-                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 2)
+                    .shadow(color: .black.opacity(0.1), radius: isLargeScreen ? 4 : 2, x: 0, y: isLargeScreen ? 3 : 2)
                 
-                // Colored number/content
+                // Colored number/content with dynamic font size
                 Text(kind.displayValue)
-                    .font(kind.displayValue.count > 2 ? .body.bold() : .title.bold())
+                    .font(dynamicFont(for: kind.displayValue.count))
                     .foregroundColor(kind.numberColor)
             }
         }
@@ -211,6 +247,16 @@ struct TileView: View {
                 isPressed = pressing
             }
         }, perform: {})
+    }
+    
+    private func dynamicFont(for charCount: Int) -> Font {
+        if isLargeScreen {
+            // Larger fonts for iPads
+            return charCount > 2 ? .title2.bold() : .system(size: 48, weight: .bold)
+        } else {
+            // Standard fonts for iPhones
+            return charCount > 2 ? .body.bold() : .title.bold()
+        }
     }
 }
 

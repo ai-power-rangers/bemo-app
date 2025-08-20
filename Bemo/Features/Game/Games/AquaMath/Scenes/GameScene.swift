@@ -441,27 +441,36 @@ class GameScene: SKScene {
     }
     
     private func createTileNode(for tile: Tile) -> SKSpriteNode {
-        let node = SKSpriteNode(color: .clear, size: CGSize(width: 60, height: 60))
+        let isLargeScreen = size.width > 600
+        let tileSize: CGFloat = isLargeScreen ? 80 : 60
+        let halfSize = tileSize / 2
+        
+        let node = SKSpriteNode(color: .clear, size: CGSize(width: tileSize, height: tileSize))
         node.name = "tile_\(tile.id)"
         
         // White background with subtle border
-        let bg = SKShapeNode(rect: CGRect(x: -30, y: -30, width: 60, height: 60), cornerRadius: 8)
+        let bg = SKShapeNode(rect: CGRect(x: -halfSize, y: -halfSize, width: tileSize, height: tileSize), cornerRadius: isLargeScreen ? 12 : 8)
         bg.fillColor = .white
         bg.strokeColor = SKColor(cgColor: UIColor.systemGray5.cgColor)
-        bg.lineWidth = 1
+        bg.lineWidth = isLargeScreen ? 1.5 : 1
         node.addChild(bg)
         
         // Add shadow effect
-        let shadow = SKShapeNode(rect: CGRect(x: -28, y: -32, width: 60, height: 60), cornerRadius: 8)
+        let shadowOffset: CGFloat = isLargeScreen ? 3 : 2
+        let shadow = SKShapeNode(rect: CGRect(x: -halfSize + shadowOffset, y: -halfSize - shadowOffset, width: tileSize, height: tileSize), cornerRadius: isLargeScreen ? 12 : 8)
         shadow.fillColor = SKColor.black.withAlphaComponent(0.1)
         shadow.strokeColor = .clear
         shadow.zPosition = -1
         node.addChild(shadow)
         
-        // Colored label
+        // Colored label with dynamic sizing
         let label = SKLabelNode(text: tile.kind.displayValue)
         label.fontName = "Helvetica-Bold"
-        label.fontSize = tile.kind.displayValue.count > 2 ? 16 : 28
+        if isLargeScreen {
+            label.fontSize = tile.kind.displayValue.count > 2 ? 22 : 38
+        } else {
+            label.fontSize = tile.kind.displayValue.count > 2 ? 16 : 28
+        }
         label.fontColor = SKColor(cgColor: tile.kind.numberUIColor.cgColor)
         label.verticalAlignmentMode = .center
         label.zPosition = 1
@@ -501,7 +510,8 @@ class GameScene: SKScene {
         
         guard tileCount > 0 else { return }
         
-        let tileWidth: CGFloat = 60
+        let isLargeScreen = size.width > 600
+        let tileWidth: CGFloat = isLargeScreen ? 80 : 60
         let workspaceHeight = size.height * 0.3
         let yPosition: CGFloat = workspaceHeight * 0.65
         

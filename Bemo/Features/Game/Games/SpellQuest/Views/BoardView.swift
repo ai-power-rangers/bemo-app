@@ -18,53 +18,63 @@ struct BoardView: View {
     @State private var incorrectLetter: Character? = nil
     @Namespace private var letterNamespace
     
-    private var scaleFactor: CGFloat {
-        isZenJunior ? SpellQuestConstants.UI.zenJuniorScaleFactor : 1.0
+    // Dynamic scaling based on screen size
+    private func dynamicScaleFactor(for screenHeight: CGFloat) -> CGFloat {
+        let baseScale = isZenJunior ? SpellQuestConstants.UI.zenJuniorScaleFactor : 1.0
+        let heightFactor = min(screenHeight / 600, 2.0) // Scale up to 2x for larger screens
+        return baseScale * max(heightFactor, 1.0)
     }
     
     var body: some View {
         GeometryReader { geometry in
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 20 * scaleFactor) {
-                    // Puzzle Image
-                    puzzleImageView
-                        .frame(maxWidth: min(geometry.size.width - 40, 500))
-                    
-                    // Letter Slots
-                    letterSlotsView
-                        .frame(maxWidth: geometry.size.width - 20)
-                        .padding(.horizontal, 10)
-                    
-                    // Error feedback
-                    if showingIncorrectFeedback, let letter = incorrectLetter {
-                        HStack {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.red)
-                            Text("\(String(letter)) is not correct")
-                                .font(.headline)
-                                .foregroundColor(.red)
-                        }
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.red.opacity(0.1))
-                        )
-                        .padding(.horizontal)
-                        .transition(.scale.combined(with: .opacity))
+            let scaleFactor = dynamicScaleFactor(for: geometry.size.height)
+            let isLargeScreen = geometry.size.height > 800
+            
+            VStack(spacing: 20 * scaleFactor) {
+                Spacer(minLength: isLargeScreen ? 40 : 20)
+                
+                // Puzzle Image - scales with screen
+                puzzleImageView(scaleFactor: scaleFactor)
+                    .frame(maxWidth: min(geometry.size.width - 40, 600 * scaleFactor))
+                    .frame(maxHeight: geometry.size.height * 0.35)
+                
+                // Letter Slots - centered
+                letterSlotsView(scaleFactor: scaleFactor)
+                    .padding(.horizontal, 20)
+                
+                // Error feedback
+                if showingIncorrectFeedback, let letter = incorrectLetter {
+                    HStack {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.red)
+                        Text("\(String(letter)) is not correct")
+                            .font(.system(size: 16 * scaleFactor, weight: .medium))
+                            .foregroundColor(.red)
                     }
-                    
-                    // Letter Rack
-                    letterRackView
-                        .frame(maxWidth: geometry.size.width)
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.red.opacity(0.1))
+                    )
+                    .padding(.horizontal)
+                    .transition(.scale.combined(with: .opacity))
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical)
+                
+                Spacer(minLength: 10)
+                
+                // Letter Rack - scales with screen
+                letterRackView(scaleFactor: scaleFactor)
+                    .frame(maxWidth: min(geometry.size.width, 800))
+                    .padding(.bottom, isLargeScreen ? 40 : 20)
+                
+                Spacer(minLength: isLargeScreen ? 40 : 20)
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
     }
     
     // MARK: - Puzzle Image
-    private var puzzleImageView: some View {
+    private func puzzleImageView(scaleFactor: CGFloat) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color.white)
@@ -118,7 +128,7 @@ struct BoardView: View {
     }
     
     // MARK: - Letter Slots
-    private var letterSlotsView: some View {
+    private func letterSlotsView(scaleFactor: CGFloat) -> some View {
         HStack(spacing: SpellQuestConstants.UI.slotSpacing * scaleFactor) {
             ForEach(Array(viewModel.boardState.slots.enumerated()), id: \.element.id) { index, slot in
                 LetterSlotView(
@@ -140,13 +150,13 @@ struct BoardView: View {
     }
     
     // MARK: - Letter Rack
-    private var letterRackView: some View {
-        VStack(spacing: 8 * scaleFactor) {
+    private func letterRackView(scaleFactor: CGFloat) -> some View {
+        VStack(spacing: 12 * scaleFactor) {
             // First row: A-I
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6 * scaleFactor) {
                     ForEach(Array("ABCDEFGHI"), id: \.self) { letter in
-                        letterTile(for: letter)
+                        letterTile(for: letter, scaleFactor: scaleFactor)
                     }
                 }
                 .padding(.horizontal, 4)
@@ -156,7 +166,7 @@ struct BoardView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6 * scaleFactor) {
                     ForEach(Array("JKLMNOPQR"), id: \.self) { letter in
-                        letterTile(for: letter)
+                        letterTile(for: letter, scaleFactor: scaleFactor)
                     }
                 }
                 .padding(.horizontal, 4)
@@ -166,7 +176,7 @@ struct BoardView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6 * scaleFactor) {
                     ForEach(Array("STUVWXYZ"), id: \.self) { letter in
-                        letterTile(for: letter)
+                        letterTile(for: letter, scaleFactor: scaleFactor)
                     }
                 }
                 .padding(.horizontal, 4)
@@ -181,7 +191,7 @@ struct BoardView: View {
     }
     
     // MARK: - Letter Tile
-    private func letterTile(for letter: Character) -> some View {
+    private func letterTile(for letter: Character, scaleFactor: CGFloat) -> some View {
         LetterTileView(
             letter: letter,
             isHighlighted: viewModel.highlightedLetter == letter,
@@ -248,19 +258,19 @@ private struct LetterSlotView: View {
             
             if let letter = slot.currentLetter {
                 Text(String(letter))
-                    .font(.system(size: 30 * scaleFactor, weight: .bold))
+                    .font(.system(size: 36 * scaleFactor, weight: .bold))
                     .foregroundColor(slot.isRevealedByHint ? .orange : SpellQuestConstants.Colors.letterColor(for: letter))
                     .transition(.scale.combined(with: .opacity))
             } else {
                 // Show placeholder dash for empty slots
                 Text("_")
-                    .font(.system(size: 30 * scaleFactor, weight: .light))
+                    .font(.system(size: 36 * scaleFactor, weight: .light))
                     .foregroundColor(.gray.opacity(0.3))
             }
         }
         .frame(
-            width: SpellQuestConstants.UI.slotSize * scaleFactor,
-            height: SpellQuestConstants.UI.slotSize * scaleFactor
+            width: 65 * scaleFactor,
+            height: 65 * scaleFactor
         )
         .scaleEffect(slot.isFilled ? 1.05 : 1.0)
         .animation(.spring(response: 0.3), value: slot.isFilled)
@@ -295,11 +305,11 @@ private struct LetterTileView: View {
     
     var body: some View {
         Text(String(letter))
-            .font(.system(size: 24 * scaleFactor, weight: .bold))
+            .font(.system(size: 28 * scaleFactor, weight: .bold))
             .foregroundColor(SpellQuestConstants.Colors.letterColor(for: letter))
             .frame(
-                width: SpellQuestConstants.UI.letterTileSize * scaleFactor,
-                height: SpellQuestConstants.UI.letterTileSize * scaleFactor
+                width: 60 * scaleFactor,
+                height: 60 * scaleFactor
             )
             .background(
                 RoundedRectangle(cornerRadius: 8)
