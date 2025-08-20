@@ -14,8 +14,8 @@ import SwiftUI
 enum TangramColors {
     // Official piece colors from the editor - these remain constant
     private static let colors: [TangramPieceType: String] = [
-        .smallTriangle1: "#C445A4",  // Purple-pink
-        .smallTriangle2: "#02B7CD",  // Cyan
+        .smallTriangle1: "#02B7CD",  // Purple-pink
+        .smallTriangle2: "#C445A4",  // Cyan
         .mediumTriangle: "#2BBA35",  // Green
         .largeTriangle1: "#3896FF",  // Blue
         .largeTriangle2: "#FF3A41",  // Red

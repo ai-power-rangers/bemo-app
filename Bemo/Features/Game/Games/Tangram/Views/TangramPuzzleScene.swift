@@ -250,14 +250,7 @@ class TangramPuzzleScene: SKScene {
         let availableHeight = size.height - topPadding - 10
         let sectionHeight = (availableHeight - sectionGap) / 2
         
-        // Top panel background (entire top section)
-        let targetBg = SKShapeNode(rectOf: CGSize(width: size.width - 20, height: sectionHeight))
-        targetBg.fillColor = SKColor.systemGray6.withAlphaComponent(0.3)
-        targetBg.strokeColor = SKColor.systemGray3
-        targetBg.lineWidth = 2
-        targetBg.position = .zero
-        targetBg.zPosition = -1
-        targetSection.addChild(targetBg)
+        // Removed grey outer rectangle background for a cleaner puzzle scene
         
         // Mini CV display background (with a subtle border so we can see it during debugging)
         let miniDisplaySize: CGFloat = min(size.width * 0.25, 150)
@@ -440,13 +433,17 @@ class TangramPuzzleScene: SKScene {
             if pts.count >= 3 {
                 modelPlanePolygons.append(pts)
                 modelPlaneClassIds.append(key.intValue)
-                if let col = TangramPuzzleScene.jsonColorsByClassId[key.intValue] {
-                    modelFillColors.append(col)
+                // Use the same palette as SpriteKit piece renders for consistency
+                if let pt = pieceTypeFromClassId(key.intValue) {
+                    let base = TangramColors.Sprite.uiColor(for: pt)
+                    modelFillColors.append(base.withAlphaComponent(0.35))
                 } else if let rgb = modelColorsRGB?[key], rgb.count >= 3 {
                     let r = CGFloat(truncating: rgb[0]) / 255.0
                     let g = CGFloat(truncating: rgb[1]) / 255.0
                     let b = CGFloat(truncating: rgb[2]) / 255.0
                     modelFillColors.append(SKColor(red: r, green: g, blue: b, alpha: 0.35))
+                } else if let col = TangramPuzzleScene.jsonColorsByClassId[key.intValue] {
+                    modelFillColors.append(col)
                 } else {
                     modelFillColors.append(SKColor.white.withAlphaComponent(0.35))
                 }
@@ -541,46 +538,14 @@ class TangramPuzzleScene: SKScene {
             let shape = SKShapeNode(path: path)
             let fill = (idx < modelFillColors.count) ? modelFillColors[idx] : SKColor.white.withAlphaComponent(0.35)
             shape.fillColor = fill
-            shape.strokeColor = SKColor.white
-            shape.lineWidth = 1.5
+            // Stroke uses the same base color at higher alpha to match SpriteKit piece styling
+            shape.strokeColor = fill.withAlphaComponent(1.0)
+            shape.lineWidth = 2.0
             modelPolygonLayer?.addChild(shape)
             cvShapeNodesByGlobalIndex[idx] = shape
         }
         
-        // Draw plane axes (red X, green Y)
-        func addArrow(from: CGPoint, to: CGPoint, color: SKColor, width: CGFloat) {
-            let linePath = CGMutablePath()
-            linePath.move(to: from)
-            linePath.addLine(to: to)
-            let line = SKShapeNode(path: linePath)
-            line.strokeColor = color
-            line.lineWidth = width
-            modelPolygonLayer?.addChild(line)
-            
-            let angle = atan2(to.y - from.y, to.x - from.x)
-            let headLen: CGFloat = 8
-            let headAng: CGFloat = .pi / 7
-            let p1 = CGPoint(x: to.x - headLen * cos(angle - headAng), y: to.y - headLen * sin(angle - headAng))
-            let p2 = CGPoint(x: to.x - headLen * cos(angle + headAng), y: to.y - headLen * sin(angle + headAng))
-            let headPath = CGMutablePath()
-            headPath.move(to: to)
-            headPath.addLine(to: p1)
-            headPath.move(to: to)
-            headPath.addLine(to: p2)
-            let head = SKShapeNode(path: headPath)
-            head.strokeColor = color
-            head.lineWidth = width
-            modelPolygonLayer?.addChild(head)
-        }
-        
-        let axisLenPlane = 0.15 * min(srcW, srcH)
-        let originPlane = CGPoint(x: minX + 0.1*srcW, y: maxY - 0.1*srcH)
-        let originLocal = planeToPanel(originPlane)
-        let xEndLocal = planeToPanel(CGPoint(x: originPlane.x + axisLenPlane, y: originPlane.y))
-        // Match PolygonPlotView: draw positive Y axis upward on screen
-        let yEndLocal = planeToPanel(CGPoint(x: originPlane.x, y: originPlane.y - axisLenPlane))
-        addArrow(from: originLocal, to: xEndLocal, color: .systemRed, width: 2)
-        addArrow(from: originLocal, to: yEndLocal, color: .systemGreen, width: 2)
+        // Removed axes rendering for cleaner scene
 
         // Update outline scale only when a fresh CV frame arrived
         if shouldUpdateScaleThisFrame {
@@ -872,8 +837,8 @@ class TangramPuzzleScene: SKScene {
                     let color = modelFillColors[globalIdx].withAlphaComponent(1.0)
                     node.strokeColor = color
                     node.lineWidth = 3.0
-                    // Fill the outline to represent snapped state; keep CV shape hidden
-                    node.fillColor = modelFillColors[globalIdx].withAlphaComponent(0.35)
+                    // Fill the outline to represent snapped state; use full opacity when snapped/held
+                    node.fillColor = modelFillColors[globalIdx].withAlphaComponent(1.0)
                     // Start/extend snap hold window
                     snapHoldUntilByTargetId[tid] = now + snapHoldDuration
                     lastMatchedGlobalIndexByTargetId[tid] = globalIdx
@@ -893,7 +858,7 @@ class TangramPuzzleScene: SKScene {
                     let color = modelFillColors[globalIdx].withAlphaComponent(1.0)
                     node.strokeColor = color
                     node.lineWidth = 3.0
-                    node.fillColor = modelFillColors[globalIdx].withAlphaComponent(0.35)
+                    node.fillColor = modelFillColors[globalIdx].withAlphaComponent(1.0)
                     if let original = cvShapeNodesByGlobalIndex[globalIdx] { original.isHidden = true }
                 }
                 continue
