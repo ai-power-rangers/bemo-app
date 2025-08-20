@@ -66,44 +66,49 @@ struct TangramSpriteView: View {
                     onViewSizeChange(newSize)
                 }
                 
-                // CV overlay anchored to bottom half of the screen (static)
-                VStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    ZStack {
-                        // Background panel
-                        Rectangle()
-                            .fill(Color.black.opacity(0.75))
-                            .overlay(
+                // CV overlay anchored to the top-right corner (static mini panel)
+                if cvOverlayImage != nil {
+                    VStack(spacing: 0) {
+                        HStack(spacing: 0) {
+                            Spacer(minLength: 0)
+                            ZStack {
+                                // Background panel
                                 Rectangle()
-                                    .stroke(Color.blue.opacity(0.6), lineWidth: 2)
-                            )
-                        
-                        // Overlay image
-                        if let overlay = cvOverlayImage {
-                            Image(uiImage: overlay)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .padding(8)
-                        }
-                        
-                        // FPS in corner of the overlay panel
-                        VStack {
-                            HStack {
-                                Spacer()
-                                if cvFPS > 0 {
-                                    Text(String(format: "%.1f FPS", cvFPS))
-                                        .font(.caption)
-                                        .foregroundColor(.white)
+                                    .fill(Color.black.opacity(0.75))
+                                    .overlay(
+                                        Rectangle()
+                                            .stroke(Color.blue.opacity(0.6), lineWidth: 2)
+                                    )
+                                // Overlay image
+                                if let overlay = cvOverlayImage {
+                                    Image(uiImage: overlay)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
                                         .padding(8)
-                                        .background(Color.black.opacity(0.5))
-                                        .cornerRadius(4)
                                 }
+                                // FPS badge
+                                VStack {
+                                    HStack {
+                                        Spacer()
+                                        if cvFPS > 0 {
+                                            Text(String(format: "%.1f FPS", cvFPS))
+                                                .font(.caption)
+                                                .foregroundColor(.white)
+                                                .padding(8)
+                                                .background(Color.black.opacity(0.5))
+                                                .cornerRadius(4)
+                                        }
+                                    }
+                                    Spacer()
+                                }
+                                .padding(8)
                             }
-                            Spacer()
+                            .frame(width: (geometry.size.width * 0.3),
+                                   height: (geometry.size.width * 0.3))
                         }
-                        .padding(8)
+                        Spacer(minLength: 0)
                     }
-                    .frame(height: geometry.size.height * 0.5)
+                    .padding(10)
                 }
             }
         }

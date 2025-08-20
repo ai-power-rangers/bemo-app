@@ -21,6 +21,7 @@ class TangramPuzzleScene: SKScene {
     internal var cvMiniDisplay: SKNode!      // Mini CV display in top-right corner (internal for extensions)
     internal var cvContent: SKNode!          // Content container inside CV mini display (scaled mapping of physical world)
     internal var physicalWorldSection: SKNode! // Bottom - user interaction area (internal for extensions)
+    private var sceneCamera: SKCameraNode?
     
     // MARK: - Section Bounds
     
@@ -109,6 +110,20 @@ class TangramPuzzleScene: SKScene {
     private var modelPlanePolygons: [[CGPoint]] = []
     private var modelFillColors: [SKColor] = []
     private var modelPolygonLayer: SKNode?
+    private var snappedPolygonLayer: SKNode?
+    private var cvShapeNodesByGlobalIndex: [Int: SKShapeNode] = [:]
+    private var cvOverlayRotationRadians: CGFloat = 0
+    // Snapping hysteresis (render snapped for a short window after verification)
+    private var snapHoldUntilByTargetId: [String: TimeInterval] = [:]
+    private var lastMatchedGlobalIndexByTargetId: [String: Int] = [:]
+    private let snapHoldDuration: TimeInterval = 1.0
+    // Completion wiring to ViewModel
+    private var firedCompletionTargetIds: Set<String> = []
+    private var puzzleCompletionFired: Bool = false
+    // Class ids aligned with `modelPlanePolygons` indices for interchangeability mapping
+    private var modelPlaneClassIds: [Int] = []
+    // Recompute outline scale only on new CV frames (not during verification-only passes)
+    private var shouldUpdateScaleThisFrame: Bool = false
     // Persisted transform mapping model plane → panel (targetSection) coordinates
     private struct PanelTransform {
         let scale: CGFloat
@@ -169,6 +184,16 @@ class TangramPuzzleScene: SKScene {
         backgroundColor = SKColor(named: "GameBackground") ?? SKColor.systemBackground
         setupSections()
         setupSectionBackgrounds()
+        // Ensure a scene camera exists so we can apply a final, global centering
+        if self.camera == nil {
+            let cam = SKCameraNode()
+            cam.position = CGPoint(x: size.width / 2, y: size.height / 2)
+            addChild(cam)
+            self.camera = cam
+            self.sceneCamera = cam
+        } else if let existing = self.camera {
+            self.sceneCamera = existing
+        }
         
         // Initialize validation bridge with current difficulty
         validationBridge = CVValidationBridge(scene: self, difficulty: difficultySetting)
@@ -267,6 +292,12 @@ class TangramPuzzleScene: SKScene {
         
         // Clear existing state
         clearAllSections()
+        // Reset per-frame scaling flag for new puzzle
+        shouldUpdateScaleThisFrame = false
+        // Reset completion wiring state
+        firedCompletionTargetIds.removeAll()
+        puzzleCompletionFired = false
+        validatedTargets.removeAll()
         
         // Setup target section with silhouettes
         setupTargetPuzzle(puzzle)
@@ -392,6 +423,9 @@ class TangramPuzzleScene: SKScene {
         // Reset storage
         modelPlanePolygons.removeAll()
         modelFillColors.removeAll()
+        modelPlaneClassIds.removeAll()
+        // Mark that we should rescale the outline based on this fresh CV frame
+        shouldUpdateScaleThisFrame = true
         
         // Deterministic order by class id
         for (key, arr) in planeModelPolygons.sorted(by: { $0.key.intValue < $1.key.intValue }) {
@@ -405,6 +439,7 @@ class TangramPuzzleScene: SKScene {
             }
             if pts.count >= 3 {
                 modelPlanePolygons.append(pts)
+                modelPlaneClassIds.append(key.intValue)
                 if let col = TangramPuzzleScene.jsonColorsByClassId[key.intValue] {
                     modelFillColors.append(col)
                 } else if let rgb = modelColorsRGB?[key], rgb.count >= 3 {
@@ -439,9 +474,20 @@ class TangramPuzzleScene: SKScene {
             targetSection.addChild(layer)
             modelPolygonLayer = layer
         }
+        if snappedPolygonLayer == nil {
+            let layer = SKNode()
+            layer.name = "snappedPolygonLayer"
+            layer.zPosition = 4 // Above raw overlay
+            targetSection.addChild(layer)
+            snappedPolygonLayer = layer
+        }
         
-        // Clear previous shapes
+        // Clear previous raw overlay shapes; keep snapped layer empty since we won't draw snapped polygons anymore
         modelPolygonLayer?.removeAllChildren()
+        snappedPolygonLayer?.removeAllChildren()
+        cvShapeNodesByGlobalIndex.removeAll()
+        // Ensure overlay rotation reflects any verification-driven adjustment
+        modelPolygonLayer?.zRotation = cvOverlayRotationRadians
         
         // Compute fit within the top panel area (match sample: full width of the panel)
         let panelWidth = max(1, targetBounds.width)
@@ -457,11 +503,18 @@ class TangramPuzzleScene: SKScene {
             }
         }
         let pad: CGFloat = 8
+        let paddingFraction: CGFloat = 0.3 // 30% padding around ROI
         let srcW = max(1, maxX - minX)
         let srcH = max(1, maxY - minY)
-        let scale = min((panelWidth - 2*pad)/srcW, (panelHeight - 2*pad)/srcH)
-        let offsetX = (panelWidth - scale*srcW)/2 - scale*minX
-        let offsetY = (panelHeight - scale*srcH)/2 - scale*minY
+        let cx = (minX + maxX) * 0.5
+        let cy = (minY + maxY) * 0.5
+        let paddedW = srcW * (1.0 + paddingFraction)
+        let paddedH = srcH * (1.0 + paddingFraction)
+        let paddedMinX = cx - paddedW * 0.5
+        let paddedMinY = cy - paddedH * 0.5
+        let scale = min((panelWidth - 2*pad)/paddedW, (panelHeight - 2*pad)/paddedH)
+        let offsetX = (panelWidth - scale*paddedW)/2 - scale*paddedMinX
+        let offsetY = (panelHeight - scale*paddedH)/2 - scale*paddedMinY
         // Store transform for unification
         cvPanelTransform = PanelTransform(
             scale: scale,
@@ -491,6 +544,7 @@ class TangramPuzzleScene: SKScene {
             shape.strokeColor = SKColor.white
             shape.lineWidth = 1.5
             modelPolygonLayer?.addChild(shape)
+            cvShapeNodesByGlobalIndex[idx] = shape
         }
         
         // Draw plane axes (red X, green Y)
@@ -527,6 +581,27 @@ class TangramPuzzleScene: SKScene {
         let yEndLocal = planeToPanel(CGPoint(x: originPlane.x, y: originPlane.y - axisLenPlane))
         addArrow(from: originLocal, to: xEndLocal, color: .systemRed, width: 2)
         addArrow(from: originLocal, to: yEndLocal, color: .systemGreen, width: 2)
+
+        // Update outline scale only when a fresh CV frame arrived
+        if shouldUpdateScaleThisFrame {
+            adjustPuzzleContainerScaleToCV()
+            shouldUpdateScaleThisFrame = false
+        }
+        // Run per-frame verification and global snap
+        verifyAndSnapToCV()
+        // Apply final global translation so the puzzle outline is centered in the view
+        applyFinalSceneCenteringOnPuzzle()
+    }
+
+    /// Final global centering: move the scene camera so the puzzle outline is centered in the view
+    private func applyFinalSceneCenteringOnPuzzle() {
+        guard let cam = sceneCamera else { return }
+        guard let container = targetSection.childNode(withName: "puzzleContainer") else { return }
+        let frameInTarget = container.calculateAccumulatedFrame()
+        guard frameInTarget.width > 0, frameInTarget.height > 0 else { return }
+        let centerInTarget = CGPoint(x: frameInTarget.midX, y: frameInTarget.midY)
+        let centerInScene = targetSection.convert(centerInTarget, to: self)
+        cam.position = centerInScene
     }
 
     // MARK: - Panel-space Conversion Helpers
@@ -554,8 +629,9 @@ class TangramPuzzleScene: SKScene {
     internal func collectCVPanelPolygons() -> [[CGPoint]] {
         guard !modelPlanePolygons.isEmpty, cvPanelTransform != nil else { return [] }
         var polys: [[CGPoint]] = []
+        let rot = CGAffineTransform(rotationAngle: cvOverlayRotationRadians)
         for poly in modelPlanePolygons {
-            let mapped = poly.map { planeToPanel($0) }
+            let mapped = poly.map { planeToPanel($0).applying(rot) }
             if mapped.count >= 3 { polys.append(mapped) }
         }
         return polys
@@ -577,36 +653,302 @@ class TangramPuzzleScene: SKScene {
 
     /// Adjust the puzzle outline container scale so silhouette size matches CV polygon size
     func adjustPuzzleContainerScaleToCV() {
-        guard let t = cvPanelTransform else { return }
+        guard cvPanelTransform != nil else { return }
         // Get puzzleContainer in targetSection
         guard let container = targetSection.childNode(withName: "puzzleContainer") else { return }
-        // Current silhouette envelope in targetSection coordinates
-        let silhouetteRect = container.calculateAccumulatedFrame()
-        guard silhouetteRect.width > 0, silhouetteRect.height > 0 else { return }
-        // CV polygon envelope in panel (targetSection) coordinates using last mapped points
+        // Compute rotation-invariant ratio from total polygon areas
         let cvPolys = collectCVPanelPolygons()
         guard !cvPolys.isEmpty else { return }
-        var minX = CGFloat.greatestFiniteMagnitude
-        var minY = CGFloat.greatestFiniteMagnitude
-        var maxX = -CGFloat.greatestFiniteMagnitude
-        var maxY = -CGFloat.greatestFiniteMagnitude
-        for poly in cvPolys {
-            for p in poly {
-                minX = min(minX, p.x); maxX = max(maxX, p.x)
-                minY = min(minY, p.y); maxY = max(maxY, p.y)
-            }
-        }
-        let cvWidth = max(1, maxX - minX)
-        let cvHeight = max(1, maxY - minY)
-        // Compute uniform scale factor to make silhouettes match CV polygon size
-        let scaleX = cvWidth / silhouetteRect.width
-        let scaleY = cvHeight / silhouetteRect.height
-        let uniform = min(scaleX, scaleY)
-        // Apply uniform scale to puzzleContainer (relative to its current scale)
-        container.setScale(uniform)
+        let targetPolys = collectTargetPanelPolygons().values
+        guard !targetPolys.isEmpty else { return }
+        let cvArea = cvPolys.reduce(0) { $0 + polygonAreaAbs($1) }
+        let targetArea = targetPolys.reduce(0) { $0 + polygonAreaAbs($1) }
+        guard cvArea > 0, targetArea > 0 else { return }
+        let ratio = sqrt(cvArea / targetArea)
+        // Multiply current scale by ratio to converge toward CV size
+        let newScale = max(0.0001, container.xScale * ratio)
+        container.setScale(newScale)
     }
 
-    // MARK: - CGPath helpers (defined below class)
+    // MARK: - Verification & Snap Integration
+
+    private func pieceTypeFromClassId(_ classId: Int) -> TangramPieceType? {
+        switch classId {
+        case 0: return .parallelogram
+        case 1: return .square
+        case 2: return .largeTriangle1
+        case 3: return .largeTriangle2
+        case 4: return .mediumTriangle
+        case 5: return .smallTriangle1
+        case 6: return .smallTriangle2
+        default: return nil
+        }
+    }
+
+    private func collectCVPanelPolygonsByType() -> [TangramPieceType: [[CGPoint]]] {
+        var mapping: [TangramPieceType: [[CGPoint]]] = [:]
+        guard cvPanelTransform != nil, !modelPlanePolygons.isEmpty else { return mapping }
+
+        // Group piece types by display name to model interchangeability (e.g., the two large triangles)
+        var typesByDisplayName: [String: [TangramPieceType]] = [:]
+        for t in TangramPieceType.allCases {
+            typesByDisplayName[t.displayName, default: []].append(t)
+        }
+
+        for (index, polyPlane) in modelPlanePolygons.enumerated() {
+            let rot = CGAffineTransform(rotationAngle: cvOverlayRotationRadians)
+            let polyPanel = polyPlane.map { planeToPanel($0).applying(rot) }
+            let classId = (index < modelPlaneClassIds.count) ? modelPlaneClassIds[index] : -1
+
+            if let primaryType = (classId >= 0 ? pieceTypeFromClassId(classId) : nil) {
+                let display = primaryType.displayName
+                let interchangeableTypes = typesByDisplayName[display] ?? [primaryType]
+                for t in interchangeableTypes {
+                    mapping[t, default: []].append(polyPanel)
+                }
+            } else {
+                // If class id missing, make the polygon available to all types
+                for t in TangramPieceType.allCases {
+                    mapping[t, default: []].append(polyPanel)
+                }
+            }
+        }
+
+        return mapping
+    }
+
+    private func collectTargetTypesById() -> [String: TangramPieceType] {
+        var mapping: [String: TangramPieceType] = [:]
+        for (targetId, node) in targetSilhouettes {
+            if let raw = node.userData?["pieceType"] as? String, let pt = TangramPieceType(rawValue: raw) {
+                mapping[targetId] = pt
+            }
+        }
+        return mapping
+    }
+
+    private func collectCVPanelPolygonsByTypeWithIndices() -> (polys: [TangramPieceType: [[CGPoint]]], globalIndices: [TangramPieceType: [Int]]) {
+        var polysByType: [TangramPieceType: [[CGPoint]]] = [:]
+        var indicesByType: [TangramPieceType: [Int]] = [:]
+        guard cvPanelTransform != nil, !modelPlanePolygons.isEmpty else { return (polysByType, indicesByType) }
+
+        var typesByDisplayName: [String: [TangramPieceType]] = [:]
+        for t in TangramPieceType.allCases { typesByDisplayName[t.displayName, default: []].append(t) }
+
+        let rot = CGAffineTransform(rotationAngle: cvOverlayRotationRadians)
+        for (globalIndex, polyPlane) in modelPlanePolygons.enumerated() {
+            let polyPanel = polyPlane.map { planeToPanel($0).applying(rot) }
+            let classId = (globalIndex < modelPlaneClassIds.count) ? modelPlaneClassIds[globalIndex] : -1
+            if let primaryType = (classId >= 0 ? pieceTypeFromClassId(classId) : nil) {
+                let display = primaryType.displayName
+                let interchangeableTypes = typesByDisplayName[display] ?? [primaryType]
+                for t in interchangeableTypes {
+                    polysByType[t, default: []].append(polyPanel)
+                    indicesByType[t, default: []].append(globalIndex)
+                }
+            } else {
+                for t in TangramPieceType.allCases {
+                    polysByType[t, default: []].append(polyPanel)
+                    indicesByType[t, default: []].append(globalIndex)
+                }
+            }
+        }
+        return (polysByType, indicesByType)
+    }
+
+    private func centroidOfPolygon(_ poly: [CGPoint]) -> CGPoint {
+        guard poly.count >= 3 else { return .zero }
+        var a: CGFloat = 0
+        var cx: CGFloat = 0
+        var cy: CGFloat = 0
+        for i in 0..<poly.count {
+            let p0 = poly[i]
+            let p1 = poly[(i + 1) % poly.count]
+            let cross = p0.x * p1.y - p1.x * p0.y
+            a += cross
+            cx += (p0.x + p1.x) * cross
+            cy += (p0.y + p1.y) * cross
+        }
+        if abs(a) < 1e-6 {
+            var sx: CGFloat = 0, sy: CGFloat = 0
+            for p in poly { sx += p.x; sy += p.y }
+            let n = CGFloat(max(1, poly.count))
+            return CGPoint(x: sx / n, y: sy / n)
+        }
+        a *= 0.5
+        let factor = 1.0 / (6.0 * a)
+        return CGPoint(x: cx * factor, y: cy * factor)
+    }
+
+    private func normalizeAngle(_ a: CGFloat) -> CGFloat {
+        var x = a
+        while x > .pi { x -= 2 * .pi }
+        while x < -.pi { x += 2 * .pi }
+        return x
+    }
+    
+    private func polygonAreaAbs(_ poly: [CGPoint]) -> CGFloat {
+        guard poly.count >= 3 else { return 0 }
+        var area: CGFloat = 0
+        for i in 0..<poly.count {
+            let p0 = poly[i]
+            let p1 = poly[(i + 1) % poly.count]
+            area += (p0.x * p1.y - p1.x * p0.y)
+        }
+        return abs(area) * 0.5
+    }
+
+    private func verifyAndSnapToCV() {
+        let targetPolys = collectTargetPanelPolygons()
+        guard !targetPolys.isEmpty else { return }
+        let typesById = collectTargetTypesById()
+
+        // Build CV polygons by type and remember their source indices for color mapping
+        let cvCollected = collectCVPanelPolygonsByTypeWithIndices()
+        var cvByType = cvCollected.polys
+        let cvGlobalIndices = cvCollected.globalIndices
+        if cvByType.isEmpty {
+            let all = collectCVPanelPolygons()
+            // If no type map, assign the same pool to each target's type so verifier can choose best
+            var distinctTypes = Set<TangramPieceType>()
+            for (_, t) in typesById { distinctTypes.insert(t) }
+            for t in distinctTypes { cvByType[t] = all }
+        }
+        guard !cvByType.isEmpty else { return }
+        let panelMin = max(1, min(targetBounds.width, targetBounds.height))
+
+        let result = TangramVerificationEngine.verifyMatches(
+            targetPolygonsById: targetPolys,
+            targetTypesById: typesById,
+            cvPolygonsByType: cvByType,
+            panelMinDimension: panelMin
+        )
+
+        var targetCentroidsById: [String: CGPoint] = [:]
+        for (tid, poly) in targetPolys { targetCentroidsById[tid] = centroidOfPolygon(poly) }
+
+        var cvCentroidsById: [String: CGPoint] = [:]
+        for (tid, match) in result.perTarget {
+            guard let idx = match.matchedCVIndex, let list = cvByType[match.pieceType], idx < list.count else { continue }
+            cvCentroidsById[tid] = centroidOfPolygon(list[idx])
+        }
+
+        if let snap = TangramVerificationEngine.computeGlobalSnap(
+            result: result,
+            targetCentroidsById: targetCentroidsById,
+            cvCentroidsById: cvCentroidsById,
+            maxRotationDegrees: 15
+        ) {
+            if let container = targetSection.childNode(withName: "puzzleContainer") {
+                // Dampen translation to reduce oscillations
+                let tAlpha: CGFloat = 1//0.2
+                container.position = CGPoint(
+                    x: container.position.x + tAlpha * snap.translation.dx,
+                    y: container.position.y + tAlpha * snap.translation.dy
+                )
+
+                // Apply rotation to CV overlay (not the outline). Dampen and normalize to avoid spin.
+                let matchedCount = result.matchedTargets.count
+                if matchedCount >= 2 {
+                    let rAlpha: CGFloat = 1//0.2
+                    let delta = -rAlpha * snap.rotationRadians // rotate CV opposite the target->CV rotation
+                    cvOverlayRotationRadians = normalizeAngle(cvOverlayRotationRadians + delta)
+                    modelPolygonLayer?.zRotation = cvOverlayRotationRadians
+                }
+            }
+        }
+
+        // Visualization: On match/hold: hide CV shape, color and fill the corresponding outline.
+        var matchedTargetsCurrentFrame: Set<String> = []
+        let now = CACurrentMediaTime()
+        for (tid, match) in result.perTarget {
+            guard let idx = match.matchedCVIndex,
+                  let node = targetSilhouettes[tid] else { continue }
+            matchedTargetsCurrentFrame.insert(tid)
+            // Map per-type index back to global polygon index to fetch its color
+            if let list = cvGlobalIndices[match.pieceType], idx < list.count {
+                let globalIdx = list[idx]
+                if globalIdx >= 0 && globalIdx < modelFillColors.count {
+                    let color = modelFillColors[globalIdx].withAlphaComponent(1.0)
+                    node.strokeColor = color
+                    node.lineWidth = 3.0
+                    // Fill the outline to represent snapped state; keep CV shape hidden
+                    node.fillColor = modelFillColors[globalIdx].withAlphaComponent(0.35)
+                    // Start/extend snap hold window
+                    snapHoldUntilByTargetId[tid] = now + snapHoldDuration
+                    lastMatchedGlobalIndexByTargetId[tid] = globalIdx
+                    // Hide the original CV shape; do not change its position/rotation
+                    if let original = cvShapeNodesByGlobalIndex[globalIdx] {
+                        original.isHidden = true
+                    }
+                }
+            }
+        }
+        // Reset unmatched outlines unless within snap hold window
+        for (tid, node) in targetSilhouettes where !matchedTargetsCurrentFrame.contains(tid) {
+            // If within hold, keep outline filled/colored and CV hidden
+            if let holdUntil = snapHoldUntilByTargetId[tid], now < holdUntil {
+                // Keep outline colored and show snapped polygon; also hide original CV if known
+                if let globalIdx = lastMatchedGlobalIndexByTargetId[tid], globalIdx >= 0 && globalIdx < modelFillColors.count {
+                    let color = modelFillColors[globalIdx].withAlphaComponent(1.0)
+                    node.strokeColor = color
+                    node.lineWidth = 3.0
+                    node.fillColor = modelFillColors[globalIdx].withAlphaComponent(0.35)
+                    if let original = cvShapeNodesByGlobalIndex[globalIdx] { original.isHidden = true }
+                }
+                continue
+            } else {
+                // Expired hold → clean up memory
+                snapHoldUntilByTargetId.removeValue(forKey: tid)
+                lastMatchedGlobalIndexByTargetId.removeValue(forKey: tid)
+            }
+            // Restore base fill and stroke when not matched or held
+            if let baseFill = node.userData?["baseFillColor"] as? SKColor {
+                node.fillColor = baseFill
+            } else {
+                node.fillColor = .clear
+            }
+            if let baseColor = node.userData?["baseStrokeColor"] as? SKColor {
+                node.strokeColor = baseColor
+            } else {
+                node.strokeColor = .systemGray2
+            }
+            if let baseWidth = node.userData?["baseLineWidth"] as? CGFloat {
+                node.lineWidth = baseWidth
+            } else {
+                node.lineWidth = 2.0
+            }
+            if let baseAlpha = node.userData?["baseAlpha"] as? CGFloat {
+                node.alpha = baseAlpha
+            }
+        }
+
+        // Emit validation and completion events to ViewModel
+        // Build validated set based on active snap-hold windows
+        var currentlyValidated: Set<String> = []
+        for (tid, holdUntil) in snapHoldUntilByTargetId {
+            if now < holdUntil { currentlyValidated.insert(tid) }
+        }
+        // Fire per-piece completion for newly validated targets
+        if let typesById = Optional(collectTargetTypesById()) {
+            for tid in currentlyValidated where !firedCompletionTargetIds.contains(tid) {
+                if let t = typesById[tid] {
+                    onPieceCompleted?(t.rawValue, false)
+                    firedCompletionTargetIds.insert(tid)
+                }
+            }
+        }
+        // Emit validated set change if it differs
+        if currentlyValidated != validatedTargets {
+            validatedTargets = currentlyValidated
+            onValidatedTargetsChanged?(validatedTargets)
+        }
+        // Puzzle completion when all targets validated
+        if !puzzleCompletionFired && validatedTargets.count == targetSilhouettes.count && !targetSilhouettes.isEmpty {
+            puzzleCompletionFired = true
+            onPuzzleCompleted?()
+        }
+    }
     // MARK: - Nudge System
     
     func showSmartNudgeInTarget(targetNode: SKShapeNode, content: NudgeContent, pieceType: TangramPieceType) {
