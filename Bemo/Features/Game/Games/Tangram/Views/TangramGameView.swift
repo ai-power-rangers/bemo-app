@@ -188,6 +188,9 @@ struct TangramGameView: View {
                     },
                     onPromotionTriggered: { [weak viewModel] in
                         viewModel?.checkForPromotionAndTransition()
+                    },
+                    onBackToLobby: { [weak viewModel] in
+                        viewModel?.exitToLobby()
                     }
                 )
                 

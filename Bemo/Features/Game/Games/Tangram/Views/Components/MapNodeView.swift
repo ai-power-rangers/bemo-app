@@ -21,6 +21,8 @@ struct MapNodeView: View {
     
     @State private var isPressed = false
     @State private var animationOffset: CGFloat = 0
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     
     // MARK: - Initialization
     
@@ -32,7 +34,7 @@ struct MapNodeView: View {
     
     // MARK: - Node Styling
     
-    private var nodeColor: Color {
+    private var borderColor: Color {
         switch nodeState {
         case .locked:
             return TangramTheme.UI.disabled
@@ -43,21 +45,21 @@ struct MapNodeView: View {
         }
     }
     
-    private var nodeIcon: String {
+    private var overlayIcon: String? {
         switch nodeState {
         case .locked:
             return "lock.fill"
         case .current:
-            return "target"
+            return nil  // No overlay for current - just the pulse animation
         case .completed:
             return "checkmark.circle.fill"
         }
     }
     
-    private var nodeIconColor: Color {
+    private var overlayIconColor: Color {
         switch nodeState {
         case .locked:
-            return TangramTheme.Text.tertiary
+            return TangramTheme.Text.tertiary.opacity(0.8)
         case .current, .completed:
             return .white
         }
@@ -67,36 +69,104 @@ struct MapNodeView: View {
         nodeState == .current
     }
     
-    private var nodeSize: CGFloat = 60
+    /// Dynamic thumbnail size based on device size class
+    private var thumbnailSize: CGFloat {
+        // Base size for compact screens (phones)
+        let baseSize: CGFloat = 80
+        
+        // Triple size for regular screens (iPads and large iPhones in landscape)
+        if horizontalSizeClass == .regular && verticalSizeClass == .regular {
+            return baseSize * 3  // 240 for iPads
+        } else if horizontalSizeClass == .regular || verticalSizeClass == .regular {
+            return baseSize * 2  // 160 for larger phones in landscape
+        } else {
+            return baseSize      // 80 for compact phones
+        }
+    }
+    
+    /// Dynamic overlay icon size
+    private var overlayIconSize: CGFloat {
+        if horizontalSizeClass == .regular && verticalSizeClass == .regular {
+            return 48  // Larger on iPad
+        } else if horizontalSizeClass == .regular || verticalSizeClass == .regular {
+            return 36  // Medium on larger phones
+        } else {
+            return 30  // Standard on phones
+        }
+    }
+    
+    /// Dynamic font sizes
+    private var titleFont: Font {
+        if horizontalSizeClass == .regular && verticalSizeClass == .regular {
+            return .title3  // Larger on iPad
+        } else if horizontalSizeClass == .regular || verticalSizeClass == .regular {
+            return .headline  // Medium on larger phones
+        } else {
+            return .caption  // Standard on phones
+        }
+    }
+    
+    private var starSize: CGFloat {
+        if horizontalSizeClass == .regular && verticalSizeClass == .regular {
+            return 20  // Larger on iPad
+        } else if horizontalSizeClass == .regular || verticalSizeClass == .regular {
+            return 12  // Medium on larger phones
+        } else {
+            return 8   // Standard on phones
+        }
+    }
     
     // MARK: - Body
     
     var body: some View {
         VStack(spacing: BemoTheme.Spacing.small) {
             
-            // Main Node Circle
+            // Main Node - Thumbnail with overlay
             ZStack {
-                // Background circle
-                Circle()
-                    .fill(nodeColor)
-                    .frame(width: nodeSize, height: nodeSize)
+                // Thumbnail background
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.white)
+                    .frame(width: thumbnailSize, height: thumbnailSize)
                     .shadow(
-                        color: nodeColor.opacity(0.3),
+                        color: borderColor.opacity(0.3),
                         radius: shouldPulse ? 8 : 4,
                         x: 0,
                         y: 2
                     )
                 
-                // Icon
-                Image(systemName: nodeIcon)
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(nodeIconColor)
+                // Puzzle thumbnail
+                PuzzleThumbnailService.shared.tangramThumbnailView(
+                    for: puzzle,
+                    colorful: nodeState != .locked  // Grayscale for locked puzzles
+                )
+                .frame(width: thumbnailSize - 8, height: thumbnailSize - 8)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .opacity(nodeState == .locked ? 0.6 : 1.0)
+                
+                // Border
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(borderColor, lineWidth: 3)
+                    .frame(width: thumbnailSize, height: thumbnailSize)
+                
+                // Overlay icon (lock or checkmark)
+                if let icon = overlayIcon {
+                    ZStack {
+                        // Background for better visibility
+                        Circle()
+                            .fill(nodeState == .completed ? borderColor : Color.black.opacity(0.6))
+                            .frame(width: overlayIconSize, height: overlayIconSize)
+                        
+                        Image(systemName: icon)
+                            .font(.system(size: overlayIconSize * 0.53, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
                 
                 // Pulse animation for current state
                 if shouldPulse {
-                    Circle()
-                        .stroke(nodeColor.opacity(0.6), lineWidth: 2)
-                        .frame(width: nodeSize + 20, height: nodeSize + 20)
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(borderColor.opacity(0.6), lineWidth: 2)
+                        .frame(width: thumbnailSize + 20, height: thumbnailSize + 20)
                         .scaleEffect(1.0 + animationOffset * 0.3)
                         .opacity(1.0 - animationOffset)
                         .animation(
@@ -112,7 +182,7 @@ struct MapNodeView: View {
             // Puzzle Info
             VStack(spacing: 2) {
                 Text(puzzle.name)
-                    .font(.caption)
+                    .font(titleFont)
                     .fontWeight(.medium)
                     .foregroundColor(TangramTheme.Text.primary)
                     .lineLimit(2)
@@ -122,12 +192,12 @@ struct MapNodeView: View {
                 HStack(spacing: 1) {
                     ForEach(1...puzzle.difficulty, id: \.self) { _ in
                         Image(systemName: "star.fill")
-                            .font(.system(size: 8))
+                            .font(.system(size: starSize))
                             .foregroundColor(.orange)
                     }
                 }
             }
-            .frame(width: nodeSize + 20) // Ensure consistent width for alignment
+            .frame(width: thumbnailSize + 20) // Ensure consistent width for alignment
         }
         .opacity(nodeState == .locked ? 0.6 : 1.0)
         .onTapGesture {
@@ -192,9 +262,32 @@ struct MapNodeView: View {
 
 struct MapConnectionLine: View {
     let isCompleted: Bool
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     
     init(isCompleted: Bool) {
         self.isCompleted = isCompleted
+    }
+    
+    /// Dynamic line dimensions based on device size
+    private var lineWidth: CGFloat {
+        if horizontalSizeClass == .regular && verticalSizeClass == .regular {
+            return 4  // Thicker on iPad
+        } else if horizontalSizeClass == .regular || verticalSizeClass == .regular {
+            return 3  // Medium on larger phones
+        } else {
+            return 2  // Standard on phones
+        }
+    }
+    
+    private var lineHeight: CGFloat {
+        if horizontalSizeClass == .regular && verticalSizeClass == .regular {
+            return 60  // Longer on iPad to match larger nodes
+        } else if horizontalSizeClass == .regular || verticalSizeClass == .regular {
+            return 40  // Medium on larger phones
+        } else {
+            return 30  // Standard on phones
+        }
     }
     
     var body: some View {
@@ -204,7 +297,7 @@ struct MapConnectionLine: View {
                     ? TangramTheme.UI.success.opacity(0.6)
                     : TangramTheme.UI.separator
             )
-            .frame(width: 2, height: 30)
+            .frame(width: lineWidth, height: lineHeight)
             .animation(.easeInOut(duration: 0.3), value: isCompleted)
     }
 }

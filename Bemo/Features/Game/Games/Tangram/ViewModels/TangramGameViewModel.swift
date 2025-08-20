@@ -256,13 +256,17 @@ class TangramGameViewModel {
             print("🚨 [TangramGameViewModel] Preserving existing phase: \(currentPhase)")
             #endif
             return // Don't override these special phases
-        case .selectingDifficulty:
-            return // Don't override if already in difficulty selection
         case .playingPuzzle:
             #if DEBUG
             print("🚨 [TangramGameViewModel] Preserving playingPuzzle phase - puzzle already selected")
             #endif
             return // Don't override if already playing a puzzle
+        case .selectingDifficulty:
+            // Continue with phase determination to skip difficulty selection
+            #if DEBUG
+            print("🎯 [TangramGameViewModel] Overriding difficulty selection phase to skip to map")
+            #endif
+            break
         default:
             #if DEBUG
             print("📍 [TangramGameViewModel] Current phase \(currentPhase) will be overridden")
@@ -319,8 +323,9 @@ class TangramGameViewModel {
     private func getInitialPhaseForUserType(_ userType: UserType) -> GamePhase {
         switch userType {
         case .new:
-            // New users start with difficulty selection
-            return .selectingDifficulty
+            // New users now go straight to Easy difficulty map
+            selectedDifficulty = .easy
+            return .map(.easy)
             
         case .returning(let lastDifficulty, _):
             // Returning users go to their last difficulty map
@@ -329,11 +334,25 @@ class TangramGameViewModel {
             
         case .completed(let allDifficulties):
             if allDifficulties {
-                // All complete - let them choose what to replay
-                return .selectingDifficulty
+                // All complete - go to Hard difficulty map
+                selectedDifficulty = .hard
+                return .map(.hard)
             } else {
-                // Some complete - go to difficulty selection to choose next
-                return .selectingDifficulty
+                // Some complete - go to the highest available difficulty
+                // Check which difficulties are completed and go to the next
+                let easyCompletion = getCompletionPercentage(for: .easy)
+                let normalCompletion = getCompletionPercentage(for: .normal)
+                
+                if normalCompletion < 1.0 {
+                    selectedDifficulty = .normal
+                    return .map(.normal)
+                } else if easyCompletion < 1.0 {
+                    selectedDifficulty = .easy
+                    return .map(.easy)
+                } else {
+                    selectedDifficulty = .hard
+                    return .map(.hard)
+                }
             }
         }
     }

@@ -1,17 +1,3 @@
-#ifndef TANGRAM_PIPELINE_BUNDLE_ADJUSTMENT_H
-#define TANGRAM_PIPELINE_BUNDLE_ADJUSTMENT_H
-
-#include "tangram_pipeline/Types.h"
-
-namespace tangram {
-
-class BundleAdjustment {
-public:
-    BundleAdjustment();
-
-    BASolution solve(const BAInputs& inputs, int max_iterations = 100);
-};
-
-} // namespace tangram
-
-#endif // TANGRAM_PIPELINE_BUNDLE_ADJUSTMENT_H
+version https://git-lfs.github.com/spec/v1
+oid sha256:d6625e3898b8d50f8452c93b00927187fb3305027262916c9416741e05cc2d83
+size 353
