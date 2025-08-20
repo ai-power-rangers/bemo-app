@@ -99,50 +99,144 @@ struct OnboardingView: View {
             
             // Main content
             VStack(spacing: BemoTheme.Spacing.xxlarge) {
-                // Logo/Icon section
-                ZStack {
-                    // Subtle background circle
-                    Circle()
-                        .fill(Color.gray.opacity(0.05))
-                        .frame(width: 160, height: 160)
-                        .scaleEffect(animateContent ? 1 : 0.9)
-                        .animation(
-                            Animation.easeInOut(duration: 2)
-                                .repeatForever(autoreverses: true),
-                            value: animateContent
-                        )
-                    
-                    // Bemo logo placeholder (using shapes)
-                    VStack(spacing: 8) {                        
-                        Text("Bemo")
-                            .font(.system(size: 42, weight: .bold, design: .rounded))
-                            .foregroundColor(BemoTheme.Colors.primary)
-                    }
-                    .scaleEffect(animateContent ? 1 : 0.8)
-                    .opacity(animateContent ? 1 : 0)
-                    .animation(.spring(response: 0.6, dampingFraction: 0.8), value: animateContent)
-                }
                 
-                // Welcome text
-                VStack(spacing: BemoTheme.Spacing.medium) {
-                    Text("Ready to Begin?")
-                        .font(BemoTheme.font(for: .heading3))
-                        .foregroundColor(Color("AppPrimaryTextColor"))
-                        .multilineTextAlignment(.center)
-                        .opacity(animateContent ? 1 : 0)
-                        .offset(y: animateContent ? 0 : 20)
-                        .animation(.easeOut(duration: 0.5).delay(0.2), value: animateContent)
+                // Welcome text with cloudy background
+                ZStack {
+                    // Cloudy background with multiple soft circles
+                    ZStack {
+                        // Base layer - multiple overlapping circles for puffiness
+                        Circle()
+                            .fill(Color.white.opacity(0.8))
+                            .frame(width: 220, height: 220)
+                            .offset(x: -200, y: 0)
+                            .blur(radius: 15)
+                        
+                        Circle()
+                            .fill(Color.white.opacity(0.85))
+                            .frame(width: 250, height: 250)
+                            .offset(x: -100, y: -10)
+                            .blur(radius: 12)
+                        
+                        Circle()
+                            .fill(Color.white.opacity(0.9))
+                            .frame(width: 280, height: 280)
+                            .offset(x: 0, y: 0)
+                            .blur(radius: 10)
+                        
+                        Circle()
+                            .fill(Color.white.opacity(0.85))
+                            .frame(width: 250, height: 250)
+                            .offset(x: 100, y: -10)
+                            .blur(radius: 12)
+                        
+                        Circle()
+                            .fill(Color.white.opacity(0.8))
+                            .frame(width: 220, height: 220)
+                            .offset(x: 200, y: 0)
+                            .blur(radius: 15)
+                        
+                        // Top puffs for more cloud-like appearance
+                        Circle()
+                            .fill(Color.white.opacity(0.75))
+                            .frame(width: 160, height: 160)
+                            .offset(x: -150, y: -60)
+                            .blur(radius: 14)
+                        
+                        Circle()
+                            .fill(Color.white.opacity(0.8))
+                            .frame(width: 180, height: 180)
+                            .offset(x: -50, y: -70)
+                            .blur(radius: 12)
+                        
+                        Circle()
+                            .fill(Color.white.opacity(0.8))
+                            .frame(width: 180, height: 180)
+                            .offset(x: 50, y: -70)
+                            .blur(radius: 12)
+                        
+                        Circle()
+                            .fill(Color.white.opacity(0.75))
+                            .frame(width: 160, height: 160)
+                            .offset(x: 150, y: -60)
+                            .blur(radius: 14)
+                        
+                        // Bottom puffs
+                        Circle()
+                            .fill(Color.white.opacity(0.7))
+                            .frame(width: 140, height: 140)
+                            .offset(x: -120, y: 50)
+                            .blur(radius: 16)
+                        
+                        Circle()
+                            .fill(Color.white.opacity(0.75))
+                            .frame(width: 160, height: 160)
+                            .offset(x: 0, y: 60)
+                            .blur(radius: 14)
+                        
+                        Circle()
+                            .fill(Color.white.opacity(0.7))
+                            .frame(width: 140, height: 140)
+                            .offset(x: 120, y: 50)
+                            .blur(radius: 16)
+                        
+                        // Extra small puffs for detail
+                        Circle()
+                            .fill(Color.white.opacity(0.65))
+                            .frame(width: 100, height: 100)
+                            .offset(x: -250, y: -30)
+                            .blur(radius: 18)
+                        
+                        Circle()
+                            .fill(Color.white.opacity(0.65))
+                            .frame(width: 100, height: 100)
+                            .offset(x: 250, y: -30)
+                            .blur(radius: 18)
+                        
+                        // Central bright area
+                        Ellipse()
+                            .fill(
+                                RadialGradient(
+                                    gradient: Gradient(colors: [
+                                        Color.white.opacity(0.95),
+                                        Color.white.opacity(0.0)
+                                    ]),
+                                    center: .center,
+                                    startRadius: 50,
+                                    endRadius: 200
+                                )
+                            )
+                            .frame(width: 400, height: 200)
+                            .blur(radius: 5)
+                    }
+                    .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 10)
+                    .scaleEffect(animateContent ? 1 : 0.95)
+                    .opacity(animateContent ? 1 : 0)
+                    .animation(.easeOut(duration: 0.5).delay(0.1), value: animateContent)
                     
-                    Text("Sign in to unlock personalized learning experiences tailored for your child.")
-                        .font(.system(size: 17, weight: .regular, design: .rounded))
-                        .foregroundColor(Color("AppPrimaryTextColor").opacity(0.7))
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(4)
-                        .padding(.horizontal, 32)
-                        .opacity(animateContent ? 1 : 0)
-                        .offset(y: animateContent ? 0 : 20)
-                        .animation(.easeOut(duration: 0.5).delay(0.3), value: animateContent)
+                    VStack(spacing: BemoTheme.Spacing.medium) {
+                        Text("Ready to Begin?")
+                            .font(BemoTheme.font(for: .heading3))
+                            .foregroundColor(Color("AppPrimaryTextColor"))
+                            .multilineTextAlignment(.center)
+                            .opacity(animateContent ? 1 : 0)
+                            .offset(y: animateContent ? 0 : 20)
+                            .animation(.easeOut(duration: 0.5).delay(0.2), value: animateContent)
+                        
+                        Text("Sign in to unlock personalized learning experiences tailored for your child.")
+                            .font(.system(size: 17, weight: .regular, design: .rounded))
+                            .foregroundColor(Color("AppPrimaryTextColor").opacity(0.8))
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(4)
+                            .opacity(animateContent ? 1 : 0)
+                            .offset(y: animateContent ? 0 : 20)
+                            .animation(.easeOut(duration: 0.5).delay(0.3), value: animateContent)
+                    }
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 24)
                 }
+                .padding(.horizontal, 24)
+                .frame(maxWidth: 700) // Limit max width for larger screens
+                .clipped() // Ensure cloud doesn't overflow
             }
             .padding(.horizontal, BemoTheme.Spacing.large)
             
