@@ -32,30 +32,39 @@ struct GameCardView: View {
     
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 20) {
-                // Game Icon with colored background
-                ZStack {
-                    Circle()
-                        .fill(cardColors.foreground.opacity(0.15))
-                        .frame(width: 80, height: 80)
-                    
-                    Image(systemName: game.iconName)
-                        .font(.system(size: 40, weight: .medium))
-                        .foregroundColor(cardColors.foreground)
-                }
+            GeometryReader { geometry in
+                let cardSize = min(geometry.size.width, geometry.size.height)
+                let iconSize = cardSize * 0.35
+                let fontSize = cardSize * 0.11
+                let verticalPadding = cardSize * 0.15
+                let spacing = cardSize * 0.12
                 
-                // Game Title and Subtitle
-                VStack(spacing: 4) {
+                VStack(spacing: spacing) {
+                    // Game Icon
+                    if game.hasCustomIcon {
+                        Image(game.iconName)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: iconSize, height: iconSize)
+                    } else {
+                        Image(systemName: game.iconName)
+                            .font(.system(size: iconSize * 0.83, weight: .medium))
+                            .foregroundColor(Color(hex: "#666666"))
+                            .frame(width: iconSize, height: iconSize)
+                    }
+                    
+                    // Game Title
                     Text(game.title)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: fontSize, weight: .semibold))
                         .foregroundColor(Color(hex: "#333333"))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)                    
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, 8)
                 }
-                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.vertical, verticalPadding)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.vertical, 24)
             .background(Color.white)
             .cornerRadius(20)
             .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
@@ -73,6 +82,7 @@ struct GameItem: Identifiable {
     let devTool: DevTool?
     let title: String
     let iconName: String
+    let hasCustomIcon: Bool
     let colorScheme: Int
     let isLocked: Bool
     
@@ -81,7 +91,9 @@ struct GameItem: Identifiable {
         self.game = game
         self.devTool = nil
         self.title = game.title
-        self.iconName = Self.iconForGame(game.id)
+        let iconInfo = Self.iconInfoForGame(game.id)
+        self.iconName = iconInfo.name
+        self.hasCustomIcon = iconInfo.isCustom
         self.colorScheme = colorScheme
         self.isLocked = isLocked
     }
@@ -91,23 +103,45 @@ struct GameItem: Identifiable {
         self.game = nil
         self.devTool = devTool
         self.title = devTool.title
-        self.iconName = Self.iconForGame(devTool.id)
+        let iconInfo = Self.iconInfoForGame(devTool.id)
+        self.iconName = iconInfo.name
+        self.hasCustomIcon = iconInfo.isCustom
         self.colorScheme = colorScheme
         self.isLocked = isLocked
     }
     
-    private static func iconForGame(_ gameId: String) -> String {
+    // Direct initializer for custom items (like "Coming Soon")
+    init(id: String, game: Game?, devTool: DevTool?, title: String, iconName: String, hasCustomIcon: Bool, colorScheme: Int = 1, isLocked: Bool = false) {
+        self.id = id
+        self.game = game
+        self.devTool = devTool
+        self.title = title
+        self.iconName = iconName
+        self.hasCustomIcon = hasCustomIcon
+        self.colorScheme = colorScheme
+        self.isLocked = isLocked
+    }
+    
+    private static func iconInfoForGame(_ gameId: String) -> (name: String, isCustom: Bool) {
         switch gameId {
         case "tangram":
-            return "square.grid.2x2"
+            return ("tangram_icon", true)
+        case "aquamath":
+            return ("icons8-accounting-100", true)
+        case "spellquest":
+            return ("icons8-toys-100", true)
+        case "animation_lab":
+            return ("icons8-chemistry-100", true)
+        case "coming_soon":
+            return ("icons8-surprise-box-100", true)
         case "tangram-editor":
-            return "pencil.and.ruler.fill"
+            return ("pencil.and.ruler.fill", false)
         case "numbers":
-            return "number"
+            return ("number", false)
         case "letters":
-            return "textformat.abc"
+            return ("textformat.abc", false)
         default:
-            return "gamecontroller"
+            return ("gamecontroller", false)
         }
     }
 }

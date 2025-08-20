@@ -73,15 +73,25 @@ class GameLobbyViewModel {
         
         // Convenience properties
         var title: String {
+            if game == nil && devTool == nil && badge == "Coming Soon" {
+                return "Coming Soon"
+            }
             return game?.title ?? devTool?.title ?? "Unknown"
         }
         
         var description: String {
+            if game == nil && devTool == nil && badge == "Coming Soon" {
+                return "New games coming soon!"
+            }
             return game?.description ?? devTool?.description ?? ""
         }
         
         var isDevTool: Bool {
             return devTool != nil
+        }
+        
+        var isComingSoon: Bool {
+            return game == nil && devTool == nil && badge == "Coming Soon"
         }
         
         // Convenience initializers
@@ -95,6 +105,15 @@ class GameLobbyViewModel {
         
         init(devTool: DevTool, iconName: String, color: Color, badge: String? = nil) {
             self.game = nil
+            self.devTool = devTool
+            self.iconName = iconName
+            self.color = color
+            self.badge = badge
+        }
+        
+        // Initializer for "Coming Soon" placeholder
+        init(game: Game?, devTool: DevTool?, iconName: String, color: Color, badge: String? = nil) {
+            self.game = game
             self.devTool = devTool
             self.iconName = iconName
             self.color = color
@@ -194,6 +213,14 @@ class GameLobbyViewModel {
                 iconName: "textformat.abc",
                 color: .pink,
                 badge: "New"
+            ),
+            // Coming Soon placeholder
+            GameItem(
+                game: nil,
+                devTool: nil,
+                iconName: "questionmark.circle.fill",
+                color: .gray,
+                badge: "Coming Soon"
             )
         ]
         
@@ -281,6 +308,12 @@ class GameLobbyViewModel {
     }
     
     func selectGameItem(_ gameItem: GameItem) {
+        // Handle "Coming Soon" placeholder
+        if gameItem.isComingSoon {
+            print("Coming Soon game tapped - no action")
+            return
+        }
+        
         if gameItem.isDevTool {
             // Handle dev tool selection
             guard let devTool = gameItem.devTool else {

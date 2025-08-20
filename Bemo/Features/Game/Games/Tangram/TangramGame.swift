@@ -17,7 +17,7 @@ class TangramGame: Game {
     // MARK: - Game Protocol Properties
     
     let id = "tangram"
-    let title = "Tangram Puzzles"
+    let title = "Puzzle Map"
     let description = "Solve classic tangram puzzles by arranging shapes"
     let recommendedAge = 5...12
     let thumbnailImageName = "tangram_thumb"

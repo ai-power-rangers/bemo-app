@@ -14,7 +14,7 @@ import SwiftUI
 class SpellQuestGame: Game {
     // MARK: - Game Protocol Properties
     let id = "spellquest"
-    let title = "SpellQuest"
+    let title = "Spell Quest"
     let description = "Drag letters to spell the word from the picture"
     let recommendedAge = 4...12
     let thumbnailImageName = "textformat.abc"
