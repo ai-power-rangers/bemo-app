@@ -270,9 +270,12 @@ class TangramGameViewModel {
             break // Continue with normal phase determination
         }
         
-        // Detect user type and route accordingly
-        let userType = detectUserType()
-        currentPhase = getInitialPhaseForUserType(userType)
+        // Skip difficulty selection and go straight to Easy map
+        #if DEBUG
+        print("🚀 [TangramGameViewModel] Skipping difficulty selection - going straight to Easy map")
+        #endif
+        selectedDifficulty = .easy
+        currentPhase = .map(.easy)
         
         // Track user flow for analytics
         trackUserFlow()
@@ -390,9 +393,11 @@ class TangramGameViewModel {
     
     /// Return to difficulty selection from map view
     func returnToDifficultySelection() {
-        selectedDifficulty = nil
-        difficultySelectionViewModel = nil
-        currentPhase = .selectingDifficulty
+        // Since we're skipping difficulty selection, go back to lobby instead
+        #if DEBUG
+        print("🔙 [TangramGameViewModel] Skipping difficulty selection - returning to lobby")
+        #endif
+        exitToLobby()
     }
     
     /// Exit completely to lobby
@@ -1330,7 +1335,7 @@ class TangramGameViewModel {
         currentChildProfileId = childId
         
         // Reset difficulty selection state when changing child profiles
-        selectedDifficulty = nil
+        selectedDifficulty = .easy  // Default to Easy when skipping difficulty selection
         difficultySelectionViewModel = nil
         currentProgress = nil
         
@@ -1339,9 +1344,9 @@ class TangramGameViewModel {
             determineInitialPhase()
         } else {
             #if DEBUG
-            print("⚠️ [TangramGameViewModel] Puzzles not loaded for child profile change, using safe default phase")
+            print("⚠️ [TangramGameViewModel] Puzzles not loaded for child profile change, defaulting to Easy map")
             #endif
-            currentPhase = .selectingDifficulty
+            currentPhase = .map(.easy)  // Go straight to Easy map instead of difficulty selection
         }
     }
     

@@ -97,11 +97,6 @@ struct TangramMapView: View {
             
             // Progress Section
             progressSectionView
-            
-            // Development Test Buttons (DEBUG only)
-            #if DEBUG
-            testButtonsView
-            #endif
         }
         .tangramPanel()
         .padding(.bottom, BemoTheme.Spacing.large)
@@ -205,101 +200,7 @@ struct TangramMapView: View {
         }
     }
     
-    // MARK: - Development Test UI
-    
-    #if DEBUG
-    private var testButtonsView: some View {
-        VStack(spacing: BemoTheme.Spacing.small) {
-            // Section Title
-            HStack {
-                Text("🧪 Testing Controls")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(TangramTheme.Text.secondary)
-                Spacer()
-            }
-            
-            // Test Buttons
-            HStack(spacing: BemoTheme.Spacing.medium) {
-                // Complete Current Puzzle Button
-                Button(action: {
-                    viewModel.completeCurrentPuzzleForTesting()
-                }) {
-                    HStack(spacing: BemoTheme.Spacing.xsmall) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 14))
-                        Text("Complete Next")
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    .padding(.horizontal, BemoTheme.Spacing.medium)
-                    .padding(.vertical, BemoTheme.Spacing.small)
-                    .background(TangramTheme.UI.success.opacity(0.1))
-                    .foregroundColor(TangramTheme.UI.success)
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(TangramTheme.UI.success.opacity(0.3), lineWidth: 1)
-                    )
-                }
-                .disabled(viewModel.nextPuzzle == nil)
-                
-                // Complete All Puzzles (Trigger Promotion) Button
-                Button(action: {
-                    viewModel.completeAllPuzzlesForTesting()
-                }) {
-                    HStack(spacing: BemoTheme.Spacing.xsmall) {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 14))
-                        Text("Complete All")
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    .padding(.horizontal, BemoTheme.Spacing.medium)
-                    .padding(.vertical, BemoTheme.Spacing.small)
-                    .background(TangramTheme.UI.primaryButton.opacity(0.1))
-                    .foregroundColor(TangramTheme.UI.primaryButton)
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(TangramTheme.UI.primaryButton.opacity(0.3), lineWidth: 1)
-                    )
-                }
-                .disabled(viewModel.isDifficultyCompleted)
-                
-                Spacer()
-            }
-            
-            // Status Info
-            if viewModel.isDifficultyCompleted {
-                HStack(spacing: BemoTheme.Spacing.xsmall) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .foregroundColor(TangramTheme.UI.warning)
-                        .font(.system(size: 12))
-                    
-                    if let nextDifficulty = viewModel.checkForDifficultyPromotion() {
-                        Text("Ready for promotion to \(nextDifficulty.displayName)!")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(TangramTheme.UI.warning)
-                    } else {
-                        Text("All difficulties completed!")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(TangramTheme.UI.success)
-                    }
-                    
-                    Spacer()
-                }
-                .padding(.top, BemoTheme.Spacing.xsmall)
-            }
-        }
-        .padding(.horizontal, BemoTheme.Spacing.large)
-        .padding(.vertical, BemoTheme.Spacing.medium)
-        .background(Color.gray.opacity(0.05))
-        .cornerRadius(8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-        )
-        .padding(.horizontal, BemoTheme.Spacing.large)
-    }
-    #endif
+
     
     // MARK: - State Views
     

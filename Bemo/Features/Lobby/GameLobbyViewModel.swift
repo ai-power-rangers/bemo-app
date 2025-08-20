@@ -224,7 +224,9 @@ class GameLobbyViewModel {
             )
         ]
         
-        // Add developer tools only if user is a developer
+        // Developer tools are now hidden
+        // To re-enable: uncomment the code below and ensure developerService.isDeveloper is true
+        /*
         if developerService.isDeveloper {
             let tangramEditorTool = TangramEditorTool(puzzleManagementService: puzzleManagementService)
             
@@ -274,6 +276,9 @@ class GameLobbyViewModel {
         } else {
             print("👤 Regular user - dev tools hidden")
         }
+        */
+        
+        print("👤 Developer tools are currently disabled")
     }
     
     private func updateActiveProfile(_ profile: UserProfile?) {

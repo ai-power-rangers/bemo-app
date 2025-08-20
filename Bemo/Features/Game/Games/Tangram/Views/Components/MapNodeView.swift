@@ -67,19 +67,23 @@ struct MapNodeView: View {
         nodeState == .current
     }
     
-    private var nodeSize: CGFloat = 60
+    private var nodeSize: CGFloat = 180  // Tripled from 60
     
     // MARK: - Body
     
     var body: some View {
         VStack(spacing: BemoTheme.Spacing.small) {
             
-            // Main Node Circle
+            // Main Node with Thumbnail
             ZStack {
                 // Background circle
                 Circle()
-                    .fill(nodeColor)
+                    .fill(TangramTheme.Backgrounds.panel)
                     .frame(width: nodeSize, height: nodeSize)
+                    .overlay(
+                        Circle()
+                            .stroke(nodeColor, lineWidth: 3)
+                    )
                     .shadow(
                         color: nodeColor.opacity(0.3),
                         radius: shouldPulse ? 8 : 4,
@@ -87,10 +91,31 @@ struct MapNodeView: View {
                         y: 2
                     )
                 
-                // Icon
-                Image(systemName: nodeIcon)
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(nodeIconColor)
+                // Thumbnail
+                GamePuzzleThumbnailView(
+                    puzzleData: puzzle,
+                    size: CGSize(width: nodeSize - 16, height: nodeSize - 16)
+                )
+                .clipShape(Circle())
+                
+                // State overlay
+                if nodeState == .completed {
+                    Circle()
+                        .fill(TangramTheme.UI.success.opacity(0.8))
+                        .frame(width: nodeSize, height: nodeSize)
+                    
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 84, weight: .bold))  // Tripled from 28
+                        .foregroundColor(.white)
+                } else if nodeState == .locked {
+                    Circle()
+                        .fill(Color.black.opacity(0.6))
+                        .frame(width: nodeSize, height: nodeSize)
+                    
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 72, weight: .bold))  // Tripled from 24
+                        .foregroundColor(.white)
+                }
                 
                 // Pulse animation for current state
                 if shouldPulse {
@@ -110,24 +135,24 @@ struct MapNodeView: View {
             .animation(.easeInOut(duration: 0.1), value: isPressed)
             
             // Puzzle Info
-            VStack(spacing: 2) {
+            VStack(spacing: 4) {
                 Text(puzzle.name)
-                    .font(.caption)
-                    .fontWeight(.medium)
+                    .font(.headline)  // Larger font for bigger thumbnails
+                    .fontWeight(.semibold)
                     .foregroundColor(TangramTheme.Text.primary)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                 
-                // Difficulty stars (smaller for map)
-                HStack(spacing: 1) {
+                // Difficulty stars (scaled up for larger nodes)
+                HStack(spacing: 2) {
                     ForEach(1...puzzle.difficulty, id: \.self) { _ in
                         Image(systemName: "star.fill")
-                            .font(.system(size: 8))
+                            .font(.system(size: 16))  // Doubled from 8
                             .foregroundColor(.orange)
                     }
                 }
             }
-            .frame(width: nodeSize + 20) // Ensure consistent width for alignment
+            .frame(width: nodeSize + 40) // Ensure consistent width for alignment
         }
         .opacity(nodeState == .locked ? 0.6 : 1.0)
         .onTapGesture {
@@ -204,7 +229,7 @@ struct MapConnectionLine: View {
                     ? TangramTheme.UI.success.opacity(0.6)
                     : TangramTheme.UI.separator
             )
-            .frame(width: 2, height: 30)
+            .frame(width: 3, height: 60)  // Doubled height and slightly thicker
             .animation(.easeInOut(duration: 0.3), value: isCompleted)
     }
 }
