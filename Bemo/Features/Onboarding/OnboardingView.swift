@@ -87,6 +87,13 @@ struct OnboardingView: View {
             // App background color from assets
             Color("AppBackground")
             
+            // Tangram background image with 66% opacity
+            Image("tangram-background")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .opacity(0.33)
+                .ignoresSafeArea()
+            
             // Subtle animated shapes
             GeometryReader { geometry in
                 ForEach(0..<2) { index in
