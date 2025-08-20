@@ -97,9 +97,8 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             Spacer()
             
-            // Main content
-            VStack(spacing: BemoTheme.Spacing.xxlarge) {
-                
+            // Centered content container
+            VStack(spacing: 40) {
                 // Welcome text with cloudy background
                 ZStack {
                     // Cloudy background with multiple soft circles
@@ -237,13 +236,9 @@ struct OnboardingView: View {
                 .padding(.horizontal, 24)
                 .frame(maxWidth: 700) // Limit max width for larger screens
                 .clipped() // Ensure cloud doesn't overflow
-            }
-            .padding(.horizontal, BemoTheme.Spacing.large)
-            
-            Spacer()
-            
-            // Sign-in section
-            VStack(spacing: BemoTheme.Spacing.large) {
+                
+                // Sign-in section - match cloud width
+                VStack(spacing: BemoTheme.Spacing.large) {
                 // Apple Sign-In Button or Loading
                 if viewModel.isLoading {
                     HStack(spacing: 12) {
@@ -258,7 +253,6 @@ struct OnboardingView: View {
                     .frame(height: 56)
                     .background(Color.black)
                     .cornerRadius(BemoTheme.CornerRadius.medium)
-                    .padding(.horizontal, BemoTheme.Spacing.large)
                 } else {
                     Button(action: {
                         viewModel.signInWithApple()
@@ -270,9 +264,9 @@ struct OnboardingView: View {
                         .allowsHitTesting(false)
                     }
                     .signInWithAppleButtonStyle(.black)
+                    .frame(maxWidth: .infinity)
                     .frame(height: 56)
                     .cornerRadius(BemoTheme.CornerRadius.medium)
-                    .padding(.horizontal, BemoTheme.Spacing.large)
                     .scaleEffect(animateContent ? 1 : 0.9)
                     .opacity(animateContent ? 1 : 0)
                     .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.4), value: animateContent)
@@ -304,8 +298,14 @@ struct OnboardingView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
                     .tint(BemoTheme.Colors.primary)
+                }
+                .padding(.horizontal, 24)
+                .frame(maxWidth: 700) // Match cloud width
             }
-            .padding(.bottom, 50)
+            .padding(.horizontal, BemoTheme.Spacing.large)
+            .padding(.bottom, 30) // Add some bottom padding for balance
+            
+            Spacer()
         }
         .onAppear {
             animateContent = false
