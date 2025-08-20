@@ -67,7 +67,10 @@ class TangramGameViewModel {
     // CV Overlay for display
     var cvOverlayImage: UIImage?
     var cvFPS: Double = 0.0
-    
+   
+    // Tangram pipeline visualization data (for model polygons)
+    var modelPlanePolygons: [NSNumber: [NSNumber]] = [:]
+    var modelColorsRGB: [NSNumber: [NSNumber]] = [:]
     // Hint System
     var currentHint: TangramHintEngine.HintData?
     var hintHistory: [TangramHintEngine.HintData] = []
@@ -871,6 +874,8 @@ class TangramGameViewModel {
             print("🔴 [CV] Ignoring CV input - not in playingPuzzle phase (current: \(currentPhase))")
             return 
         }
+        // Ensure video feed is running right before we start consuming CV frames
+        cvService?.startVideoFeedIfNeeded()
         
         print("🟢 [CV] Processing \(pieces.count) pieces from CV")
         for piece in pieces {
@@ -1294,8 +1299,30 @@ class TangramGameViewModel {
             .sink { [weak self] result in
                 self?.cvOverlayImage = result.overlayImage
                 self?.cvFPS = result.fps
+                // Store model polygons and colors for SpriteKit visualization
+                if let plane = result.tangramResult?.planeModelPolygons as? [NSNumber: [NSNumber]] {
+                    self?.modelPlanePolygons = plane
+                } else {
+                    self?.modelPlanePolygons = [:]
+                }
+               if let colors = result.tangramResult?.modelColorsRGB as? [NSNumber: [NSNumber]] {
+                    self?.modelColorsRGB = colors
+                } else {
+                    self?.modelColorsRGB = [:]
+                }
             }
     }
+
+    // Propagate UI view size to CVService for accurate overlay composition
+    func setCVServiceSize(_ size: CGSize) {
+        cvService?.updateViewSize(size)
+    }
+
+    // Called by gameplay view when it appears to start camera only on puzzle screen
+    func startVideoFeedIfNeeded() {
+        cvService?.startVideoFeedIfNeeded()
+    }
+
     
     // MARK: - Metrics Tracking
     

@@ -24,6 +24,11 @@ struct TangramSpriteView: View {
     let currentHint: TangramHintEngine.HintData?
     let cvOverlayImage: UIImage?
     let cvFPS: Double
+    // Tangram model polygons and colors from CV pipeline
+    let modelPlanePolygons: [NSNumber: [NSNumber]]
+    let modelColorsRGB: [NSNumber: [NSNumber]]
+    // Notify CVService about view size to mirror sample app behavior
+    let onViewSizeChange: (CGSize) -> Void
     let onPieceCompleted: (String, Bool) -> Void  // pieceType and isFlipped
     let onPuzzleCompleted: () -> Void
     let onBackPressed: () -> Void
@@ -49,24 +54,62 @@ struct TangramSpriteView: View {
                 .ignoresSafeArea()
                 .onAppear {
                     configureScene(size: geometry.size, safeAreaTop: geometry.safeAreaInsets.top)
+                    if let tangramScene = scene as? TangramPuzzleScene, !modelPlanePolygons.isEmpty {
+                        tangramScene.updateModelPolygons(
+                            planeModelPolygons: modelPlanePolygons,
+                            modelColorsRGB: modelColorsRGB
+                        )
+                    }
+                    onViewSizeChange(geometry.size)
+                }
+                .onChange(of: geometry.size) { _, newSize in
+                    onViewSizeChange(newSize)
                 }
                 
-                // FPS overlay (top-right corner)
-                VStack {
-                    HStack {
-                        Spacer()
-                        if cvFPS > 0 {
-                            Text(String(format: "%.1f FPS", cvFPS))
-                                .font(.caption)
-                                .foregroundColor(.white)
+                // CV overlay anchored to the top-right corner (static mini panel)
+                if cvOverlayImage != nil {
+                    VStack(spacing: 0) {
+                        HStack(spacing: 0) {
+                            Spacer(minLength: 0)
+                            ZStack {
+                                // Background panel
+                                Rectangle()
+                                    .fill(Color.black.opacity(0.75))
+                                    .overlay(
+                                        Rectangle()
+                                            .stroke(Color.blue.opacity(0.6), lineWidth: 2)
+                                    )
+                                // Overlay image
+                                if let overlay = cvOverlayImage {
+                                    Image(uiImage: overlay)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .padding(8)
+                                }
+                                // FPS badge
+                                VStack {
+                                    HStack {
+                                        Spacer()
+                                        if cvFPS > 0 {
+                                            Text(String(format: "%.1f FPS", cvFPS))
+                                                .font(.caption)
+                                                .foregroundColor(.white)
+                                                .padding(8)
+                                                .background(Color.black.opacity(0.5))
+                                                .cornerRadius(4)
+                                        }
+                                    }
+                                    Spacer()
+                                }
                                 .padding(8)
-                                .background(Color.black.opacity(0.5))
-                                .cornerRadius(4)
+                            }
+                            .frame(width: (geometry.size.width * 0.3),
+                                   height: (geometry.size.width * 0.3))
                         }
+                        Spacer(minLength: 0)
                     }
-                    Spacer()
+                    .padding(10)
                 }
-                .padding()
             }
         }
         .onChange(of: puzzle) { oldValue, newValue in
@@ -106,6 +149,20 @@ struct TangramSpriteView: View {
             // Update scene with CV-detected pieces
             if let tangramScene = scene as? TangramPuzzleScene {
                 tangramScene.updateFromCVPieces(newPieces)
+                if !modelPlanePolygons.isEmpty {
+                    tangramScene.updateModelPolygons(
+                        planeModelPolygons: modelPlanePolygons,
+                        modelColorsRGB: modelColorsRGB
+                    )
+                }
+            }
+        }
+        .onChange(of: modelPlanePolygons) { _, newPolys in
+            if let tangramScene = scene as? TangramPuzzleScene, !newPolys.isEmpty {
+                tangramScene.updateModelPolygons(
+                    planeModelPolygons: newPolys,
+                    modelColorsRGB: modelColorsRGB
+                )
             }
         }
     }

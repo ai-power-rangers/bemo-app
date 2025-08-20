@@ -489,6 +489,14 @@ struct TangramGameView: View {
                     currentHint: viewModel.currentHint,
                     cvOverlayImage: viewModel.cvOverlayImage,
                     cvFPS: viewModel.cvFPS,
+                    modelPlanePolygons: viewModel.modelPlanePolygons,
+                    modelColorsRGB: viewModel.modelColorsRGB,
+                    onViewSizeChange: { size in
+                        // Inform CVService to use the UI view size for overlays and homography projection
+                        viewModel.setCVServiceSize(size)
+                        // Start the video feed only when the puzzle screen is active (onAppear of gameplay view)
+                        viewModel.startVideoFeedIfNeeded()
+                    },
                     onPieceCompleted: { pieceType, isFlipped in
                         viewModel.handlePieceCompletion(pieceType: pieceType, isFlipped: isFlipped)
                     },

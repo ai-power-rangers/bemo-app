@@ -119,6 +119,8 @@ extension TangramPuzzleScene {
             silhouette.userData = (silhouette.userData ?? NSMutableDictionary())
             silhouette.userData?["pieceType"] = target.pieceType.rawValue
         }
+        // After silhouettes are laid out, align their scale to match CV polygon visualization
+        adjustPuzzleContainerScaleToCV()
     }
     
     private func createTargetSilhouette(_ target: GamePuzzleData.TargetPiece, boundsCenterSK: CGPoint, displayScale: CGFloat) -> SKShapeNode {
@@ -186,11 +188,16 @@ extension TangramPuzzleScene {
             silhouette.lineWidth = 0
             silhouette.alpha = 1.0
         }
+        // Persist base visual style so we can restore it when not matched by CV
+        silhouette.userData = (silhouette.userData ?? NSMutableDictionary())
+        silhouette.userData?["baseFillColor"] = silhouette.fillColor
+        silhouette.userData?["baseStrokeColor"] = silhouette.strokeColor
+        silhouette.userData?["baseLineWidth"] = silhouette.lineWidth
+        silhouette.userData?["baseAlpha"] = silhouette.alpha
         silhouette.name = "target_\(target.id)"
         silhouette.position = .zero  // Already positioned via vertices
         
         // Store the actual centroid position and expected rotation for validation
-        silhouette.userData = silhouette.userData ?? [:]
         silhouette.userData!["centroidSK"] = NSValue(cgPoint: CGPoint(
             x: (centroidSK.x - boundsCenterSK.x) * displayScale,
             y: (centroidSK.y - boundsCenterSK.y) * displayScale
